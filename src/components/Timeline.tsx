@@ -26,7 +26,7 @@ export default function Timeline() {
   let touchMoved = false
 
   function timeToX(time: number, width: number) {
-    return LABEL_WIDTH + ((time / doc.duration) * (width - LABEL_WIDTH))
+    return LABEL_WIDTH + (time / doc.duration) * (width - LABEL_WIDTH)
   }
 
   function xToTime(x: number, width: number) {
@@ -86,11 +86,7 @@ export default function Timeline() {
         ctx.fillStyle = colorText
         ctx.font = `${10 * dpr}px monospace`
         ctx.textBaseline = 'middle'
-        ctx.fillText(
-          `${layer.name} / ${track.property}`,
-          8 * dpr,
-          y + (TRACK_HEIGHT / 2) * dpr,
-        )
+        ctx.fillText(`${layer.name} / ${track.property}`, 8 * dpr, y + (TRACK_HEIGHT / 2) * dpr)
         ctx.fillStyle = colorBorder
         ctx.fillRect(LABEL_WIDTH * dpr, y + (TRACK_HEIGHT / 2) * dpr, width - LABEL_WIDTH * dpr, 1)
         track.keyframes.forEach((kf) => {

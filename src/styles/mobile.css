@@ -1,7 +1,9 @@
 @layer layout {
   /* On mobile: kill the 3-col desktop grid, go full-height flex column */
   @media (max-width: 768px) {
-    html, body, #app {
+    html,
+    body,
+    #app {
       height: 100%;
       height: 100dvh;
       overflow: hidden;
@@ -109,7 +111,9 @@
       gap: var(--space-1);
       padding: var(--space-2) var(--space-1);
       color: var(--color-text-muted);
-      transition: color var(--duration-fast), background var(--duration-fast);
+      transition:
+        color var(--duration-fast),
+        background var(--duration-fast);
       min-height: 52px;
     }
 

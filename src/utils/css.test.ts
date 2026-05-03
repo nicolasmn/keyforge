@@ -68,9 +68,7 @@ describe('generateCss', () => {
             {
               id: 'track-1',
               property: 'opacity',
-              keyframes: [
-                { id: 'kf-1', time: 0, value: '0', easing: 'linear' },
-              ],
+              keyframes: [{ id: 'kf-1', time: 0, value: '0', easing: 'linear' }],
             },
           ],
         },

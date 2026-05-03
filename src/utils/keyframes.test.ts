@@ -18,9 +18,7 @@ describe('buildKeyframeBlock', () => {
       {
         id: nanoid(),
         property: 'opacity',
-        keyframes: [
-          { id: nanoid(), time: 500, value: '0.5', easing: 'linear' },
-        ],
+        keyframes: [{ id: nanoid(), time: 500, value: '0.5', easing: 'linear' }],
       },
     ])
     const { times } = buildKeyframeBlock(layer, 1000)
@@ -29,9 +27,7 @@ describe('buildKeyframeBlock', () => {
   })
 
   it('returns empty keyframeBlock for a layer with no keyframes', () => {
-    const layer = makeLayer([
-      { id: nanoid(), property: 'opacity', keyframes: [] },
-    ])
+    const layer = makeLayer([{ id: nanoid(), property: 'opacity', keyframes: [] }])
     const { keyframeBlock } = buildKeyframeBlock(layer, 1000)
     expect(keyframeBlock).toBe('')
   })

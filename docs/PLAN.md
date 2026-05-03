@@ -71,8 +71,8 @@ type Track = {
 
 type Keyframe = {
   id: string
-  time: number   // ms, 0..duration
-  value: string  // raw CSS value
+  time: number // ms, 0..duration
+  value: string // raw CSS value
   easing: EasingName
 }
 ```

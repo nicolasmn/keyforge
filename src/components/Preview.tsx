@@ -25,11 +25,14 @@ export default function Preview() {
           id: t.id,
           property: t.property,
           keyframes: t.keyframes.map((k) => ({
-            id: k.id, time: k.time, value: k.value, easing: k.easing,
+            id: k.id,
+            time: k.time,
+            value: k.value,
+            easing: k.easing,
           })),
         })),
-      }))
-    )
+      })),
+    ),
   )
 
   // Re-inject CSS only when structure changes.
