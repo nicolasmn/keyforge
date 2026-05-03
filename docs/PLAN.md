@@ -25,22 +25,23 @@ Keyforge is a visual, browser-native animation editor. It lets developers and de
 - **SolidJS** + TypeScript — signal-based reactivity, no VDOM, fast partial updates
 - **Vite** — instant HMR, ESNext target
 - **Modern CSS** — `@layer`, custom properties, no utility framework
-- **Konva.js** — canvas-based timeline track rendering
-- **Web Animations API** — preview engine and scrubbing
+- **Native Canvas 2D** — timeline track rendering (DPR-aware, ResizeObserver)
+- **Web Animations API** — scrubbing via negative `animation-delay`
+- **Vitest** — unit tests for store mutations and CSS generation
 
 ### Layout
 
 ```
 ┌─────────────────────────────────────────┐
-│  Header (logo, export, playback)         │
+│  Header (logo, doc name, export)         │
 ├──────────┬──────────────────┬───────────┤
 │  Layer   │                  │ Property  │
 │  Tree    │   Preview Pane   │ Inspector │
-│          │                  │           │
-│  (DOM    │   (real DOM +    │ (keyframe │
-│  layers) │   injected CSS)  │  values)  │
+│          │   (real DOM +    │ (tracks,  │
+│          │   injected CSS)  │  keyframes│
 ├──────────┴──────────────────┴───────────┤
-│  Timeline (Konva canvas)                 │
+│  Playback controls                       │
+│  Timeline (native Canvas 2D)             │
 │  scrubber · tracks · keyframe diamonds   │
 └─────────────────────────────────────────┘
 ```
@@ -48,7 +49,7 @@ Keyforge is a visual, browser-native animation editor. It lets developers and de
 ### Data Model (core)
 
 ```ts
-type Document = {
+type AnimationDocument = {
   id: string
   name: string
   duration: number // ms
@@ -58,20 +59,21 @@ type Document = {
 type Layer = {
   id: string
   name: string
-  element: ElementConfig // tag, initial CSS, HTML content
+  element: LayerElement // tag, initialCss, text
   tracks: Track[]
 }
 
 type Track = {
+  id: string
   property: AnimatableProperty
-  easing: string // default easing for the track
   keyframes: Keyframe[]
 }
 
 type Keyframe = {
-  time: number // ms
-  value: string // raw CSS value
-  easing: string // easing from THIS keyframe to the next
+  id: string
+  time: number   // ms, 0..duration
+  value: string  // raw CSS value
+  easing: EasingName
 }
 ```
 
@@ -79,17 +81,21 @@ type Keyframe = {
 
 ## Feature Roadmap
 
-### Phase 1 — Foundation (MVP)
+### Phase 1 — Foundation (MVP) ✅
 
-- [ ] App shell: header, sidebar, workspace, inspector, timeline panels
-- [ ] SolidJS store with document/layer/track/keyframe data model
-- [ ] Preview pane: DOM element with generated `<style>` injection
-- [ ] Timeline: Konva canvas, track rows, scrubber, playhead
-- [ ] Draggable keyframe diamonds on timeline
-- [ ] Property inspector: value inputs bound to selected keyframe
-- [ ] Playback controls: play/pause/stop, loop toggle
-- [ ] Basic properties: `transform`, `opacity`, `background-color`
-- [ ] CSS export: `@keyframes` + `animation` shorthand
+- [x] App shell: header, sidebar, workspace, inspector, timeline panels
+- [x] SolidJS store with document/layer/track/keyframe data model
+- [x] All store mutations: add/remove layer, track, keyframe; update keyframe
+- [x] Preview pane: real DOM elements with generated `<style>` injection
+- [x] Timeline: native Canvas 2D, track rows, time ruler, playhead triangle
+- [x] Draggable keyframe diamonds on timeline
+- [x] Scrubbing via ruler click/drag (negative animation-delay trick)
+- [x] Property inspector: value/easing inputs bound to selected keyframe
+- [x] Add keyframe at playhead position
+- [x] Playback controls: play/pause/stop, loop toggle, time counter
+- [x] Basic properties: `transform`, `opacity`, `background-color` + 7 more
+- [x] CSS export: `@keyframes` + `animation` shorthand → clipboard
+- [x] Unit tests: store mutations + CSS generation
 
 ### Phase 2 — Modern CSS
 
@@ -100,6 +106,7 @@ type Keyframe = {
 - [ ] `animation-timeline: scroll()` binding — map keyframes to scroll position
 - [ ] `animation-timeline: view()` binding — viewport entry/exit ranges
 - [ ] `grid-template-rows: 0fr → 1fr` animated height
+- [ ] Easing curve editor (cubic-bezier visual handles)
 
 ### Phase 3 — Export & Interop
 
@@ -112,11 +119,20 @@ type Keyframe = {
 ### Phase 4 — Power Features
 
 - [ ] Multi-layer sequencing with offset delays
-- [ ] Easing curve editor (cubic-bezier visual, spring preview)
-- [ ] View Transitions API mode: old/new pseudo-element keyframe generation
 - [ ] Stagger helper: auto-generate delay increments across layers
+- [ ] View Transitions API mode: old/new pseudo-element keyframe generation
 - [ ] Save/load documents (IndexedDB)
 - [ ] Share URL (compressed state in hash)
+- [ ] Desktop app via Tauri (offline, file system access)
+
+---
+
+## Testing Strategy
+
+- **Unit tests** (Vitest): pure functions — store mutations, CSS generation, export utils, nanoid
+- **No component tests** in Phase 1 — SolidJS reactivity tested via store logic, not DOM
+- **Manual testing**: preview pane is the ground truth (renders real CSS)
+- Future: Playwright e2e for critical user flows (create layer → add keyframe → export)
 
 ---
 
@@ -150,6 +166,6 @@ Built-in technique presets the user can apply and customise:
 
 ## Open Questions
 
-- Desktop app via Tauri in future? (offline, file system access)
 - Multiplayer / share-by-URL collaboration?
 - Plugin system for custom property types?
+- AI-assisted animation generation (describe motion → keyframes)?
