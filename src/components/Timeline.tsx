@@ -14,7 +14,7 @@ const TRACK_HEIGHT = 36
 const HEADER_HEIGHT = 28
 const LABEL_WIDTH = 120
 const KF_RADIUS = 6
-const TOUCH_SLOP = 10 // px — min move to start drag vs tap
+const TOUCH_SLOP = 10
 
 export default function Timeline() {
   let canvas: HTMLCanvasElement | undefined
@@ -162,7 +162,7 @@ export default function Timeline() {
     return null
   }
 
-  // ── Mouse events ───────────────────────────────────────────
+  // ── Mouse ──────────────────────────────────────────────────
   function onMouseDown(e: MouseEvent) {
     const x = cssX(e)
     const y = cssY(e)
@@ -197,14 +197,12 @@ export default function Timeline() {
     scrubbing = false
   }
 
-  // ── Touch events ───────────────────────────────────────────
+  // ── Touch ──────────────────────────────────────────────────
   function onTouchStart(e: TouchEvent) {
     const t = e.touches[0]
     touchStartX = cssX(t)
     touchStartY = cssY(t)
     touchMoved = false
-
-    // Immediately begin scrubbing if in ruler
     if (touchStartY < HEADER_HEIGHT) {
       scrubbing = true
       setPlaying(false)
@@ -213,14 +211,12 @@ export default function Timeline() {
   }
 
   function onTouchMove(e: TouchEvent) {
-    e.preventDefault() // prevent page scroll while using timeline
+    e.preventDefault()
     const t = e.touches[0]
     const x = cssX(t)
     const y = cssY(t)
-    const dx = Math.abs(x - touchStartX)
-    const dy = Math.abs(y - touchStartY)
-    if (dx > TOUCH_SLOP || dy > TOUCH_SLOP) touchMoved = true
-
+    if (Math.abs(x - touchStartX) > TOUCH_SLOP || Math.abs(y - touchStartY) > TOUCH_SLOP)
+      touchMoved = true
     if (scrubbing) {
       setPlayhead(xToTime(x, canvas!.offsetWidth))
       return
@@ -231,7 +227,6 @@ export default function Timeline() {
       })
       return
     }
-    // Start dragging KF if we moved enough from a hit
     if (touchMoved) {
       const hit = hitTestKeyframe(touchStartX, touchStartY)
       if (hit) {
@@ -243,7 +238,6 @@ export default function Timeline() {
 
   function onTouchEnd(e: TouchEvent) {
     if (!touchMoved) {
-      // Treat as tap — select keyframe or set playhead
       const hit = hitTestKeyframe(touchStartX, touchStartY)
       if (hit) {
         setSelectedKeyframeId(hit.kfId)
@@ -256,6 +250,14 @@ export default function Timeline() {
     scrubbing = false
     touchMoved = false
     e.preventDefault()
+  }
+
+  // Single callback ref — assigns canvas + attaches touch listeners
+  function setCanvasRef(el: HTMLCanvasElement) {
+    canvas = el
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd, { passive: false })
   }
 
   onMount(() => {
@@ -279,19 +281,11 @@ export default function Timeline() {
   return (
     <div class="timeline">
       <canvas
-        ref={canvas}
+        ref={setCanvasRef}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
-        // Touch events via addEventListener to pass passive:false
-        ref={(el) => {
-          canvas = el
-          if (!el) return
-          el.addEventListener('touchstart', onTouchStart, { passive: true })
-          el.addEventListener('touchmove', onTouchMove, { passive: false })
-          el.addEventListener('touchend', onTouchEnd, { passive: false })
-        }}
       />
     </div>
   )
