@@ -1,4 +1,4 @@
-import { createEffect, For, onCleanup, onMount } from 'solid-js'
+import { createEffect, onCleanup, onMount } from 'solid-js'
 import {
   doc,
   playhead,
@@ -73,23 +73,18 @@ export default function Timeline() {
     doc.layers.forEach((layer) => {
       layer.tracks.forEach((track, ti) => {
         const y = HEADER_HEIGHT + row * TRACK_HEIGHT
-        // Row bg
         ctx.fillStyle = selectedLayerId() === layer.id
           ? 'hsl(220 12% 15%)'
           : colorBg
         ctx.fillRect(0, y, width, TRACK_HEIGHT)
-        // Row border
         ctx.fillStyle = colorBorder
         ctx.fillRect(0, y + TRACK_HEIGHT - 1, width, 1)
-        // Label
         ctx.fillStyle = colorText
         ctx.font = `${10 * dpr}px monospace`
         ctx.textBaseline = 'middle'
         ctx.fillText(`${layer.name} / ${track.property}`, 8, y + TRACK_HEIGHT / 2)
-        // Track line
         ctx.fillStyle = colorBorder
         ctx.fillRect(LABEL_WIDTH, y + TRACK_HEIGHT / 2, width - LABEL_WIDTH, 1)
-        // Keyframes
         track.keyframes.forEach((kf) => {
           const x = timeToX(kf.time, width)
           const cy = y + TRACK_HEIGHT / 2
@@ -110,7 +105,6 @@ export default function Timeline() {
     const ph = timeToX(playhead(), width)
     ctx.fillStyle = colorAccent
     ctx.fillRect(ph, 0, 2, height)
-    // Playhead triangle
     ctx.beginPath()
     ctx.moveTo(ph - 6, 0)
     ctx.lineTo(ph + 6, 0)
@@ -197,9 +191,7 @@ export default function Timeline() {
     onCleanup(() => ro.disconnect())
   })
 
-  // Redraw on any store/signal change
   createEffect(() => {
-    // Access reactive values to subscribe
     void doc.layers.map((l) => l.tracks.map((t) => t.keyframes.map((k) => k.time)))
     void playhead()
     void selectedKeyframeId()

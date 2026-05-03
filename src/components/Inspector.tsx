@@ -1,6 +1,5 @@
 import { Show, For } from 'solid-js'
 import {
-  doc,
   selectedLayerId,
   selectedKeyframeId,
   setSelectedKeyframeId,
