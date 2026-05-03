@@ -1,19 +1,8 @@
 import { createEffect, createMemo, For, onCleanup, untrack } from 'solid-js'
 import { doc, playing, setPlaying, playhead, setPlayhead, loop } from '@/store'
 import { generateCss } from '@/utils/css'
+import { slugify } from '@/utils/slugify'
 
-/**
- * Preview — JS-owned time model.
- *
- * CSS animations are ALWAYS paused. Position driven exclusively by
- * `animation-delay: -${playhead}ms` set as inline style on each layer element.
- * The RAF loop advances the playhead signal; everything else reacts to it.
- *
- * Hidden layers (visible === false) are excluded from generated CSS and
- * rendered with `visibility: hidden` so they hold their layout space.
- */
-
-/** Parse a semicolon-separated inline CSS string into a style object. */
 function parseCssString(css: string): Record<string, string> {
   const result: Record<string, string> = {}
   for (const decl of css.split(';')) {
@@ -31,11 +20,11 @@ export default function Preview() {
   let rafId = 0
   let lastTs = 0
 
-  // Structural fingerprint: only changes on layers/tracks/keyframes/duration/visibility edits.
   const docStructure = createMemo(() =>
     JSON.stringify(
       doc.layers.map((l) => ({
         id: l.id,
+        name: l.name,
         visible: l.visible,
         duration: doc.duration,
         tracks: l.tracks.map((t) => ({
@@ -52,7 +41,6 @@ export default function Preview() {
     ),
   )
 
-  // Re-inject CSS only when structure changes.
   createEffect(() => {
     const _structure = docStructure()
     untrack(() => {
@@ -62,7 +50,6 @@ export default function Preview() {
     })
   })
 
-  // Sync every layer element's delay to the current playhead
   createEffect(() => {
     const ph = playhead()
     document.querySelectorAll<HTMLElement>('[data-layer-id]').forEach((el) => {
@@ -70,7 +57,6 @@ export default function Preview() {
     })
   })
 
-  // RAF loop
   createEffect(() => {
     if (!playing()) {
       cancelAnimationFrame(rafId)
@@ -113,7 +99,7 @@ export default function Preview() {
         <For each={doc.layers}>
           {(layer) => (
             <div
-              data-layer-id={layer.id}
+              data-layer-id={slugify(layer.name)}
               style={{
                 ...parseCssString(layer.element.initialCss),
                 ...(layer.visible === false ? { visibility: 'hidden' } : {}),
