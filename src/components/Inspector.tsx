@@ -2,11 +2,12 @@
  * Inspector — unified DevTools-style panel.
  *
  * Key decisions:
- * - Value editing is UNCONTROLLED: we set defaultValue once, commit only on
- *   blur/Enter/Tab. This prevents the "input loses focus on every keystroke"
- *   bug caused by SolidJS re-rendering the chip when the store updates.
- * - Autocomplete via native <datalist>. Zero deps, works on iOS Safari.
- * - Mobile: larger touch targets via @media (pointer: coarse) in inspector.css.
+ * - Value editing is UNCONTROLLED: set defaultValue once, commit on blur/Enter/Tab.
+ * - Autocomplete via native <datalist>. autocomplete must NOT be "off" for datalist
+ *   to work on iOS Safari — we use autocomplete="one-time-code" which disables
+ *   password manager suggestions while still allowing datalist.
+ * - Scrub (drag-to-change) disabled on touch pointers (pointer: coarse / pointerType=touch).
+ * - autocorrect="off" autocapitalize="none" prevents iOS from mangling CSS values.
  */
 import { createSignal, createMemo, For, Show, onCleanup, type Component } from 'solid-js'
 import {
@@ -49,11 +50,16 @@ function validate(type: ValueToken['type'], value: string): boolean {
   return value.length > 0
 }
 
+/** Returns true when the pointer event comes from a touch screen */
+function isTouch(e: PointerEvent) {
+  return e.pointerType === 'touch' || e.pointerType === 'pen'
+}
+
 // unique datalist id per chip instance
 let _dlId = 0
 function nextDlId() { return `kf-dl-${++_dlId}` }
 
-// ── Sub-token scrub chip (transform args) ────────────────────────────────────
+// ── Sub-token scrub chip (transform args, desktop only) ───────────────────────
 
 function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
   let origin: { x: number; orig: number } | null = null
@@ -74,12 +80,13 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
       class="kf-chip kf-chip--number kf-chip--scrub"
       title="Drag · Shift×10 · Alt÷10"
       onPointerDown={(e) => {
+        if (isTouch(e)) return          // touch: no scrub
         e.preventDefault()
         ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
         origin = { x: e.clientX, orig: parseFloat(val()) }
       }}
       onPointerMove={(e) => {
-        if (!origin) return
+        if (!origin || isTouch(e)) return
         const m = e.shiftKey ? 10 : e.altKey ? 0.1 : 1
         rebuild(origin.orig + (e.clientX - origin.x) * m)
       }}
@@ -121,10 +128,11 @@ function ColorSwatch(props: { token: ValueToken }) {
 
 // ── ValueChip ─────────────────────────────────────────────────────────────────
 //
-// IMPORTANT: uses UNCONTROLLED <input> (no value= binding).
-// We set defaultValue once when editing starts, then read el.value
-// only on blur/Enter. This avoids the focus-loss bug from store-driven
-// re-renders on every keystroke.
+// UNCONTROLLED input: defaultValue set once on open, store written only on
+// blur/Enter/Tab/Escape. Prevents focus-loss from reactive re-renders.
+//
+// autocomplete="one-time-code": disables password manager popups while still
+// allowing <datalist> to surface on iOS Safari. "off" breaks datalist on iOS.
 
 function ValueChip(props: { token: ValueToken }) {
   const [editing, setEditing] = createSignal(false)
@@ -186,6 +194,10 @@ function ValueChip(props: { token: ValueToken }) {
 
       {/* all other types */}
       <Show when={props.token.type !== 'transform'}>
+        {/*
+          datalist MUST be in the DOM before the input references it via list=.
+          Rendering it outside the chip span avoids it being clipped by overflow:hidden.
+        */}
         <datalist id={dlId}>
           <For each={completionsFor(props.token.type, props.token.value)}>
             {(opt) => <option value={opt} />}
@@ -202,14 +214,15 @@ function ValueChip(props: { token: ValueToken }) {
           title={props.token.type === 'number' ? 'Drag · Shift×10 · Alt÷10 · Click to edit' : 'Click to edit'}
           onClick={() => { if (!editing()) open() }}
           onPointerDown={(e) => {
-            if (props.token.type !== 'number' || editing()) return
+            // scrub disabled on touch — tap opens edit mode instead (via onClick)
+            if (props.token.type !== 'number' || editing() || isTouch(e)) return
             e.preventDefault()
             ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
             const m = NUMBER_UNIT_RE.exec(props.token.value)
             scrubOrigin = { x: e.clientX, orig: m ? parseFloat(m[1]) : 0 }
           }}
           onPointerMove={(e) => {
-            if (!scrubOrigin) return
+            if (!scrubOrigin || isTouch(e)) return
             const mult  = e.shiftKey ? 10 : e.altKey ? 0.1 : 1
             const delta = (e.clientX - scrubOrigin.x) * mult
             const m     = NUMBER_UNIT_RE.exec(props.token.value)
@@ -235,8 +248,13 @@ function ValueChip(props: { token: ValueToken }) {
               onInput={onInputChange}
               onKeyDown={onKeyDown}
               onBlur={() => close()}
+              // iOS text input hygiene: no autocorrect, no caps, no spellcheck
+              // autocomplete must NOT be "off" — that breaks datalist on iOS Safari
+              // "one-time-code" disables password manager while keeping datalist
+              autocomplete="one-time-code"
+              autocorrect="off"
+              autocapitalize="none"
               spellcheck={false}
-              autocomplete="off"
             />
           </Show>
 
@@ -290,12 +308,18 @@ function KeyframeRow(props: {
               setTimeout(() => { el?.focus(); el?.select() }, 0)
             }}
             class="kf-time kf-time--input"
+            type="number"
+            min="0"
             value={props.time}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === 'Tab') commitTime()
               if (e.key === 'Escape') setEditTime(false)
             }}
             onBlur={commitTime}
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="none"
+            spellcheck={false}
           />
         </Show>
 
