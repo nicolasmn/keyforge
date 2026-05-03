@@ -48,6 +48,7 @@ Keyforge is a visual, browser-native animation editor. It lets developers and de
 ```
 
 Panel splits:
+
 - **Horizontal** (Split.js): LayerTree | Preview | Inspector
 - **Vertical** (Split.js): top area | Timeline
 
@@ -64,8 +65,8 @@ type AnimationDocument = {
 type Layer = {
   id: string
   name: string
-  visible: boolean        // added Phase 1.5
-  element: LayerElement   // tag, initialCss, text
+  visible: boolean // added Phase 1.5
+  element: LayerElement // tag, initialCss, text
   tracks: Track[]
 }
 
@@ -108,6 +109,7 @@ type Keyframe = {
 Self-contained improvements with no architectural risk. Priority order:
 
 #### 1. Layer Management
+
 - [ ] **Rename layer** — inline click-to-edit on layer name (`contenteditable` or input swap)
 - [ ] **Reorder layers** — drag handle in LayerTree, updates layer array order in store
 - [ ] **Hide/show layer** — eye icon toggle; sets `visible` boolean on `Layer`
@@ -116,6 +118,7 @@ Self-contained improvements with no architectural risk. Priority order:
   - Store mutation: `setLayerVisibility(layerId, visible)`
 
 #### 2. Resizable Panels
+
 - [ ] Integrate **Split.js** (2.7kb, zero deps, CSS Grid/Flex aware)
 - [ ] Horizontal split: LayerTree | Preview | Inspector with min/max constraints
   - LayerTree: min 160px, max 320px
@@ -126,6 +129,7 @@ Self-contained improvements with no architectural risk. Priority order:
 - [ ] Sizes reset on double-click of drag handle
 
 #### 3. Read-only Code View
+
 - [ ] Second tab in Inspector panel: **CSS** tab alongside **Properties** tab
 - [ ] Renders live output of `generateCss(doc)` — updates on every store change
 - [ ] Syntax highlighting via **Shiki** (loads only the `css` grammar + one theme)
@@ -133,6 +137,7 @@ Self-contained improvements with no architectural risk. Priority order:
 - [ ] Scoped to selected layer only; toggle to show full document CSS
 
 #### 4. DevTools Token UI
+
 See `docs/DEVTOOLS-TOKEN-UI.md` — tracked separately due to scope and UX research required.
 
 ---

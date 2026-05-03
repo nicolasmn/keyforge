@@ -55,13 +55,13 @@ Replace (or augment) the property inspector with a structured code view where:
 
 The UI must detect value types to render appropriate controls:
 
-| Token type | Detection | Control |
-|---|---|---|
-| Color | `#`, `rgb(`, `hsl(`, `oklch(`, named colors | Color swatch + hex/oklch input |
-| Number + unit | `/^-?[\d.]+(?:px|ms|deg|%|rem|em|vw|vh)?$/` | Scrub on drag, type to edit |
-| Easing | matches known easing names or `cubic-bezier(` | Easing picker popup |
-| Transform fn | `translate(`, `rotate(`, `scale(`, etc. | Sub-token editing per argument |
-| Plain string | anything else | Plain text input |
+| Token type    | Detection                                     | Control                        |
+| ------------- | --------------------------------------------- | ------------------------------ | --- | --- | --- | --- | --- | ------- | --------------------------- |
+| Color         | `#`, `rgb(`, `hsl(`, `oklch(`, named colors   | Color swatch + hex/oklch input |
+| Number + unit | `/^-?[\d.]+(?:px                              | ms                             | deg | %   | rem | em  | vw  | vh)?$/` | Scrub on drag, type to edit |
+| Easing        | matches known easing names or `cubic-bezier(` | Easing picker popup            |
+| Transform fn  | `translate(`, `rotate(`, `scale(`, etc.       | Sub-token editing per argument |
+| Plain string  | anything else                                 | Plain text input               |
 
 ---
 
@@ -97,12 +97,15 @@ The UI must detect value types to render appropriate controls:
 Three options under consideration. Decision deferred until prototype.
 
 ### Option A — Inspector tab (additive)
+
 Token UI lives in a second tab alongside the existing form inspector. Low risk — existing inspector untouched. User switches between views. Best for initial shipping.
 
 ### Option B — Inspector replacement
+
 Token UI replaces the form inspector entirely. Cleaner, fewer UI surfaces. Requires token UI to be fully capable before shipping.
 
 ### Option C — Side-by-side split
+
 Token UI on the right, existing inspector on the left. Redundant but useful during transition. High visual noise.
 
 **Current lean: Option A** — ship as a tab first, validate, then decide whether to deprecate the form inspector.
@@ -123,6 +126,7 @@ Token UI on the right, existing inspector on the left. Redundant but useful duri
 The key challenge: a CSS value token must know where it lives in the store so a change can be dispatched. The token AST generation step resolves this — each value token carries a store path that the edit handler uses directly.
 
 Example:
+
 ```ts
 type ValueToken = {
   type: 'color' | 'number' | 'easing' | 'transform' | 'string'
