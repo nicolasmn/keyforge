@@ -7,6 +7,7 @@ function makeLayer(tracks: Layer['tracks']): Layer {
   return {
     id: nanoid(),
     name: 'Test',
+    visible: true,
     element: { tag: 'div', text: '', initialCss: '' },
     tracks,
   }
@@ -44,7 +45,6 @@ describe('buildKeyframeBlock', () => {
       },
     ])
     const { keyframeBlock } = buildKeyframeBlock(layer, 1000)
-    // 0% stop should use the first keyframe value (0.5) since nothing before 500ms
     expect(keyframeBlock).toContain('0.00%')
     const line = keyframeBlock.split('\n').find((l) => l.includes('0.00%'))!
     expect(line).toContain('opacity:0.5')
@@ -62,7 +62,6 @@ describe('buildKeyframeBlock', () => {
       },
     ])
     const { keyframeBlock } = buildKeyframeBlock(layer, 1000)
-    // 100% stop should hold the last keyframe value (1)
     const line = keyframeBlock.split('\n').find((l) => l.includes('100.00%'))!
     expect(line).toContain('opacity:1')
   })
@@ -87,7 +86,6 @@ describe('buildKeyframeBlock', () => {
       },
     ])
     const { times } = buildKeyframeBlock(layer, 1000)
-    // 0, 500, 1000 — no duplicates
     expect(times).toEqual([0, 500, 1000])
   })
 

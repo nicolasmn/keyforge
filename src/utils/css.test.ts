@@ -21,8 +21,33 @@ describe('generateCss', () => {
         {
           id: 'layer-1',
           name: 'Box',
+          visible: true,
           element: { tag: 'div', text: '', initialCss: '' },
           tracks: [{ id: 'track-1', property: 'opacity', keyframes: [] }],
+        },
+      ],
+    })
+    expect(generateCss(doc).trim()).toBe('')
+  })
+
+  it('returns empty string for hidden layer with keyframes', () => {
+    const doc = makeDoc({
+      layers: [
+        {
+          id: 'layer-1',
+          name: 'Box',
+          visible: false,
+          element: { tag: 'div', text: '', initialCss: '' },
+          tracks: [
+            {
+              id: 'track-1',
+              property: 'opacity',
+              keyframes: [
+                { id: 'kf-1', time: 0, value: '0', easing: 'ease-out' },
+                { id: 'kf-2', time: 1000, value: '1', easing: 'ease-out' },
+              ],
+            },
+          ],
         },
       ],
     })
@@ -35,6 +60,7 @@ describe('generateCss', () => {
         {
           id: 'layer-1',
           name: 'Box',
+          visible: true,
           element: { tag: 'div', text: '', initialCss: '' },
           tracks: [
             {
@@ -63,6 +89,7 @@ describe('generateCss', () => {
         {
           id: 'layer-1',
           name: 'Box',
+          visible: true,
           element: { tag: 'div', text: '', initialCss: '' },
           tracks: [
             {
@@ -76,7 +103,6 @@ describe('generateCss', () => {
     })
     const css = generateCss(doc)
     expect(css).toContain('[data-layer-id="layer-1"]')
-    // css.ts emits longhand animation properties, not the shorthand
     expect(css).toContain('animation-name: kf-layer-1')
     expect(css).toContain('animation-duration: 1000ms')
     expect(css).toContain('animation-play-state: paused')
@@ -88,6 +114,7 @@ describe('generateCss', () => {
         {
           id: 'layer-1',
           name: 'Box',
+          visible: true,
           element: { tag: 'div', text: '', initialCss: '' },
           tracks: [
             {
