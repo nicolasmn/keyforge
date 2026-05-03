@@ -1,15 +1,21 @@
 /**
- * Inspector — unified DevTools-style panel.
+ * Inspector — DevTools-style panel.
  *
- * Key decisions:
- * - Value editing is UNCONTROLLED: set defaultValue once, commit on blur/Enter/Tab.
- * - Autocomplete via native <datalist>. autocomplete must NOT be "off" for datalist
- *   to work on iOS Safari — we use autocomplete="one-time-code" which disables
- *   password manager suggestions while still allowing datalist.
- * - Scrub (drag-to-change) disabled on touch pointers (pointer: coarse / pointerType=touch).
- * - autocorrect="off" autocapitalize="none" prevents iOS from mangling CSS values.
+ * Design decisions:
+ * - UNCONTROLLED inputs: set value once on open, commit on blur/Enter/Tab/Escape.
+ * - No drag-scrub anywhere (removed). Numbers use type="number" spinner/keyboard.
+ * - Transform args are editable via tap → inline number input per sub-token.
+ * - <datalist> rendered in a portal div appended to document.body so it is
+ *   never clipped by overflow:hidden parents. This is the only reliable way
+ *   to show the dropdown on all browsers including iOS Safari.
+ * - autocomplete="on" + list= is required for datalist on iOS. "off" breaks it.
+ * - autocorrect="off" autocapitalize="none" prevents iOS mangling CSS values.
  */
-import { createSignal, createMemo, For, Show, onCleanup, type Component } from 'solid-js'
+import {
+  createSignal, createMemo, For, Show, onCleanup,
+  type Component,
+} from 'solid-js'
+import { render } from 'solid-js/web'
 import {
   selectedLayerId,
   getSelectedLayer,
@@ -22,8 +28,7 @@ import {
 } from '@/store'
 import type { AnimatableProperty, EasingName, ValueToken, SubToken } from '@/types'
 import EasingEditor from './EasingEditor'
-import { tokenizeLayer } from '@/utils/tokenize'
-import { NUMBER_UNIT_RE } from '@/utils/tokenize'
+import { tokenizeLayer, NUMBER_UNIT_RE } from '@/utils/tokenize'
 import { completionsFor } from '@/utils/cssCompletions'
 
 const PROPERTIES: AnimatableProperty[] = [
@@ -31,7 +36,7 @@ const PROPERTIES: AnimatableProperty[] = [
   'border-radius', 'width', 'height', 'scale', 'translate', 'rotate',
 ]
 
-// ── helpers ────────────────────────────────────────────────────────────────────
+// ── helpers ──────────────────────────────────────────────────────────────────
 
 function commit(path: ValueToken['path'], value: string) {
   if (path.field === 'value') {
@@ -45,56 +50,25 @@ function commit(path: ValueToken['path'], value: string) {
 
 function validate(type: ValueToken['type'], value: string): boolean {
   if (type === 'color')  return CSS.supports('color', value)
-  if (type === 'number') return NUMBER_UNIT_RE.test(value)
+  if (type === 'number') return NUMBER_UNIT_RE.test(value) || value === '' || !isNaN(Number(value))
   if (type === 'easing') return value === 'linear' || /^cubic-bezier\(/.test(value) || /^steps\(/.test(value)
   return value.length > 0
 }
 
-/** Returns true when the pointer event comes from a touch screen */
-function isTouch(e: PointerEvent) {
-  return e.pointerType === 'touch' || e.pointerType === 'pen'
-}
-
-// unique datalist id per chip instance
-let _dlId = 0
-function nextDlId() { return `kf-dl-${++_dlId}` }
-
-// ── Sub-token scrub chip (transform args, desktop only) ───────────────────────
-
-function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
-  let origin: { x: number; orig: number } | null = null
-  const val  = () => props.sub.value
-  const unit = () => props.sub.unit
-
-  function rebuild(newVal: number) {
-    const updated = props.parent.subTokens!.map((st) =>
-      st.argIndex === props.sub.argIndex
-        ? { ...st, value: String(+newVal.toFixed(3)) }
-        : st
-    ) as SubToken[]
-    commit(props.parent.path, props.sub.assembler(updated))
-  }
-
-  return (
-    <span
-      class="kf-chip kf-chip--number kf-chip--scrub"
-      title="Drag · Shift×10 · Alt÷10"
-      onPointerDown={(e) => {
-        if (isTouch(e)) return          // touch: no scrub
-        e.preventDefault()
-        ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-        origin = { x: e.clientX, orig: parseFloat(val()) }
-      }}
-      onPointerMove={(e) => {
-        if (!origin || isTouch(e)) return
-        const m = e.shiftKey ? 10 : e.altKey ? 0.1 : 1
-        rebuild(origin.orig + (e.clientX - origin.x) * m)
-      }}
-      onPointerUp={() => { origin = null }}
-    >
-      {val()}{unit()}
-    </span>
-  )
+/**
+ * Mount a <datalist> into document.body (portal) so it is never clipped
+ * by overflow:hidden ancestors. Returns a cleanup function.
+ */
+function mountDatalist(id: string, options: string[]): () => void {
+  const host = document.createElement('div')
+  host.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none'
+  document.body.appendChild(host)
+  const dispose = render(() => (
+    <datalist id={id}>
+      <For each={options}>{(o) => <option value={o} />}</For>
+    </datalist>
+  ), host)
+  return () => { dispose(); document.body.removeChild(host) }
 }
 
 // ── Color swatch ──────────────────────────────────────────────────────────────
@@ -126,23 +100,83 @@ function ColorSwatch(props: { token: ValueToken }) {
   )
 }
 
+// ── SubScrub: editable sub-token chip (transform arg) ────────────────────────
+// Tap to open an inline number input. No drag.
+
+function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
+  const [editing, setEditing] = createSignal(false)
+  let inputEl: HTMLInputElement | undefined
+
+  function commitSub() {
+    const raw = inputEl?.value ?? ''
+    const n = parseFloat(raw)
+    if (!isNaN(n)) {
+      const updated = props.parent.subTokens!.map((st) =>
+        st.argIndex === props.sub.argIndex
+          ? { ...st, value: String(n) }
+          : st
+      ) as SubToken[]
+      commit(props.parent.path, props.sub.assembler(updated))
+    }
+    setEditing(false)
+  }
+
+  return (
+    <Show
+      when={editing()}
+      fallback={
+        <span
+          class="kf-chip kf-chip--number kf-chip--sub"
+          onClick={() => setEditing(true)}
+          title="Tap to edit"
+        >
+          {props.sub.value}{props.sub.unit}
+        </span>
+      }
+    >
+      <input
+        ref={(el) => {
+          inputEl = el
+          setTimeout(() => { el?.focus(); el?.select() }, 0)
+        }}
+        class="kf-chip kf-chip--number kf-chip--sub kf-chip--editing kf-chip__input"
+        type="number"
+        value={props.sub.value}
+        style={{ width: `${Math.max(4, props.sub.value.length + 2)}ch` }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); commitSub() }
+          if (e.key === 'Escape') setEditing(false)
+        }}
+        onBlur={commitSub}
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="none"
+        spellcheck={false}
+      />
+    </Show>
+  )
+}
+
 // ── ValueChip ─────────────────────────────────────────────────────────────────
-//
-// UNCONTROLLED input: defaultValue set once on open, store written only on
-// blur/Enter/Tab/Escape. Prevents focus-loss from reactive re-renders.
-//
-// autocomplete="one-time-code": disables password manager popups while still
-// allowing <datalist> to surface on iOS Safari. "off" breaks datalist on iOS.
+// UNCONTROLLED. No drag. Tap to open, blur/Enter/Escape to close.
 
 function ValueChip(props: { token: ValueToken }) {
   const [editing, setEditing] = createSignal(false)
   const [invalid,  setInvalid]  = createSignal(false)
-  const dlId = nextDlId()
   let inputEl: HTMLInputElement | undefined
-  let scrubOrigin: { x: number; orig: number } | null = null
+  let cleanupDl: (() => void) | null = null
+
+  // Mount datalist portal lazily on first open, clean up on chip unmount
+  onCleanup(() => { cleanupDl?.() })
+
+  const dlId = `kf-dl-${Math.random().toString(36).slice(2)}`
 
   function open() {
     if (props.token.type === 'transform') return
+    // Mount datalist portal once
+    if (!cleanupDl) {
+      cleanupDl = mountDatalist(dlId, completionsFor(props.token.type, props.token.value))
+    }
     setInvalid(false)
     setEditing(true)
   }
@@ -151,7 +185,14 @@ function ValueChip(props: { token: ValueToken }) {
     const raw = inputEl?.value ?? props.token.value
     if (!revert) {
       if (validate(props.token.type, raw)) {
-        commit(props.token.path, raw)
+        // For numbers, preserve unit from original value if user typed bare number
+        if (props.token.type === 'number' && !NUMBER_UNIT_RE.test(raw)) {
+          const m = NUMBER_UNIT_RE.exec(props.token.value)
+          const unit = m?.[2] ?? ''
+          commit(props.token.path, `${raw}${unit}`)
+        } else {
+          commit(props.token.path, raw)
+        }
         setInvalid(false)
       } else {
         setInvalid(true)
@@ -172,9 +213,11 @@ function ValueChip(props: { token: ValueToken }) {
     setInvalid(!validate(props.token.type, v))
   }
 
+  const isNumber = () => props.token.type === 'number'
+
   return (
     <>
-      {/* transform: render scrubable sub-tokens inline */}
+      {/* transform: render sub-token chips inline */}
       <Show when={props.token.type === 'transform' && (props.token.subTokens?.length ?? 0) > 0}>
         <span class="kf-chip kf-chip--transform">
           <span class="kf-chip__fn">{props.token.value.split('(')[0]}(</span>
@@ -194,16 +237,6 @@ function ValueChip(props: { token: ValueToken }) {
 
       {/* all other types */}
       <Show when={props.token.type !== 'transform'}>
-        {/*
-          datalist MUST be in the DOM before the input references it via list=.
-          Rendering it outside the chip span avoids it being clipped by overflow:hidden.
-        */}
-        <datalist id={dlId}>
-          <For each={completionsFor(props.token.type, props.token.value)}>
-            {(opt) => <option value={opt} />}
-          </For>
-        </datalist>
-
         <span
           class="kf-chip"
           classList={{
@@ -211,25 +244,8 @@ function ValueChip(props: { token: ValueToken }) {
             'kf-chip--editing': editing(),
             'kf-chip--error':   editing() && invalid(),
           }}
-          title={props.token.type === 'number' ? 'Drag · Shift×10 · Alt÷10 · Click to edit' : 'Click to edit'}
+          title="Tap to edit"
           onClick={() => { if (!editing()) open() }}
-          onPointerDown={(e) => {
-            // scrub disabled on touch — tap opens edit mode instead (via onClick)
-            if (props.token.type !== 'number' || editing() || isTouch(e)) return
-            e.preventDefault()
-            ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-            const m = NUMBER_UNIT_RE.exec(props.token.value)
-            scrubOrigin = { x: e.clientX, orig: m ? parseFloat(m[1]) : 0 }
-          }}
-          onPointerMove={(e) => {
-            if (!scrubOrigin || isTouch(e)) return
-            const mult  = e.shiftKey ? 10 : e.altKey ? 0.1 : 1
-            const delta = (e.clientX - scrubOrigin.x) * mult
-            const m     = NUMBER_UNIT_RE.exec(props.token.value)
-            const unit  = m ? (m[2] ?? '') : ''
-            commit(props.token.path, `${+(scrubOrigin.orig + delta).toFixed(3)}${unit}`)
-          }}
-          onPointerUp={() => { scrubOrigin = null }}
         >
           <Show when={props.token.type === 'color'}>
             <ColorSwatch token={props.token} />
@@ -242,16 +258,22 @@ function ValueChip(props: { token: ValueToken }) {
                 setTimeout(() => { el?.focus(); el?.select() }, 0)
               }}
               class="kf-chip__input"
+              // datalist portal is mounted in body; reference it by id
               list={dlId}
-              value={props.token.value}
+              // type=number for number tokens: native spinner + numeric keyboard on mobile
+              type={isNumber() ? 'number' : 'text'}
+              // For numbers, pass just the numeric part so the number input is happy
+              value={isNumber()
+                ? (NUMBER_UNIT_RE.exec(props.token.value)?.[1] ?? props.token.value)
+                : props.token.value
+              }
               style={{ width: `${Math.max(6, props.token.value.length + 2)}ch` }}
               onInput={onInputChange}
               onKeyDown={onKeyDown}
               onBlur={() => close()}
-              // iOS text input hygiene: no autocorrect, no caps, no spellcheck
-              // autocomplete must NOT be "off" — that breaks datalist on iOS Safari
-              // "one-time-code" disables password manager while keeping datalist
-              autocomplete="one-time-code"
+              // autocomplete="on" + list= is the correct combo for datalist on iOS Safari
+              // "off" suppresses the dropdown entirely on iOS
+              autocomplete="on"
               autocorrect="off"
               autocapitalize="none"
               spellcheck={false}
@@ -441,7 +463,6 @@ export default function Inspector() {
     sel.value = ''
   }
 
-  // Lazy-load CodeView so Shiki stays out of the main bundle
   let CodeViewComponent: Component | undefined
   const [codeViewReady, setCodeViewReady] = createSignal(false)
   function loadCodeView() {
