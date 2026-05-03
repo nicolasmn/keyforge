@@ -30,7 +30,11 @@
     border-top: none;
     border-right: none;
     border-bottom: none;
-    overflow-y: auto;
+    /* Let the body scroll, not the aside itself */
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
   }
   .app__timeline-area {
     grid-area: timeline;
@@ -146,6 +150,11 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
+    /* This is the scrollable region */
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    -webkit-overflow-scrolling: touch;
   }
   .inspector__empty {
     padding: var(--space-4);
