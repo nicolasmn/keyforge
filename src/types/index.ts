@@ -40,6 +40,7 @@ export interface LayerElement {
 export interface Layer {
   id: string
   name: string
+  visible: boolean
   element: LayerElement
   tracks: Track[]
 }

@@ -8,20 +8,22 @@ import { buildKeyframeBlock } from './keyframes'
  * - animation-iteration-count: infinite — prevents fill-mode freeze.
  * - Position driven exclusively by animation-delay set as inline style by Preview.
  *
- * Layers with no keyframes on any track are skipped entirely.
+ * Skips layers that are hidden (visible === false) or have no keyframes on any track.
  */
 export function generateCss(doc: AnimationDocument): string {
   return doc.layers
     .map((layer) => {
-      const animName = `kf-${layer.id}`
-      const { times, keyframeBlock } = buildKeyframeBlock(layer, doc.duration)
+      // Skip hidden layers
+      if (layer.visible === false) return ''
 
       // Skip layers where every track has zero keyframes
       const hasKeyframes = layer.tracks.some((t) => t.keyframes.length > 0)
       if (!hasKeyframes) return ''
 
-      // times always includes 0 and duration; only skip if truly nothing was built
-      if (times.length === 0 || !keyframeBlock.trim()) return ''
+      const animName = `kf-${layer.id}`
+      const { keyframeBlock } = buildKeyframeBlock(layer, doc.duration)
+
+      if (!keyframeBlock.trim()) return ''
 
       return [
         `@keyframes ${animName} {`,
