@@ -10,10 +10,9 @@
  *
  * Copy button writes the raw (unhighlighted) string to clipboard.
  */
-import { createSignal, createMemo, createEffect, onMount } from 'solid-js'
-import { doc, selectedLayerId, getSelectedLayer } from '@/store'
-import { generateCss } from '@/utils/css'
-import { generateLayerCss } from '@/utils/css'
+import { createSignal, createMemo, createEffect, onMount, untrack } from 'solid-js'
+import { doc, getSelectedLayer } from '@/store'
+import { generateCss, generateLayerCss } from '@/utils/css'
 
 // Shiki is loaded once, lazily, on first render.
 let highlighter: { codeToHtml: (code: string, opts: object) => string } | null = null
@@ -22,9 +21,10 @@ let shikiReady = false
 async function loadShiki() {
   if (shikiReady) return
   try {
-    const { createHighlighter } = await import(
-      'https://esm.sh/shiki@1?bundle=true'
-    )
+    // esm.sh CDN — no ambient type declarations; ignore the unresolvable module error.
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    const { createHighlighter } = await import('https://esm.sh/shiki@1?bundle=true')
     highlighter = await createHighlighter({
       themes: ['dark-plus'],
       langs: ['css'],
@@ -35,6 +35,12 @@ async function loadShiki() {
   }
 }
 
+async function highlight(code: string): Promise<string | null> {
+  if (!shikiReady) await loadShiki()
+  if (!highlighter) return null
+  return highlighter.codeToHtml(code, { lang: 'css', theme: 'dark-plus' })
+}
+
 export default function CodeView() {
   const [showAll, setShowAll] = createSignal(false)
   const [highlighted, setHighlighted] = createSignal<string | null>(null)
@@ -42,30 +48,20 @@ export default function CodeView() {
 
   // Raw CSS string — recomputed whenever store or toggle changes
   const rawCss = createMemo(() => {
-    if (showAll()) {
-      return generateCss(doc)
-    }
+    if (showAll()) return generateCss(doc)
     const layer = getSelectedLayer()
     if (!layer) return '/* No layer selected */'
     return generateLayerCss(doc, layer.id)
   })
 
-  // Re-highlight whenever raw CSS changes
-  createEffect(async () => {
-    const code = rawCss() // reactive read
-    if (!shikiReady) {
-      setHighlighted(null)
-      await loadShiki()
-    }
-    if (!highlighter) {
-      setHighlighted(null)
-      return
-    }
-    const html = highlighter.codeToHtml(code, {
-      lang: 'css',
-      theme: 'dark-plus',
+  // Reactive read is synchronous; async highlight runs outside tracking scope.
+  createEffect(() => {
+    const code = rawCss() // tracked
+    setHighlighted(null)
+    // untrack: async side-effect must not create reactive subscriptions
+    untrack(() => {
+      highlight(code).then(setHighlighted)
     })
-    setHighlighted(html)
   })
 
   onMount(loadShiki)
@@ -98,11 +94,9 @@ export default function CodeView() {
       </div>
 
       {highlighted() ? (
-        // Shiki wraps output in <pre class="shiki"><code>...</code></pre>
-        <div
-          class="code-view__highlighted"
-          innerHTML={highlighted()!}
-        />
+        // Shiki output is self-generated — not user input, no XSS risk.
+        // eslint-disable-next-line solid/no-innerhtml
+        <div class="code-view__highlighted" innerHTML={highlighted()!} />
       ) : (
         <pre class="code-view__plain">
           <code>{rawCss()}</code>
