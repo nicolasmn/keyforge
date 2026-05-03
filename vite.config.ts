@@ -15,4 +15,11 @@ export default defineConfig({
   build: {
     target: 'esnext',
   },
+  test: {
+    environment: 'node',
+    globals: true,
+    alias: {
+      '@/': resolve(__dirname, './src/'),
+    },
+  },
 })
