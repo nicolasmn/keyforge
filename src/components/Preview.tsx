@@ -1,5 +1,5 @@
 import { createEffect, createMemo, For, onCleanup, untrack } from 'solid-js'
-import { doc, playing, playhead, setPlayhead, loop } from '@/store'
+import { doc, playing, setPlaying, playhead, setPlayhead, loop } from '@/store'
 import { generateCss } from '@/utils/css'
 
 /**
@@ -14,8 +14,8 @@ export default function Preview() {
   let rafId = 0
   let lastTs = 0
 
-  // Structural fingerprint — only changes when layers/tracks/keyframes change,
-  // not on every playhead tick. Using createMemo avoids the fragile `void` trick.
+  // Structural fingerprint: only changes on layers/tracks/keyframes/duration edits.
+  // createMemo ensures a stable reactive dependency — no `void` trick.
   const docStructure = createMemo(() =>
     JSON.stringify(
       doc.layers.map((l) => ({
@@ -32,16 +32,19 @@ export default function Preview() {
     )
   )
 
-  // Re-inject CSS only when structure changes
+  // Re-inject CSS only when structure changes.
+  // generateCss receives a plain-object snapshot — no reactive reads inside untrack.
   createEffect(() => {
-    void docStructure() // subscribe
+    const _structure = docStructure() // reactive subscription
     untrack(() => {
       if (!styleEl) return
-      styleEl.textContent = generateCss(doc)
+      // Snapshot: spread doc into a plain object so generateCss reads no signals
+      const snapshot = JSON.parse(_structure) as typeof doc.layers
+      styleEl.textContent = generateCss({ ...doc, layers: snapshot })
     })
   })
 
-  // Sync layer elements to playhead on every tick
+  // Sync every layer element's delay to the current playhead
   createEffect(() => {
     const ph = playhead()
     document.querySelectorAll<HTMLElement>('[data-layer-id]').forEach((el) => {
@@ -49,7 +52,7 @@ export default function Preview() {
     })
   })
 
-  // RAF loop — advances playhead when playing
+  // RAF loop — advances playhead when playing; calls setPlaying(false) at end
   createEffect(() => {
     if (!playing()) {
       cancelAnimationFrame(rafId)
@@ -70,9 +73,9 @@ export default function Preview() {
         if (isLoop) {
           next = next % duration
         } else {
-          next = duration
-          setPlayhead(next)
-          cancelAnimationFrame(rafId)
+          // Reached end: snap to duration, stop playing
+          setPlayhead(duration)
+          setPlaying(false) // resets play button state
           return
         }
       }
@@ -84,7 +87,6 @@ export default function Preview() {
     rafId = requestAnimationFrame(tick)
   })
 
-  // Single top-level cleanup — no duplicate inside the RAF effect
   onCleanup(() => cancelAnimationFrame(rafId))
 
   return (
