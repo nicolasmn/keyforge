@@ -21,7 +21,7 @@ describe('generateCss', () => {
         {
           id: 'layer-1',
           name: 'Box',
-          element: { tag: 'div', initialCss: '' },
+          element: { tag: 'div', text: '', initialCss: '' },
           tracks: [{ id: 'track-1', property: 'opacity', keyframes: [] }],
         },
       ],
@@ -35,7 +35,7 @@ describe('generateCss', () => {
         {
           id: 'layer-1',
           name: 'Box',
-          element: { tag: 'div', initialCss: '' },
+          element: { tag: 'div', text: '', initialCss: '' },
           tracks: [
             {
               id: 'track-1',
@@ -63,7 +63,7 @@ describe('generateCss', () => {
         {
           id: 'layer-1',
           name: 'Box',
-          element: { tag: 'div', initialCss: '' },
+          element: { tag: 'div', text: '', initialCss: '' },
           tracks: [
             {
               id: 'track-1',
@@ -78,8 +78,10 @@ describe('generateCss', () => {
     })
     const css = generateCss(doc)
     expect(css).toContain('[data-layer-id="layer-1"]')
-    expect(css).toContain('animation:')
-    expect(css).toContain('1000ms')
+    // css.ts emits longhand animation properties, not the shorthand
+    expect(css).toContain('animation-name: kf-layer-1')
+    expect(css).toContain('animation-duration: 1000ms')
+    expect(css).toContain('animation-play-state: paused')
   })
 
   it('handles multiple tracks at the same time offset', () => {
@@ -88,7 +90,7 @@ describe('generateCss', () => {
         {
           id: 'layer-1',
           name: 'Box',
-          element: { tag: 'div', initialCss: '' },
+          element: { tag: 'div', text: '', initialCss: '' },
           tracks: [
             {
               id: 'track-1',
@@ -105,7 +107,6 @@ describe('generateCss', () => {
       ],
     })
     const css = generateCss(doc)
-    // Both props should appear in the same 0% block
     expect(css).toContain('opacity:0')
     expect(css).toContain('transform:translateY(40px)')
   })
