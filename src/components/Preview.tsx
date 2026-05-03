@@ -6,7 +6,6 @@ function layerEls(): NodeListOf<HTMLElement> {
   return document.querySelectorAll<HTMLElement>('[data-layer-id]')
 }
 
-// Pause animation frozen at time `ph` (ms)
 function applyPaused(ph: number) {
   layerEls().forEach((el) => {
     el.style.animationDelay = `-${ph}ms`
@@ -14,16 +13,10 @@ function applyPaused(ph: number) {
   })
 }
 
-// Start animation running from time `fromMs` (ms)
-// We achieve this by setting a negative delay equal to the start offset,
-// then letting the animation run — so CSS position always matches playhead.
 function applyPlaying(fromMs: number) {
-  const now = performance.now()
   layerEls().forEach((el) => {
-    // Temporarily pause to reset delay without visual jump
     el.style.animationPlayState = 'paused'
     el.style.animationDelay = `-${fromMs}ms`
-    // Force a reflow so the browser commits the delay before unpausing
     void el.offsetWidth
     el.style.animationPlayState = 'running'
   })
@@ -35,7 +28,6 @@ export default function Preview() {
   let startTime: number | null = null
   let startPlayhead: number = 0
 
-  // Re-inject CSS only when doc structure changes
   createEffect(() => {
     void doc.layers.map((l) => ({
       id: l.id,
@@ -56,13 +48,10 @@ export default function Preview() {
     })
   })
 
-  // Playback RAF loop — only drives playhead signal, CSS driven by applyPlaying
   createEffect(() => {
     if (playing()) {
       startPlayhead = untrack(playhead)
       startTime = null
-
-      // Kick CSS animation off from startPlayhead position
       applyPlaying(startPlayhead)
 
       const tick = (now: number) => {
@@ -72,7 +61,6 @@ export default function Preview() {
 
         if (next >= doc.duration) {
           if (loop()) {
-            // Reset: restart CSS animation from 0
             startPlayhead = 0
             startTime = now
             next = 0
@@ -96,7 +84,6 @@ export default function Preview() {
 
   onCleanup(() => cancelAnimationFrame(rafId))
 
-  // Scrub when paused
   createEffect(() => {
     const ph = playhead()
     if (untrack(playing)) return
