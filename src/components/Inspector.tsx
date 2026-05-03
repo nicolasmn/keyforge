@@ -8,6 +8,12 @@
  * - Rotation values (deg/rad/turn/grad) show a small SVG dial preview.
  * - <datalist> rendered in a body portal to escape overflow:hidden clipping.
  * - autocomplete="on" + list= required for datalist on iOS Safari.
+ *
+ * BLUR BUG FIX:
+ * onBlur on <input> fires when focus moves to the <select> inside the same
+ * NumberUnitField. We use onFocusOut on the wrapper span and check
+ * e.relatedTarget to see if focus stayed inside the component. Only commit
+ * when focus truly left.
  */
 import {
   createSignal, createMemo, For, Show, onCleanup,
@@ -58,10 +64,6 @@ function validate(type: ValueToken['type'], value: string): boolean {
   return value.length > 0
 }
 
-/**
- * Mount a <datalist> into document.body so it is never clipped by
- * overflow:hidden ancestors. Returns cleanup fn.
- */
 function mountDatalist(id: string, options: string[]): () => void {
   const host = document.createElement('div')
   host.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none'
@@ -75,65 +77,61 @@ function mountDatalist(id: string, options: string[]): () => void {
 }
 
 // ── RotationDial ───────────────────────────────────────────────────────────────
-// Small 20×20 SVG dial showing the angle. Purely decorative.
 
 function RotationDial(props: { deg: number }) {
-  const R = 8
-  const cx = 10, cy = 10
-  // needle tip: angle 0 = pointing up (12 o'clock), clockwise
+  const R = 7
+  const cx = 9, cy = 9
   const rad = () => ((props.deg - 90) * Math.PI) / 180
   const nx  = () => +(cx + R * Math.cos(rad())).toFixed(2)
   const ny  = () => +(cy + R * Math.sin(rad())).toFixed(2)
-
   return (
-    <svg
-      class="kf-rot-dial"
-      width="20" height="20" viewBox="0 0 20 20"
-      aria-hidden="true"
-      style={{ display: 'inline-block', 'vertical-align': 'middle', 'flex-shrink': '0' }}
-    >
-      {/* track circle */}
-      <circle cx={cx} cy={cy} r={R} fill="none"
-        stroke="currentColor" stroke-opacity="0.2" stroke-width="1.5" />
-      {/* needle */}
-      <line
-        x1={cx} y1={cy} x2={nx()} y2={ny()}
-        stroke="currentColor" stroke-width="1.5"
-        stroke-linecap="round"
-      />
-      {/* center dot */}
+    <svg class="kf-rot-dial" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <circle cx={cx} cy={cy} r={R} fill="none" stroke="currentColor" stroke-opacity="0.25" stroke-width="1.5" />
+      <line x1={cx} y1={cy} x2={nx()} y2={ny()} stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
       <circle cx={cx} cy={cy} r="1.5" fill="currentColor" />
     </svg>
   )
 }
 
 // ── NumberUnitField ────────────────────────────────────────────────────────────
-// Shared between ValueChip (standalone number token) and SubScrub (transform arg).
-// Shows: [number input] [unit select] [rotation dial?]
+//
+// Blur-bug fix: we listen to focusout on the *wrapper span* rather than
+// blur on the input. focusout bubbles; we check relatedTarget to see if
+// the new focus target is still inside the wrapper. If yes → stay open.
+// Only commit when focus leaves the entire component.
 
 interface NumberUnitFieldProps {
-  numStr:   string   // numeric part only, e.g. "40"
-  unit:     string   // current unit, e.g. "deg"
-  class?:   string
+  numStr:   string
+  unit:     string
   onCommit: (num: string, unit: string) => void
   onCancel: () => void
 }
 
 function NumberUnitField(props: NumberUnitFieldProps) {
-  let inputEl: HTMLInputElement | undefined
-  // local unit state so changing select previews immediately
+  let wrapperEl: HTMLSpanElement | undefined
+  let inputEl:   HTMLInputElement | undefined
   const [localUnit, setLocalUnit] = createSignal(props.unit)
   const [localNum,  setLocalNum]  = createSignal(props.numStr)
 
   const deg = () =>
     isAngleUnit(localUnit()) ? toDeg(parseFloat(localNum()) || 0, localUnit()) : null
 
-  function finish() {
+  function doCommit() {
     props.onCommit(inputEl?.value ?? localNum(), localUnit())
   }
 
+  function onWrapperFocusOut(e: FocusEvent) {
+    // If the new focus target is still inside the wrapper, ignore
+    if (wrapperEl && e.relatedTarget instanceof Node && wrapperEl.contains(e.relatedTarget)) return
+    doCommit()
+  }
+
   return (
-    <span class={`kf-num-field${props.class ? ` ${props.class}` : ''}`}>
+    <span
+      ref={(el) => { wrapperEl = el }}
+      class="kf-num-field"
+      onFocusOut={onWrapperFocusOut}
+    >
       <input
         ref={(el) => {
           inputEl = el
@@ -144,10 +142,10 @@ function NumberUnitField(props: NumberUnitFieldProps) {
         value={props.numStr}
         onInput={(e) => setLocalNum((e.currentTarget as HTMLInputElement).value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); finish() }
-          if (e.key === 'Escape') props.onCancel()
+          if (e.key === 'Enter') { e.preventDefault(); doCommit() }
+          if (e.key === 'Escape') { e.preventDefault(); props.onCancel() }
+          if (e.key === 'Tab') { /* let tab move to unit select naturally */ }
         }}
-        onBlur={finish}
         autocomplete="off"
         autocorrect="off"
         autocapitalize="none"
@@ -159,8 +157,10 @@ function NumberUnitField(props: NumberUnitFieldProps) {
         onChange={(e) => {
           const u = (e.currentTarget as HTMLSelectElement).value
           setLocalUnit(u)
-          // commit immediately on unit change
+          // commit immediately when unit changes, keep editing open
           props.onCommit(inputEl?.value ?? localNum(), u)
+          // re-focus input after unit change
+          setTimeout(() => inputEl?.focus(), 0)
         }}
       >
         <For each={UNIT_GROUPS}>
@@ -168,9 +168,7 @@ function NumberUnitField(props: NumberUnitFieldProps) {
             <optgroup label={group.label}>
               <For each={group.units}>
                 {(u) => (
-                  <option value={u} selected={u === localUnit()}>
-                    {u === '' ? '—' : u}
-                  </option>
+                  <option value={u}>{u === '' ? '—' : u}</option>
                 )}
               </For>
             </optgroup>
@@ -214,7 +212,6 @@ function ColorSwatch(props: { token: ValueToken }) {
 }
 
 // ── SubScrub: editable sub-token chip (transform arg) ─────────────────────────
-// Tap to open NumberUnitField. No drag.
 
 function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
   const [editing, setEditing] = createSignal(false)
@@ -248,7 +245,6 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
       <NumberUnitField
         numStr={props.sub.value}
         unit={props.sub.unit || 'px'}
-        class="kf-chip--sub"
         onCommit={commitSub}
         onCancel={() => setEditing(false)}
       />
@@ -257,7 +253,6 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
 }
 
 // ── ValueChip ─────────────────────────────────────────────────────────────────
-// UNCONTROLLED. Tap to open, blur/Enter/Escape to close.
 
 function ValueChip(props: { token: ValueToken }) {
   const [editing, setEditing] = createSignal(false)
@@ -268,10 +263,16 @@ function ValueChip(props: { token: ValueToken }) {
 
   const dlId = `kf-dl-${Math.random().toString(36).slice(2)}`
 
-  // parse current value into num + unit
   const parsed = () => {
     const m = NUMBER_UNIT_RE.exec(props.token.value)
     return m ? { num: m[1], unit: m[2] ?? '' } : { num: props.token.value, unit: '' }
+  }
+
+  const angleDeg = () => {
+    if (props.token.type !== 'number') return null
+    const { num, unit } = parsed()
+    if (!isAngleUnit(unit)) return null
+    return toDeg(parseFloat(num) || 0, unit)
   }
 
   function open() {
@@ -287,8 +288,8 @@ function ValueChip(props: { token: ValueToken }) {
     if (!revert) {
       const raw = inputEl?.value ?? props.token.value
       if (validate(props.token.type, raw)) {
-        setInvalid(false)
         commit(props.token.path, raw)
+        setInvalid(false)
       } else {
         setInvalid(true)
         commit(props.token.path, props.token.value)
@@ -319,17 +320,9 @@ function ValueChip(props: { token: ValueToken }) {
     setInvalid(!validate(props.token.type, v))
   }
 
-  // rotation dial for non-editing number tokens with angle unit
-  const angleDeg = () => {
-    if (props.token.type !== 'number') return null
-    const { num, unit } = parsed()
-    if (!isAngleUnit(unit)) return null
-    return toDeg(parseFloat(num) || 0, unit)
-  }
-
   return (
     <>
-      {/* transform: render sub-token chips inline */}
+      {/* transform: sub-token chips */}
       <Show when={props.token.type === 'transform' && (props.token.subTokens?.length ?? 0) > 0}>
         <span class="kf-chip kf-chip--transform">
           <span class="kf-chip__fn">{props.token.value.split('(')[0]}(</span>
@@ -347,7 +340,7 @@ function ValueChip(props: { token: ValueToken }) {
         </span>
       </Show>
 
-      {/* number type: NumberUnitField when editing */}
+      {/* number: NumberUnitField when editing, labeled chip at rest */}
       <Show when={props.token.type === 'number'}>
         <Show
           when={editing()}
@@ -374,7 +367,7 @@ function ValueChip(props: { token: ValueToken }) {
         </Show>
       </Show>
 
-      {/* all other non-transform types */}
+      {/* all other non-transform, non-number types */}
       <Show when={props.token.type !== 'transform' && props.token.type !== 'number'}>
         <span
           class="kf-chip"
@@ -444,13 +437,8 @@ function KeyframeRow(props: {
   return (
     <div class="kf-row">
       <div class="kf-row__main">
-
         <Show when={!editTime()}>
-          <span
-            class="kf-time"
-            onClick={() => setEditTime(true)}
-            title="Click to edit time"
-          >
+          <span class="kf-time" onClick={() => setEditTime(true)} title="Click to edit time">
             {props.time}<span class="kf-time__unit">ms</span>
           </span>
         </Show>
