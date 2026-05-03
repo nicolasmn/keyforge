@@ -29,6 +29,7 @@ Keyforge is a visual, browser-native animation editor. It lets developers and de
 - **Web Animations API** — scrubbing via negative `animation-delay`
 - **Split.js** — resizable panels (horizontal + vertical splits)
 - **@thisbeyond/solid-dnd** — pointer + touch sortable drag for LayerTree
+- **@solid-primitives/storage** — reactive persisted state (`makeObjectStorage` in-memory; IndexedDB-ready)
 - **Vitest** — unit tests for store mutations and CSS generation
 
 ### Layout
@@ -133,7 +134,7 @@ Self-contained improvements with no architectural risk. Priority order:
 - [x] Gutters: 4px wide, accent color on hover, `col-resize`/`row-resize` cursors
 - [x] `SplitLayout` component encapsulates all Split.js logic; `App.tsx` stays clean
 
-#### 3. Read-only Code View
+#### 3. Read-only Code View 🚧
 
 - [ ] Second tab in Inspector panel: **CSS** tab alongside **Properties** tab
 - [ ] Renders live output of `generateCss(doc)` — updates on every store change
@@ -141,9 +142,34 @@ Self-contained improvements with no architectural risk. Priority order:
 - [ ] Copy-to-clipboard button (reuses existing export util)
 - [ ] Scoped to selected layer only; toggle to show full document CSS
 
-#### 4. DevTools Token UI
+#### 4. DevTools Token UI 🚧
 
-See `docs/DEVTOOLS-TOKEN-UI.md` — tracked separately due to scope and UX research required.
+See `docs/DEVTOOLS-TOKEN-UI.md`.
+
+**Implemented:**
+- [x] Token AST generation (`src/utils/tokenize.ts`) — `tokenizeLayer(layer, doc) → ValueToken[]`
+- [x] Type detection: `color` / `number` / `easing` / `transform` / `string`
+- [x] `ValueToken`, `SubToken`, `TokenPath`, `TokenType` types in `src/types/index.ts`
+- [x] `TokenView` component — click-to-edit inline input, Tab/Shift+Tab, Enter/Escape, blur-revert
+- [x] Error state on invalid token (red underline + border, no commit)
+- [x] Numeric tokens: pointer-capture scrub, `Shift×10` / `Alt÷10`, `ew-resize` cursor
+- [x] Color tokens: 10px swatch + native `<input type="color">` picker; path uses `token.path`
+- [x] Easing tokens: inline `EasingEditor` toggle (one open at a time)
+- [x] `EasingEditor`: canvas curve visualiser, draggable handles (DPR-correct hit-test), preset strip
+- [x] `EasingEditor`: raw `cubic-bezier(...)` input with live curve update
+- [x] Easing presets: 14 built-ins in `BUILTIN_PRESETS` (`src/utils/easing-presets.ts`)
+- [x] **Easing library**: `@solid-primitives/storage` `makePersisted` + `makeObjectStorage` — reactive, in-memory, IndexedDB-ready
+- [x] **Save to library**: name input + Save button (Enter); upsert by name
+- [x] **Delete from library**: ✕ on hover of each custom preset chip
+- [x] Transform sub-tokens: `SubTokenScrub` component, each arg scrubable, assembler rebuilds string
+- [x] Third **Tokens** tab in Inspector (`src/components/Inspector.tsx`)
+- [x] `token-view.css` imported in `App.tsx`
+
+**Open tasks:**
+- [ ] `]` / `[` keyboard shortcut — jump to same token in next/prev keyframe stop
+- [ ] Property-aware error `title` text (e.g. `"opacity expects 0–1"`) — currently generic red state only
+- [ ] Custom oklch color picker (v2 — after native hex-only picker validated)
+- [ ] Easing library persistence upgrade: swap `makeObjectStorage` → `localforage` when Phase 4 IndexedDB lands
 
 ---
 
@@ -171,9 +197,9 @@ See `docs/DEVTOOLS-TOKEN-UI.md` — tracked separately due to scope and UX resea
 - [ ] Multi-layer sequencing with offset delays
 - [ ] Stagger helper: auto-generate delay increments across layers
 - [ ] View Transitions API mode: old/new pseudo-element keyframe generation
-- [ ] Save/load documents (IndexedDB)
+- [ ] **Save/load documents (IndexedDB)** — swap `makeObjectStorage` → `localforage` in `easingLibrary.ts`
 - [ ] Share URL (compressed state in hash)
-- [ ] Desktop app via Tauri (offline, file system access)
+- [ ] Desktop app via Tauri (offline, file system access) — use `tauriStorage` from `@solid-primitives/storage/tauri`
 
 ---
 

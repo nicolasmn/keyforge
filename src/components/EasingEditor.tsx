@@ -1,5 +1,6 @@
-import { createSignal, createEffect, onMount, For } from 'solid-js'
-import { EASING_PRESETS, parseCubicBezier, evalCubicBezier } from '@/utils/easing-presets'
+import { createSignal, createEffect, onMount, For, Show } from 'solid-js'
+import { BUILTIN_PRESETS, parseCubicBezier, evalCubicBezier } from '@/utils/easing-presets'
+import { customEasings, addEasing, removeEasing } from '@/store/easingLibrary'
 
 interface Props {
   value: string
@@ -11,12 +12,15 @@ const CANVAS_CSS = 120
 
 export default function EasingEditor(props: Props) {
   let canvas: HTMLCanvasElement | undefined
-  const [rawInput, setRawInput] = createSignal(props.value)
-  const [handles, setHandles] = createSignal<[number, number, number, number] | null>(
+  const [rawInput,   setRawInput]   = createSignal(props.value)
+  const [handles,    setHandles]    = createSignal<[number, number, number, number] | null>(
     parseCubicBezier(props.value),
   )
+  const [saveName,   setSaveName]   = createSignal('')
+  const [saveError,  setSaveError]  = createSignal('')
   let dragging: 0 | 1 | 2 = 0
 
+  // ── Canvas draw ────────────────────────────────────────────────────────
   function draw() {
     if (!canvas) return
     const ctx = canvas.getContext('2d')!
@@ -25,10 +29,10 @@ export default function EasingEditor(props: Props) {
     ctx.clearRect(0, 0, W, W)
 
     const cv = getComputedStyle(document.documentElement)
-    const colorBg     = cv.getPropertyValue('--color-surface-2').trim()
-    const colorBorder = cv.getPropertyValue('--color-border').trim()
-    const colorPrimary= cv.getPropertyValue('--color-primary').trim()
-    const colorMuted  = cv.getPropertyValue('--color-text-muted').trim()
+    const colorBg      = cv.getPropertyValue('--color-surface-2').trim()
+    const colorBorder  = cv.getPropertyValue('--color-border').trim()
+    const colorPrimary = cv.getPropertyValue('--color-primary').trim()
+    const colorMuted   = cv.getPropertyValue('--color-text-muted').trim()
 
     ctx.fillStyle = colorBg
     ctx.fillRect(0, 0, W, W)
@@ -41,10 +45,9 @@ export default function EasingEditor(props: Props) {
       ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(W, p); ctx.stroke()
     }
 
-    const pad = 12 * dpr
+    const pad   = 12 * dpr
     const inner = W - pad * 2
 
-    // Map normalised [0,1] coords → canvas pixels (Y flipped)
     function toCanvas(x: number, y: number): [number, number] {
       return [pad + x * inner, pad + (1 - y) * inner]
     }
@@ -91,30 +94,23 @@ export default function EasingEditor(props: Props) {
     }
   }
 
-  /**
-   * Convert a CSS-pixel mouse position to normalised handle coords.
-   * Uses CSS pixel size (CANVAS_CSS), not physical pixels, because
-   * getBoundingClientRect already returns CSS pixels.
-   */
+  // ── Hit-testing (CSS pixels) ────────────────────────────────────────────
   function cssToHandle(clientX: number, clientY: number): [number, number] {
-    const rect = canvas!.getBoundingClientRect()
-    const pad = 12
+    const rect  = canvas!.getBoundingClientRect()
+    const pad   = 12
     const inner = CANVAS_CSS - pad * 2
     const x = Math.max(0,    Math.min(1,   (clientX - rect.left - pad) / inner))
-    const y = Math.max(-0.5, Math.min(1.5, 1 - (clientY - rect.top  - pad) / inner))
+    const y = Math.max(-0.5, Math.min(1.5, 1 - (clientY - rect.top - pad) / inner))
     return [x, y]
   }
 
-  /**
-   * Map normalised handle coords → CSS pixels (for hit-testing).
-   * Must mirror toCanvas() but in CSS-pixel space.
-   */
   function handleToCss(nx: number, ny: number): [number, number] {
-    const pad = 12
+    const pad   = 12
     const inner = CANVAS_CSS - pad * 2
     return [pad + nx * inner, pad + (1 - ny) * inner]
   }
 
+  // ── Mouse events ───────────────────────────────────────────────────────
   function onCanvasMouseDown(e: MouseEvent) {
     const h = handles()
     if (!h) return
@@ -124,10 +120,8 @@ export default function EasingEditor(props: Props) {
     const [hx2, hy2] = handleToCss(x2, y2)
     const mx = e.clientX - rect.left
     const my = e.clientY - rect.top
-    const d1 = Math.hypot(mx - hx1, my - hy1)
-    const d2 = Math.hypot(mx - hx2, my - hy2)
-    if (d1 < 12) dragging = 1
-    else if (d2 < 12) dragging = 2
+    if (Math.hypot(mx - hx1, my - hy1) < 12) dragging = 1
+    else if (Math.hypot(mx - hx2, my - hy2) < 12) dragging = 2
   }
 
   function onCanvasMouseMove(e: MouseEvent) {
@@ -146,6 +140,7 @@ export default function EasingEditor(props: Props) {
 
   function onCanvasMouseUp() { dragging = 0 }
 
+  // ── Raw input ──────────────────────────────────────────────────────────
   function onRawInput(e: Event) {
     const v = (e.currentTarget as HTMLInputElement).value
     setRawInput(v)
@@ -160,13 +155,34 @@ export default function EasingEditor(props: Props) {
     draw()
   }
 
-  function onPresetClick(value: string) {
+  // ── Preset click ───────────────────────────────────────────────────────
+  function applyPreset(value: string) {
     setRawInput(value)
     setHandles(parseCubicBezier(value))
     props.onChange(value)
     draw()
   }
 
+  // ── Save to library ────────────────────────────────────────────────────
+  function onSave() {
+    const name = saveName().trim()
+    if (!name) { setSaveError('Name required'); return }
+    const value = rawInput()
+    if (value !== 'linear' && !parseCubicBezier(value)) {
+      setSaveError('Invalid easing value')
+      return
+    }
+    addEasing(name, value)
+    setSaveName('')
+    setSaveError('')
+  }
+
+  function onSaveKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Enter') { e.preventDefault(); onSave() }
+    else if (e.key === 'Escape') { setSaveName(''); setSaveError('') }
+  }
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────
   onMount(() => {
     if (!canvas) return
     const dpr = window.devicePixelRatio || 1
@@ -177,13 +193,13 @@ export default function EasingEditor(props: Props) {
     draw()
   })
 
-  createEffect(() => {
-    void handles()
-    draw()
-  })
+  createEffect(() => { void handles(); draw() })
 
+  // ── Render ─────────────────────────────────────────────────────────────
   return (
     <div class="easing-editor">
+
+      {/* Canvas + raw input row */}
       <div class="easing-editor__canvas-wrap">
         <canvas
           ref={(el) => { canvas = el }}
@@ -199,19 +215,23 @@ export default function EasingEditor(props: Props) {
             value={rawInput()}
             onInput={onRawInput}
             spellcheck={false}
+            aria-label="Easing value"
           />
-          <button class="btn btn--ghost easing-editor__close" onClick={props.onClose}>
+          <button class="btn btn--ghost easing-editor__close" onClick={props.onClose} aria-label="Close easing editor">
             ✕
           </button>
         </div>
       </div>
+
+      {/* Built-in presets */}
+      <div class="easing-editor__section-label">Built-in</div>
       <div class="easing-editor__presets">
-        <For each={EASING_PRESETS}>
+        <For each={BUILTIN_PRESETS}>
           {(preset) => (
             <button
               class="easing-editor__preset"
               classList={{ 'easing-editor__preset--active': rawInput() === preset.value }}
-              onClick={() => onPresetClick(preset.value)}
+              onClick={() => applyPreset(preset.value)}
               title={preset.value}
             >
               {preset.name}
@@ -219,6 +239,54 @@ export default function EasingEditor(props: Props) {
           )}
         </For>
       </div>
+
+      {/* Custom library */}
+      <Show when={customEasings().length > 0}>
+        <div class="easing-editor__section-label">Saved</div>
+        <div class="easing-editor__presets">
+          <For each={customEasings()}>
+            {(preset) => (
+              <span class="easing-editor__preset-wrap">
+                <button
+                  class="easing-editor__preset"
+                  classList={{ 'easing-editor__preset--active': rawInput() === preset.value }}
+                  onClick={() => applyPreset(preset.value)}
+                  title={preset.value}
+                >
+                  {preset.name}
+                </button>
+                <button
+                  class="easing-editor__preset-delete"
+                  onClick={() => removeEasing(preset.name)}
+                  title={`Remove ${preset.name}`}
+                  aria-label={`Remove ${preset.name}`}
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+          </For>
+        </div>
+      </Show>
+
+      {/* Save form */}
+      <div class="easing-editor__save-row">
+        <input
+          class="input easing-editor__save-input"
+          placeholder="Name…"
+          value={saveName()}
+          onInput={(e) => { setSaveName((e.currentTarget as HTMLInputElement).value); setSaveError('') }}
+          onKeyDown={onSaveKeyDown}
+          aria-label="Easing preset name"
+        />
+        <button class="btn btn--primary easing-editor__save-btn" onClick={onSave}>
+          Save
+        </button>
+      </div>
+      <Show when={saveError()}>
+        <p class="easing-editor__save-error">{saveError()}</p>
+      </Show>
+
     </div>
   )
 }
