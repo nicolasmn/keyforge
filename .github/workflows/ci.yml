@@ -20,11 +20,8 @@ jobs:
           cache: npm
           cache-dependency-path: package.json
 
-      - name: Generate lockfile if missing
-        run: |
-          if [ ! -f package-lock.json ]; then
-            npm install --package-lock-only
-          fi
+      - name: Sync lockfile with package.json
+        run: npm install --package-lock-only
 
       - name: Install dependencies
         run: npm ci
@@ -52,11 +49,8 @@ jobs:
           cache: npm
           cache-dependency-path: package.json
 
-      - name: Generate lockfile if missing
-        run: |
-          if [ ! -f package-lock.json ]; then
-            npm install --package-lock-only
-          fi
+      - name: Sync lockfile with package.json
+        run: npm install --package-lock-only
 
       - name: Install dependencies
         run: npm ci
