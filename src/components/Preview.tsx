@@ -12,6 +12,20 @@ import { generateCss } from '@/utils/css'
  * Hidden layers (visible === false) are excluded from generated CSS and
  * rendered with `visibility: hidden` so they hold their layout space.
  */
+
+/** Parse a semicolon-separated inline CSS string into a style object. */
+function parseCssString(css: string): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const decl of css.split(';')) {
+    const colon = decl.indexOf(':')
+    if (colon === -1) continue
+    const prop = decl.slice(0, colon).trim()
+    const value = decl.slice(colon + 1).trim()
+    if (prop && value) result[prop] = value
+  }
+  return result
+}
+
 export default function Preview() {
   let styleEl: HTMLStyleElement | undefined
   let rafId = 0
@@ -100,7 +114,10 @@ export default function Preview() {
           {(layer) => (
             <div
               data-layer-id={layer.id}
-              style={`${layer.element.initialCss}${!layer.visible ? 'visibility:hidden;' : ''}`}
+              style={{
+                ...parseCssString(layer.element.initialCss),
+                ...(layer.visible === false ? { visibility: 'hidden' } : {}),
+              }}
             >
               {layer.element.text}
             </div>
