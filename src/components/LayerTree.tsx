@@ -8,7 +8,6 @@ import {
   closestCenter,
   type DragEvent,
 } from '@thisbeyond/solid-dnd'
-import '@/directives'
 import {
   doc,
   selectedLayerId,
