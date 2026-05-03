@@ -12,12 +12,14 @@ const CANVAS_CSS = 120
 
 export default function EasingEditor(props: Props) {
   let canvas: HTMLCanvasElement | undefined
-  const [rawInput,   setRawInput]   = createSignal(props.value)
-  const [handles,    setHandles]    = createSignal<[number, number, number, number] | null>(
-    parseCubicBezier(props.value),
+  // Wrap props.value in a getter so we read it reactively inside createEffect
+  const initialValue = () => props.value
+  const [rawInput,  setRawInput]  = createSignal(initialValue())
+  const [handles,   setHandles]   = createSignal<[number, number, number, number] | null>(
+    parseCubicBezier(initialValue()),
   )
-  const [saveName,   setSaveName]   = createSignal('')
-  const [saveError,  setSaveError]  = createSignal('')
+  const [saveName,  setSaveName]  = createSignal('')
+  const [saveError, setSaveError] = createSignal('')
   let dragging: 0 | 1 | 2 = 0
 
   // ── Canvas draw ────────────────────────────────────────────────────────
@@ -155,7 +157,7 @@ export default function EasingEditor(props: Props) {
     draw()
   }
 
-  // ── Preset click ───────────────────────────────────────────────────────
+  // ── Preset / library ──────────────────────────────────────────────────
   function applyPreset(value: string) {
     setRawInput(value)
     setHandles(parseCubicBezier(value))
@@ -163,7 +165,7 @@ export default function EasingEditor(props: Props) {
     draw()
   }
 
-  // ── Save to library ────────────────────────────────────────────────────
+  // ── Save to library ──────────────────────────────────────────────────
   function onSave() {
     const name = saveName().trim()
     if (!name) { setSaveError('Name required'); return }
@@ -193,7 +195,7 @@ export default function EasingEditor(props: Props) {
     draw()
   })
 
-  createEffect(() => { void handles(); draw() })
+  createEffect(() => { handles(); draw() })
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
@@ -217,7 +219,12 @@ export default function EasingEditor(props: Props) {
             spellcheck={false}
             aria-label="Easing value"
           />
-          <button class="btn btn--ghost easing-editor__close" onClick={props.onClose} aria-label="Close easing editor">
+          {/* Wrap handler in arrow fn to satisfy solid/reactivity for prop access */}
+          <button
+            class="btn btn--ghost easing-editor__close"
+            onClick={() => props.onClose()}
+            aria-label="Close easing editor"
+          >
             ✕
           </button>
         </div>

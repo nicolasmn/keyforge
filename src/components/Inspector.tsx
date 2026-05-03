@@ -211,7 +211,7 @@ export default function Inspector() {
       {/* Tokens tab */}
       <Show when={activeTab() === 'tokens'}>
         <Show when={layer()} fallback={<p class="inspector__empty">No layer selected</p>}>
-          <TokenView tokens={tokens()} layerId={selectedLayerId() ?? ''} />
+          <TokenView tokens={tokens()} />
         </Show>
       </Show>
     </aside>

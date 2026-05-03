@@ -1,7 +1,6 @@
 import type { Layer, ValueToken, SubToken, TokenType, TokenPath } from '@/types'
 import type { AnimationDocument } from '@/types'
 
-const COLOR_RE = /^(#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\(|oklch\(|color\(|[a-z]+)$/
 const NUMBER_UNIT_RE = /^(-?[\d.]+)(px|ms|deg|%|rem|em|vw|vh|fr|s|turn|rad)?$/
 const EASING_NAMES = new Set([
   'linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out',
@@ -22,7 +21,6 @@ function detectType(value: string, field: 'value' | 'easing'): TokenType {
     v.startsWith('oklch') ||
     v.startsWith('color(')
   ) return 'color'
-  // Named colors (basic set)
   if (/^[a-z]+$/.test(v) && CSS.supports('color', v)) return 'color'
   if (NUMBER_UNIT_RE.test(v)) return 'number'
   if (EASING_NAMES.has(v) || v.startsWith('cubic-bezier(')) return 'easing'
@@ -31,20 +29,17 @@ function detectType(value: string, field: 'value' | 'easing'): TokenType {
 
 function parseTransformSubTokens(value: string, path: TokenPath): SubToken[] {
   const subs: SubToken[] = []
-  // Match all fn(...) groups
   const fnRe = /([\w-]+)\(([^)]+)\)/g
   const fnMatches = [...value.matchAll(fnRe)]
-  fnMatches.forEach((fnMatch) => {
-    const fnName = fnMatch[1]
+  fnMatches.forEach((fnMatch, fnIndex) => {
     const args = fnMatch[2].split(',').map((a) => a.trim())
     args.forEach((arg, argIndex) => {
       const numMatch = arg.match(/^(-?[\d.]+)(\S*)$/)
       if (!numMatch) return
       const assembler = (tokens: SubToken[]): string => {
         let result = value
-        // Rebuild by re-matching and replacing
         let fnIdx = 0
-        result = result.replace(/([\w-]+)\(([^)]+)\)/g, (full, fn, argsStr) => {
+        result = result.replace(/([\w-]+)\(([^)]+)\)/g, (_full, fn: string, argsStr: string) => {
           const argArr = argsStr.split(',').map((a: string) => a.trim())
           const rebuilt = argArr.map((_: string, i: number) => {
             const t = tokens.find((st) => st.argIndex === fnIdx * 100 + i)
@@ -59,10 +54,9 @@ function parseTransformSubTokens(value: string, path: TokenPath): SubToken[] {
         type: 'number',
         value: numMatch[1],
         unit: numMatch[2] || '',
-        argIndex: fnMatches.indexOf(fnMatch) * 100 + argIndex,
+        argIndex: fnIndex * 100 + argIndex,
         assembler,
       })
-      void fnName
       void path
     })
   })
@@ -73,7 +67,6 @@ export function tokenizeLayer(layer: Layer, doc: AnimationDocument): ValueToken[
   const tokens: ValueToken[] = []
   for (const track of layer.tracks) {
     for (const kf of track.keyframes) {
-      // value token
       const valuePath: TokenPath = {
         layerId: layer.id,
         trackId: track.id,
@@ -91,7 +84,6 @@ export function tokenizeLayer(layer: Layer, doc: AnimationDocument): ValueToken[
       }
       tokens.push(valueToken)
 
-      // easing token
       tokens.push({
         type: 'easing',
         value: kf.easing,

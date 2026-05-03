@@ -25,13 +25,16 @@ function validate(type: ValueToken['type'], value: string): boolean {
   return value.length > 0
 }
 
-// ── Inline sub-token row for transform arguments ─────────────────────────────
+// ── Inline sub-token scrub for transform arguments ───────────────────────────
 function SubTokenScrub(props: {
   sub: SubToken
   parentToken: ValueToken
 }) {
   let scrubOrigin: { x: number; orig: number } | null = null
-  const [display, setDisplay] = createSignal(`${props.sub.value}${props.sub.unit}`)
+  // Read sub props inside a getter so reactivity is tracked
+  const subValue = () => props.sub.value
+  const subUnit  = () => props.sub.unit
+  const [display, setDisplay] = createSignal(`${subValue()}${subUnit()}`)
 
   function rebuildAndCommit(newVal: number) {
     const updated = props.parentToken.subTokens!.map((st) =>
@@ -41,13 +44,13 @@ function SubTokenScrub(props: {
     ) as SubToken[]
     const assembled = props.sub.assembler(updated)
     commit(props.parentToken.path, assembled)
-    setDisplay(`${+newVal.toFixed(3)}${props.sub.unit}`)
+    setDisplay(`${+newVal.toFixed(3)}${subUnit()}`)
   }
 
   function onPointerDown(e: PointerEvent) {
     e.preventDefault()
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-    scrubOrigin = { x: e.clientX, orig: parseFloat(props.sub.value) }
+    scrubOrigin = { x: e.clientX, orig: parseFloat(subValue()) }
   }
   function onPointerMove(e: PointerEvent) {
     if (!scrubOrigin) return
@@ -71,11 +74,11 @@ function SubTokenScrub(props: {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function TokenView(props: Props) {
-  const [editingId,      setEditingId]      = createSignal<string | null>(null)
-  const [editingEasingId,setEditingEasingId]= createSignal<string | null>(null)
-  const [editValue,      setEditValue]      = createSignal('')
-  const [invalid,        setInvalid]        = createSignal(false)
-  const [scrubOrigin,    setScrubOrigin]    = createSignal<{ x: number; orig: number; token: ValueToken } | null>(null)
+  const [editingId,       setEditingId]       = createSignal<string | null>(null)
+  const [editingEasingId, setEditingEasingId] = createSignal<string | null>(null)
+  const [editValue,       setEditValue]       = createSignal('')
+  const [invalid,         setInvalid]         = createSignal(false)
+  const [scrubOrigin,     setScrubOrigin]     = createSignal<{ x: number; orig: number; token: ValueToken } | null>(null)
 
   function tid(t: ValueToken) {
     return `${t.path.trackId}:${t.path.keyframeId}:${t.path.field}`
@@ -87,7 +90,6 @@ export default function TokenView(props: Props) {
       setEditingEasingId(editingEasingId() === id ? null : id)
       return
     }
-    // Transform tokens are edited via sub-tokens, not inline
     if (t.type === 'transform') return
     setEditingId(tid(t))
     setEditValue(t.value)
@@ -173,7 +175,6 @@ export default function TokenView(props: Props) {
             const h = (n: number) => n.toString(16).padStart(2, '0')
             input.value = `#${h(+m[1])}${h(+m[2])}${h(+m[3])}`
           }
-          // Use token.path directly — no broken partial object
           input.oninput  = () => commit(token.path, input.value)
           input.onchange = () => commit(token.path, input.value)
           input.click()
@@ -203,8 +204,8 @@ export default function TokenView(props: Props) {
             <For each={group.tokens}>
               {(token) => {
                 const id = () => tid(token)
-                const isEditing     = () => editingId()       === id()
-                const isEasingOpen  = () => editingEasingId() === id()
+                const isEditing    = () => editingId()       === id()
+                const isEasingOpen = () => editingEasingId() === id()
 
                 return (
                   <>
@@ -212,9 +213,9 @@ export default function TokenView(props: Props) {
                       class="token"
                       classList={{
                         [`token--${token.type}`]: true,
-                        'token--editing':    isEditing(),
-                        'token--error':      isEditing() && invalid(),
-                        'token--easing-open':isEasingOpen(),
+                        'token--editing':     isEditing(),
+                        'token--error':       isEditing() && invalid(),
+                        'token--easing-open': isEasingOpen(),
                       }}
                       title={token.type === 'number' ? 'Drag · Shift×10 · Alt÷10' : undefined}
                       onClick={() => !isEditing() && startEdit(token)}
@@ -226,7 +227,6 @@ export default function TokenView(props: Props) {
                         {colorSwatch(token)}
                       </Show>
 
-                      {/* Transform: render sub-tokens as scrubable args */}
                       <Show when={token.type === 'transform' && token.subTokens && token.subTokens.length > 0}>
                         <span class="token__fn-label">{token.value.split('(')[0]}(</span>
                         <For each={token.subTokens}>
@@ -242,7 +242,6 @@ export default function TokenView(props: Props) {
                         <span class="token__fn-label">)</span>
                       </Show>
 
-                      {/* All other types */}
                       <Show when={token.type !== 'transform'}>
                         <Show when={isEditing()}>
                           <input

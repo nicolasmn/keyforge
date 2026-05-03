@@ -12,9 +12,9 @@ import { createSignal } from 'solid-js'
 import { makePersisted, makeObjectStorage } from '@solid-primitives/storage'
 import type { EasingPreset } from '@/utils/easing-presets'
 
-// Backing object lives for the lifetime of the module (in-memory).
 const _backingStore: Record<string, string> = {}
 
+// Array destructuring required for solid/reactivity lint rule
 const [customEasings, setCustomEasings] = makePersisted(
   createSignal<EasingPreset[]>([]),
   {
@@ -29,7 +29,6 @@ export function addEasing(name: string, value: string): void {
   const trimmed = name.trim()
   if (!trimmed) return
   setCustomEasings((prev) => {
-    // Upsert: if same name exists, replace value
     const exists = prev.some((e) => e.name === trimmed)
     if (exists) return prev.map((e) => e.name === trimmed ? { name: trimmed, value } : e)
     return [...prev, { name: trimmed, value }]
