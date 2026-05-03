@@ -16,7 +16,7 @@ const HEADER_HEIGHT = 28
 const LABEL_WIDTH = 120
 const KF_RADIUS = 6
 const TOUCH_SLOP = 10
-const HANDLE_HIT = 12  // px from right edge that counts as duration handle
+const HANDLE_HIT = 12
 
 export default function Timeline() {
   let canvas: HTMLCanvasElement | undefined
@@ -28,7 +28,6 @@ export default function Timeline() {
   let touchStartY = 0
   let touchMoved = false
 
-  // ── Coordinate helpers ─────────────────────────────────────
   function timeToX(time: number, width: number) {
     return LABEL_WIDTH + (time / doc.duration) * (width - LABEL_WIDTH)
   }
@@ -40,13 +39,13 @@ export default function Timeline() {
     )
   }
 
-  function xToDuration(x: number, width: number) {
-    // Map canvas x → a new duration value (min 100ms)
-    const raw = ((x - LABEL_WIDTH) / (width - LABEL_WIDTH)) * doc.duration
-    return Math.max(100, Math.round(raw / 50) * 50)
+  function applyDurationFromX(x: number) {
+    const msPerPx = doc.duration / (canvas!.offsetWidth - LABEL_WIDTH)
+    const newDur = Math.max(100, Math.round(((x - LABEL_WIDTH) * msPerPx) / 50) * 50)
+    setPlayhead((prev) => Math.min(prev, newDur))
+    setDuration(newDur)
   }
 
-  // ── Drawing ────────────────────────────────────────────────
   function draw() {
     if (!canvas) return
     const ctx = canvas.getContext('2d')!
@@ -70,12 +69,9 @@ export default function Timeline() {
     ctx.fillStyle = colorBg
     ctx.fillRect(0, 0, width, height)
 
-    // Time ruler background
     ctx.fillStyle = colorBorder
     ctx.fillRect(0, 0, width, HEADER_HEIGHT * dpr)
 
-    // Tick marks + labels
-    ctx.fillStyle = colorText
     ctx.font = `${11 * dpr}px monospace`
     ctx.textBaseline = 'middle'
     const tickCount = 10
@@ -88,20 +84,15 @@ export default function Timeline() {
       ctx.fillText(`${(t / 1000).toFixed(1)}s`, x * dpr + 4, (HEADER_HEIGHT / 2) * dpr)
     }
 
-    // Duration label top-right of ruler
-    const durLabel = `${doc.duration}ms`
     ctx.font = `bold ${10 * dpr}px monospace`
     ctx.textAlign = 'right'
     ctx.fillStyle = colorPrimary
-    ctx.fillText(durLabel, width - (HANDLE_HIT + 4) * dpr, (HEADER_HEIGHT / 2) * dpr)
+    ctx.fillText(`${doc.duration}ms`, width - (HANDLE_HIT + 4) * dpr, (HEADER_HEIGHT / 2) * dpr)
     ctx.textAlign = 'left'
 
-    // Duration drag handle — vertical bar at right edge of ruler
-    const handleX = width - HANDLE_HIT * dpr / 2
+    const handleX = width - (HANDLE_HIT * dpr) / 2
     ctx.fillStyle = colorPrimary
     ctx.fillRect(handleX - dpr, 0, 2 * dpr, HEADER_HEIGHT * dpr)
-    // Arrow chevrons on handle
-    ctx.fillStyle = colorPrimary
     const cx = handleX
     const cy = (HEADER_HEIGHT / 2) * dpr
     const aw = 3 * dpr
@@ -112,7 +103,6 @@ export default function Timeline() {
     ctx.lineWidth = 1.5 * dpr
     ctx.stroke()
 
-    // Tracks
     let row = 0
     doc.layers.forEach((layer) => {
       layer.tracks.forEach((track, ti) => {
@@ -144,7 +134,6 @@ export default function Timeline() {
       })
     })
 
-    // Playhead
     const ph = timeToX(playhead(), width / dpr) * dpr
     ctx.fillStyle = colorAccent
     ctx.fillRect(ph, 0, 2 * dpr, height)
@@ -209,7 +198,6 @@ export default function Timeline() {
     }
   }
 
-  // ── Mouse ──────────────────────────────────────────────────
   function onMouseDown(e: MouseEvent) {
     const x = cssX(e)
     const y = cssY(e)
@@ -237,24 +225,7 @@ export default function Timeline() {
   function onMouseMove(e: MouseEvent) {
     const x = cssX(e)
     if (resizingDuration) {
-      // Remap x: treat canvas width as the new end of the timeline
-      // duration = x / (width - LABEL_WIDTH) * current_duration … but we want
-      // to allow stretching beyond current, so we treat the full track width
-      // (width - LABEL_WIDTH) as mapping to whatever duration makes x land at the right edge
-      const trackW = canvas!.offsetWidth - LABEL_WIDTH
-      if (trackW <= 0) return
-      const newDur = Math.max(100, Math.round(((x - LABEL_WIDTH) / trackW) * doc.duration / 50) * 50)
-      // Actually: user drags to set where the end marker lands.
-      // Map canvas x linearly: x / (width-LABEL_WIDTH) * factor, where factor grows as they drag right.
-      // Simpler: treat the full canvas width as the new duration end, so
-      // newDuration = (x - LABEL_WIDTH) / (width - LABEL_WIDTH) * MAX, but MAX is unbounded.
-      // Best UX: each pixel = (current_duration / track_width) ms, so dragging right increases duration.
-      const msPerPx = doc.duration / (canvas!.offsetWidth - LABEL_WIDTH)
-      const rawDur = Math.round(((x - LABEL_WIDTH) * msPerPx) / 50) * 50
-      const clampedDur = Math.max(100, rawDur)
-      setPlayhead((prev) => Math.min(prev, clampedDur))
-      setDuration(clampedDur)
-      void newDur // suppress unused warning
+      applyDurationFromX(x)
       return
     }
     if (scrubbing) setPlayhead(xToTime(x, canvas!.offsetWidth))
@@ -263,15 +234,11 @@ export default function Timeline() {
         time: Math.round(xToTime(x, canvas!.offsetWidth)),
       })
     }
-    // Cursor feedback
     canvas!.style.cursor = isOverHandle(x) && cssY(e) < HEADER_HEIGHT ? 'ew-resize' : ''
   }
 
-  function onMouseUp(e: MouseEvent) {
-    if (resizingDuration) {
-      resizingDuration = false
-      return
-    }
+  function onMouseUp() {
+    resizingDuration = false
     draggingKf = null
     scrubbing = false
   }
@@ -284,7 +251,6 @@ export default function Timeline() {
     }
   }
 
-  // ── Touch ──────────────────────────────────────────────────
   function onTouchStart(e: TouchEvent) {
     const t = e.touches[0]
     touchStartX = cssX(t)
@@ -310,11 +276,7 @@ export default function Timeline() {
     if (Math.abs(x - touchStartX) > TOUCH_SLOP || Math.abs(y - touchStartY) > TOUCH_SLOP)
       touchMoved = true
     if (resizingDuration) {
-      const msPerPx = doc.duration / (canvas!.offsetWidth - LABEL_WIDTH)
-      const rawDur = Math.round(((x - LABEL_WIDTH) * msPerPx) / 50) * 50
-      const clampedDur = Math.max(100, rawDur)
-      setPlayhead((prev) => Math.min(prev, clampedDur))
-      setDuration(clampedDur)
+      applyDurationFromX(x)
       return
     }
     if (scrubbing) {
