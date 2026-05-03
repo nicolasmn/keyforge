@@ -3,6 +3,9 @@ name: Format
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   format:
     name: Auto-format with Prettier
