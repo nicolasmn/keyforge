@@ -1,10 +1,18 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { setDoc } from 'solid-js/store'
-import { doc, addLayer, removeLayer, addTrack, addKeyframe, updateKeyframe, removeKeyframe, setDuration } from '@/store'
+import {
+  doc,
+  setDoc,
+  addLayer,
+  removeLayer,
+  addTrack,
+  addKeyframe,
+  updateKeyframe,
+  removeKeyframe,
+  setDuration,
+} from '@/store'
 import type { AnimationDocument } from '@/types'
 import { nanoid } from '@/utils/nanoid'
 
-// Reset doc to a clean state before each test
 const blankDoc = (): AnimationDocument => ({
   id: nanoid(),
   name: 'Test',
