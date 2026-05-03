@@ -1,20 +1,16 @@
 import { createSignal } from 'solid-js'
 import { doc, setDuration, setPlayhead, setPlaying } from '@/store'
-import { exportCss } from '@/utils/export'
 
 export default function Header() {
-  // Local draft so the input isn't reactive on every keystroke
   const [draft, setDraft] = createSignal(String(doc.duration))
 
   function commitDuration() {
     const ms = parseInt(draft(), 10)
     if (!isNaN(ms) && ms >= 100) {
       setPlaying(false)
-      // Clamp playhead so it doesn't exceed the new duration
       setPlayhead((prev) => Math.min(prev, ms))
       setDuration(ms)
     } else {
-      // Revert to current value if invalid
       setDraft(String(doc.duration))
     }
   }
@@ -25,12 +21,6 @@ export default function Header() {
       setDraft(String(doc.duration))
       ;(e.currentTarget as HTMLInputElement).blur()
     }
-  }
-
-  function handleExport() {
-    const css = exportCss(doc)
-    navigator.clipboard.writeText(css)
-    alert('CSS copied to clipboard!')
   }
 
   return (
@@ -53,12 +43,6 @@ export default function Header() {
         />
         <span class="header__duration-unit">ms</span>
       </label>
-
-      <div class="header__actions">
-        <button class="btn btn--ghost" onClick={handleExport}>
-          Export CSS
-        </button>
-      </div>
     </header>
   )
 }
