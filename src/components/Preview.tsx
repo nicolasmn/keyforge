@@ -1,45 +1,47 @@
-import { createEffect, For, onCleanup, untrack } from 'solid-js'
+import { createEffect, createMemo, For, onCleanup, untrack } from 'solid-js'
 import { doc, playing, playhead, setPlayhead, loop } from '@/store'
 import { generateCss } from '@/utils/css'
 
 /**
- * Preview uses a single source of truth: the `playhead` signal (ms).
+ * Preview — JS-owned time model.
  *
- * CSS animations are ALWAYS paused. Position is driven exclusively by
- * `animation-delay: -${playhead}ms` on each layer element.
- *
- * The RAF loop advances the playhead signal when playing.
- * Everything — scrubbing, play, pause, stop — goes through setPlayhead.
- * No CSS play-state toggling, no reflow tricks, no dual sources of truth.
+ * CSS animations are ALWAYS paused. Position driven exclusively by
+ * `animation-delay: -${playhead}ms` set as inline style on each layer element.
+ * The RAF loop advances the playhead signal; everything else reacts to it.
  */
 export default function Preview() {
   let styleEl: HTMLStyleElement | undefined
   let rafId = 0
   let lastTs = 0
 
-  // ── CSS injection ────────────────────────────────────────────
-  // Only re-runs when doc structure changes (layers/tracks/keyframes/duration).
-  // Reads playhead via untrack so ticks never trigger a style reset.
-  createEffect(() => {
-    void doc.duration
-    void doc.layers.map((l) => ({
-      id: l.id,
-      tracks: l.tracks.map((t) => ({
-        id: t.id,
-        property: t.property,
-        keyframes: t.keyframes.map((k) => ({
-          id: k.id, time: k.time, value: k.value, easing: k.easing,
+  // Structural fingerprint — only changes when layers/tracks/keyframes change,
+  // not on every playhead tick. Using createMemo avoids the fragile `void` trick.
+  const docStructure = createMemo(() =>
+    JSON.stringify(
+      doc.layers.map((l) => ({
+        id: l.id,
+        duration: doc.duration,
+        tracks: l.tracks.map((t) => ({
+          id: t.id,
+          property: t.property,
+          keyframes: t.keyframes.map((k) => ({
+            id: k.id, time: k.time, value: k.value, easing: k.easing,
+          })),
         })),
-      })),
-    }))
+      }))
+    )
+  )
+
+  // Re-inject CSS only when structure changes
+  createEffect(() => {
+    void docStructure() // subscribe
     untrack(() => {
       if (!styleEl) return
       styleEl.textContent = generateCss(doc)
     })
   })
 
-  // ── Sync layer elements to playhead ──────────────────────────
-  // Runs on every playhead change. CSS is always paused; delay = -playhead.
+  // Sync layer elements to playhead on every tick
   createEffect(() => {
     const ph = playhead()
     document.querySelectorAll<HTMLElement>('[data-layer-id]').forEach((el) => {
@@ -47,9 +49,7 @@ export default function Preview() {
     })
   })
 
-  // ── RAF loop ─────────────────────────────────────────────────
-  // Advances playhead at real wall-clock speed when playing.
-  // Stops itself when playing() becomes false.
+  // RAF loop — advances playhead when playing
   createEffect(() => {
     if (!playing()) {
       cancelAnimationFrame(rafId)
@@ -72,8 +72,6 @@ export default function Preview() {
         } else {
           next = duration
           setPlayhead(next)
-          // Stop — this will cause playing() to be false on next effect run,
-          // but we stop the loop ourselves immediately.
           cancelAnimationFrame(rafId)
           return
         }
@@ -84,9 +82,9 @@ export default function Preview() {
     }
 
     rafId = requestAnimationFrame(tick)
-    onCleanup(() => cancelAnimationFrame(rafId))
   })
 
+  // Single top-level cleanup — no duplicate inside the RAF effect
   onCleanup(() => cancelAnimationFrame(rafId))
 
   return (

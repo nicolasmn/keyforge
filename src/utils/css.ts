@@ -1,38 +1,20 @@
 import type { AnimationDocument } from '@/types'
+import { buildKeyframeBlock } from './keyframes'
 
 /**
- * Generate @keyframes + animation declaration for all layers.
+ * Generate @keyframes + animation declaration for preview.
  *
- * animation-play-state is set to `paused` here as the default.
- * Preview drives position exclusively via `animation-delay: -${playhead}ms`
- * set as inline style on each [data-layer-id] element.
- * The browser never advances the animation on its own.
+ * - animation-play-state: paused — browser never advances on its own.
+ * - animation-iteration-count: infinite — prevents fill-mode freeze.
+ * - Position driven exclusively by animation-delay set as inline style by Preview.
  */
 export function generateCss(doc: AnimationDocument): string {
   return doc.layers
     .map((layer) => {
       const animName = `kf-${layer.id}`
-
-      const times = [
-        ...new Set(layer.tracks.flatMap((t) => t.keyframes.map((k) => k.time))),
-      ].sort((a, b) => a - b)
+      const { times, keyframeBlock } = buildKeyframeBlock(layer, doc.duration)
 
       if (times.length === 0) return ''
-
-      const keyframeBlock = times
-        .map((time) => {
-          const pct = ((time / doc.duration) * 100).toFixed(2)
-          const props = layer.tracks
-            .map((track) => {
-              const kf = [...track.keyframes].reverse().find((k) => k.time <= time)
-              if (!kf) return ''
-              return `${track.property}:${kf.value};`
-            })
-            .filter(Boolean)
-            .join(' ')
-          return `  ${pct}% { ${props} }`
-        })
-        .join('\n')
 
       return [
         `@keyframes ${animName} {`,

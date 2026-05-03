@@ -1,33 +1,16 @@
 import type { AnimationDocument } from '@/types'
+import { buildKeyframeBlock } from './keyframes'
 
 /**
- * Export clean CSS — finite iteration shorthand, no preview-only properties.
+ * Export production-ready CSS — finite animation shorthand, no preview-only properties.
  */
 export function exportCss(doc: AnimationDocument): string {
   const css = doc.layers
     .map((layer) => {
       const animName = `kf-${layer.id}`
-
-      const times = [
-        ...new Set(layer.tracks.flatMap((t) => t.keyframes.map((k) => k.time))),
-      ].sort((a, b) => a - b)
+      const { times, keyframeBlock } = buildKeyframeBlock(layer, doc.duration)
 
       if (times.length === 0) return ''
-
-      const keyframeBlock = times
-        .map((time) => {
-          const pct = ((time / doc.duration) * 100).toFixed(2)
-          const props = layer.tracks
-            .map((track) => {
-              const kf = [...track.keyframes].reverse().find((k) => k.time <= time)
-              if (!kf) return ''
-              return `${track.property}:${kf.value};`
-            })
-            .filter(Boolean)
-            .join(' ')
-          return `  ${pct}% { ${props} }`
-        })
-        .join('\n')
 
       return [
         `@keyframes ${animName} {`,
