@@ -57,13 +57,13 @@ Replace (or augment) the property inspector with a structured code view where:
 
 The UI must detect value types to render appropriate controls:
 
-| Token type | Detection | Control |
-|---|---|---|
-| Color | `#`, `rgb(`, `hsl(`, `oklch(`, named colors | Inline color swatch; click opens `<input type="color">` |
-| Number + unit | `/^-?[\d.]+(?:px\|ms\|deg\|%\|rem\|em\|vw\|vh)?$/` | Scrub on drag, type to edit |
-| Easing | matches known easing names or `cubic-bezier(` | Inline expandable easing editor (see below) |
-| Transform fn | `translate(`, `rotate(`, `scale(`, etc. | Split per function argument — each argument is its own sub-token |
-| Plain string | anything else | Plain text input |
+| Token type    | Detection                                          | Control                                                          |
+| ------------- | -------------------------------------------------- | ---------------------------------------------------------------- |
+| Color         | `#`, `rgb(`, `hsl(`, `oklch(`, named colors        | Inline color swatch; click opens `<input type="color">`          |
+| Number + unit | `/^-?[\d.]+(?:px\|ms\|deg\|%\|rem\|em\|vw\|vh)?$/` | Scrub on drag, type to edit                                      |
+| Easing        | matches known easing names or `cubic-bezier(`      | Inline expandable easing editor (see below)                      |
+| Transform fn  | `translate(`, `rotate(`, `scale(`, etc.            | Split per function argument — each argument is its own sub-token |
+| Plain string  | anything else                                      | Plain text input                                                 |
 
 ### Transform sub-token splitting
 
@@ -77,13 +77,14 @@ translateX( [40] [px] )  rotate( [45] [deg] )
 The function name and parentheses are read-only decoration. Only the argument values are editable tokens. On commit, sub-tokens are reassembled into the full transform string before writing to the store.
 
 Each function argument maps to:
+
 ```ts
 type SubToken = {
   type: 'number'
   value: string
   unit: string
-  path: ValueToken['path']  // same keyframe, same field
-  assembler: (tokens: SubToken[]) => string  // rebuilds full value string
+  path: ValueToken['path'] // same keyframe, same field
+  assembler: (tokens: SubToken[]) => string // rebuilds full value string
 }
 ```
 
@@ -127,22 +128,22 @@ Easing is a first-class concept in Keyforge. Rather than a simple dropdown or te
 
 ### Built-in presets
 
-| Name | Value |
-|---|---|
-| `ease` | `cubic-bezier(0.25, 0.1, 0.25, 1)` |
-| `ease-in` | `cubic-bezier(0.42, 0, 1, 1)` |
-| `ease-out` | `cubic-bezier(0, 0, 0.58, 1)` |
-| `ease-in-out` | `cubic-bezier(0.42, 0, 0.58, 1)` |
-| `linear` | `linear` |
-| `ease-in-quad` | `cubic-bezier(0.55, 0.085, 0.68, 0.53)` |
-| `ease-out-quad` | `cubic-bezier(0.25, 0.46, 0.45, 0.94)` |
-| `ease-in-out-quad` | `cubic-bezier(0.455, 0.03, 0.515, 0.955)` |
-| `ease-in-cubic` | `cubic-bezier(0.55, 0.055, 0.675, 0.19)` |
-| `ease-out-cubic` | `cubic-bezier(0.215, 0.61, 0.355, 1)` |
-| `ease-in-out-cubic` | `cubic-bezier(0.645, 0.045, 0.355, 1)` |
-| `ease-in-back` | `cubic-bezier(0.6, -0.28, 0.735, 0.045)` |
-| `ease-out-back` | `cubic-bezier(0.175, 0.885, 0.32, 1.275)` |
-| `ease-in-out-back` | `cubic-bezier(0.68, -0.55, 0.265, 1.55)` |
+| Name                | Value                                     |
+| ------------------- | ----------------------------------------- |
+| `ease`              | `cubic-bezier(0.25, 0.1, 0.25, 1)`        |
+| `ease-in`           | `cubic-bezier(0.42, 0, 1, 1)`             |
+| `ease-out`          | `cubic-bezier(0, 0, 0.58, 1)`             |
+| `ease-in-out`       | `cubic-bezier(0.42, 0, 0.58, 1)`          |
+| `linear`            | `linear`                                  |
+| `ease-in-quad`      | `cubic-bezier(0.55, 0.085, 0.68, 0.53)`   |
+| `ease-out-quad`     | `cubic-bezier(0.25, 0.46, 0.45, 0.94)`    |
+| `ease-in-out-quad`  | `cubic-bezier(0.455, 0.03, 0.515, 0.955)` |
+| `ease-in-cubic`     | `cubic-bezier(0.55, 0.055, 0.675, 0.19)`  |
+| `ease-out-cubic`    | `cubic-bezier(0.215, 0.61, 0.355, 1)`     |
+| `ease-in-out-cubic` | `cubic-bezier(0.645, 0.045, 0.355, 1)`    |
+| `ease-in-back`      | `cubic-bezier(0.6, -0.28, 0.735, 0.045)`  |
+| `ease-out-back`     | `cubic-bezier(0.175, 0.885, 0.32, 1.275)` |
+| `ease-in-out-back`  | `cubic-bezier(0.68, -0.55, 0.265, 1.55)`  |
 
 ---
 
@@ -178,12 +179,15 @@ Easing is a first-class concept in Keyforge. Rather than a simple dropdown or te
 Three options under consideration. Decision deferred until prototype.
 
 ### Option A — Inspector tab (additive)
+
 Token UI lives in a second tab alongside the existing form inspector. Low risk — existing inspector untouched. User switches between views. Best for initial shipping.
 
 ### Option B — Inspector replacement
+
 Token UI replaces the form inspector entirely. Cleaner, fewer UI surfaces. Requires token UI to be fully capable before shipping.
 
 ### Option C — Side-by-side split
+
 Token UI on the right, existing inspector on the left. Redundant but useful during transition. High visual noise.
 
 **Current lean: Option A** — ship as a tab first, validate, then decide whether to deprecate the form inspector.
@@ -227,10 +231,10 @@ type ValueToken = {
 
 ## Resolved Decisions
 
-| Question | Decision |
-|---|---|
-| Transform sub-tokens | Split per function argument — each arg is its own editable sub-token |
-| Color picker | Browser-native `<input type="color">` — hex only in v1 |
-| Validation | Error state on token (red underline + `title` description); invalid values not committed |
-| Easing picker | Inline expandable panel in inspector; includes curve visualiser, preset library, save-to-library |
-| AI features | None planned |
+| Question             | Decision                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------ |
+| Transform sub-tokens | Split per function argument — each arg is its own editable sub-token                             |
+| Color picker         | Browser-native `<input type="color">` — hex only in v1                                           |
+| Validation           | Error state on token (red underline + `title` description); invalid values not committed         |
+| Easing picker        | Inline expandable panel in inspector; includes curve visualiser, preset library, save-to-library |
+| AI features          | None planned                                                                                     |
