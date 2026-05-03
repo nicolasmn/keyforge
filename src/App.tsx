@@ -1,4 +1,5 @@
 import { Show } from 'solid-js'
+import { createMediaQuery } from '@/utils/mediaQuery'
 import Header from '@/components/Header'
 import LayerTree from '@/components/LayerTree'
 import Preview from '@/components/Preview'
@@ -11,14 +12,14 @@ import '@/styles/utils.css'
 import '@/styles/app.css'
 import '@/styles/mobile.css'
 
-const isMobile = () => window.matchMedia('(max-width: 768px)').matches
-
 export default function App() {
+  const isMobile = createMediaQuery('(max-width: 768px)')
+
   return (
     <div class="app">
       <Header />
 
-      {/* Desktop layout */}
+      {/* Desktop */}
       <Show when={!isMobile()}>
         <LayerTree />
         <Preview />
@@ -29,7 +30,7 @@ export default function App() {
         </div>
       </Show>
 
-      {/* Mobile layout */}
+      {/* Mobile */}
       <Show when={isMobile()}>
         <div class="app__mobile-body">
           <Show when={activeTab() === 'layers'}>

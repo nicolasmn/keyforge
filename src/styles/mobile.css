@@ -1,5 +1,4 @@
 @layer layout {
-  /* Mobile shell */
   .app__mobile-body {
     flex: 1;
     display: flex;
@@ -16,24 +15,73 @@
     min-height: 0;
   }
 
-  /* Timeline area inside preview tab on mobile */
   .app__mobile-timeline {
     flex-shrink: 0;
-    height: 180px;
+    height: 160px;
     display: flex;
     flex-direction: column;
     border-top: 1px solid var(--color-border);
   }
+
+  /* Preview fills remaining space above timeline */
+  .app__mobile-panel .preview {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .app__mobile-panel .preview__canvas {
+    width: 100% !important;
+    height: 100% !important;
+    min-width: unset !important;
+    min-height: unset !important;
+    border-radius: 0;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Timeline fills its container */
+  .app__mobile-timeline .timeline {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .app__mobile-timeline .timeline canvas {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* Layer tree full panel */
+  .app__mobile-panel .layer-tree {
+    border: none;
+    border-radius: 0;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  /* Inspector scrollable */
+  .app__mobile-panel .inspector {
+    border: none;
+    border-radius: 0;
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Playback strip */
+  .app__mobile-timeline .playback {
+    flex-shrink: 0;
+  }
 }
 
 @layer components {
-  /* Mobile tab bar */
   .mobile-tabs {
     display: flex;
     border-top: 1px solid var(--color-border);
     background: var(--color-surface);
     flex-shrink: 0;
-    /* Safe area for iPhone home indicator */
     padding-bottom: env(safe-area-inset-bottom);
   }
 
@@ -46,12 +94,10 @@
     gap: var(--space-1);
     padding: var(--space-2) var(--space-1);
     color: var(--color-text-muted);
-    font-size: var(--font-size-xs);
     transition: color var(--duration-fast), background var(--duration-fast);
-    min-height: 52px; /* 44px tap target + padding */
+    min-height: 52px;
   }
 
-  .mobile-tabs__btn:hover,
   .mobile-tabs__btn--active {
     color: var(--color-accent);
     background: var(--color-surface-2);
@@ -68,58 +114,21 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
   }
-
-  /* Preview on mobile — full width, auto height */
-  .app__mobile-panel .preview {
-    flex: 1;
-    min-height: 0;
-  }
-
-  .app__mobile-panel .preview__canvas {
-    width: 100%;
-    max-width: 100%;
-    height: 100%;
-    border-radius: 0;
-    border: none;
-  }
-
-  /* Layer tree on mobile — full panel */
-  .app__mobile-panel .layer-tree {
-    border: none;
-    border-radius: 0;
-    flex: 1;
-  }
-
-  /* Inspector on mobile — scrollable */
-  .app__mobile-panel .inspector {
-    border: none;
-    border-radius: 0;
-    flex: 1;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
 }
 
 @layer base {
-  /* Larger touch targets for inputs and buttons on mobile */
   @media (pointer: coarse) {
     .btn {
       min-height: 44px;
       min-width: 44px;
     }
 
+    /* Prevent iOS input zoom — font-size >= 16px */
     .input {
       min-height: 40px;
-      /* Prevent iOS zoom on focus (font-size must be >= 16px) */
-      font-size: max(16px, var(--font-size-sm));
+      font-size: max(16px, var(--font-size-sm, 0.875rem));
     }
 
-    .keyframe-dot {
-      width: 16px;
-      height: 16px;
-    }
-
-    /* Disable hover effects on touch devices */
     .layer-tree__item:hover {
       background: transparent;
     }
@@ -129,18 +138,15 @@
     }
   }
 
-  /* Prevent rubber-band scroll on iOS at app root */
   body {
     overscroll-behavior: none;
     -webkit-tap-highlight-color: transparent;
   }
 
-  /* Timeline canvas — prevent default touch scroll */
   .timeline canvas {
     touch-action: none;
   }
 
-  /* Preview canvas area — allow pinch zoom */
   .preview__canvas {
     touch-action: pinch-zoom;
   }
