@@ -30,7 +30,6 @@
     border-top: none;
     border-right: none;
     border-bottom: none;
-    /* Let the body scroll, not the aside itself */
     display: flex;
     flex-direction: column;
     min-height: 0;
@@ -70,7 +69,7 @@
   .layer-tree__item {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: var(--space-2);
     padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-md);
     cursor: pointer;
@@ -84,13 +83,67 @@
     background: var(--color-accent-dim);
     color: var(--color-text);
   }
+  .layer-tree__item--dragging {
+    opacity: 0.4;
+  }
+  .layer-tree__drag-handle {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    color: var(--color-text-muted);
+    cursor: grab;
+    opacity: 0;
+    transition: opacity var(--duration-fast);
+  }
+  .layer-tree__item:hover .layer-tree__drag-handle {
+    opacity: 1;
+  }
+  .layer-tree__drag-handle:active {
+    cursor: grabbing;
+  }
+  .layer-tree__visibility {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    padding: 2px;
+    color: var(--color-text-muted);
+  }
+  .layer-tree__item--hidden .layer-tree__visibility {
+    opacity: 0.4;
+  }
+  .layer-tree__name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .layer-tree__name-input {
+    flex: 1;
+    min-width: 0;
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-sm);
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    font-family: inherit;
+    padding: 1px var(--space-1);
+    outline: none;
+  }
   .layer-tree__remove {
     opacity: 0;
     font-size: var(--font-size-xs);
     padding: 2px 4px;
+    flex-shrink: 0;
+    margin-left: auto;
   }
   .layer-tree__item:hover .layer-tree__remove {
     opacity: 1;
+  }
+  .layer-tree__drag-ghost {
+    height: 36px;
+    border-radius: var(--radius-md);
+    background: var(--color-accent-dim);
+    border: 1px dashed var(--color-accent);
   }
 
   /* Preview */
@@ -150,7 +203,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
-    /* This is the scrollable region */
     flex: 1;
     overflow-y: auto;
     min-height: 0;

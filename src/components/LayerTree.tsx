@@ -1,5 +1,14 @@
 import { For, createSignal } from 'solid-js'
 import {
+  DragDropProvider,
+  DragDropSensors,
+  DragOverlay,
+  SortableProvider,
+  createSortable,
+  closestCenter,
+  type DragEvent,
+} from '@thisbeyond/solid-dnd'
+import {
   doc,
   selectedLayerId,
   setSelectedLayerId,
@@ -10,11 +19,95 @@ import {
   setLayerVisibility,
 } from '@/store'
 
+function SortableLayer(props: {
+  layer: (typeof doc.layers)[number]
+  editingId: () => string | null
+  onStartEdit: (e: MouseEvent, id: string) => void
+  onCommit: (id: string, value: string) => void
+  onKeyDown: (e: KeyboardEvent, id: string) => void
+}) {
+  const sortable = createSortable(props.layer.id)
+
+  return (
+    <li
+      use:sortable
+      class="layer-tree__item"
+      classList={{
+        'layer-tree__item--active': selectedLayerId() === props.layer.id,
+        'layer-tree__item--hidden': !props.layer.visible,
+        'layer-tree__item--dragging': sortable.isActiveDraggable,
+      }}
+      onClick={() => setSelectedLayerId(props.layer.id)}
+    >
+      {/* Drag handle */}
+      <span class="layer-tree__drag-handle" title="Drag to reorder">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+          <circle cx="4" cy="3" r="1" /><circle cx="8" cy="3" r="1" />
+          <circle cx="4" cy="6" r="1" /><circle cx="8" cy="6" r="1" />
+          <circle cx="4" cy="9" r="1" /><circle cx="8" cy="9" r="1" />
+        </svg>
+      </span>
+
+      {/* Visibility toggle */}
+      <button
+        class="btn btn--ghost layer-tree__visibility"
+        onClick={(e) => {
+          e.stopPropagation()
+          setLayerVisibility(props.layer.id, !props.layer.visible)
+        }}
+        title={props.layer.visible ? 'Hide layer' : 'Show layer'}
+        aria-label={props.layer.visible ? 'Hide layer' : 'Show layer'}
+      >
+        {props.layer.visible ? (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+            <circle cx="12" cy="12" r="3" />
+          </svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+            <line x1="1" y1="1" x2="23" y2="23" />
+          </svg>
+        )}
+      </button>
+
+      {/* Layer name */}
+      {props.editingId() === props.layer.id ? (
+        <input
+          class="layer-tree__name-input"
+          value={props.layer.name}
+          autofocus
+          onClick={(e) => e.stopPropagation()}
+          onBlur={(e) => props.onCommit(props.layer.id, e.currentTarget.value)}
+          onKeyDown={(e) => props.onKeyDown(e, props.layer.id)}
+        />
+      ) : (
+        <span
+          class="layer-tree__name"
+          onDblClick={(e) => props.onStartEdit(e, props.layer.id)}
+          title="Double-click to rename"
+        >
+          {props.layer.name}
+        </span>
+      )}
+
+      {/* Remove */}
+      <button
+        class="btn btn--ghost layer-tree__remove"
+        onClick={(e) => {
+          e.stopPropagation()
+          removeLayer(props.layer.id)
+        }}
+        title="Remove layer"
+      >
+        ✕
+      </button>
+    </li>
+  )
+}
+
 export default function LayerTree() {
-  // Track which layer is being renamed
   const [editingId, setEditingId] = createSignal<string | null>(null)
-  // Track drag state
-  let dragFromIndex = -1
 
   function startEdit(e: MouseEvent, layerId: string) {
     e.stopPropagation()
@@ -31,110 +124,41 @@ export default function LayerTree() {
     if (e.key === 'Escape') setEditingId(null)
   }
 
-  function onDragStart(e: DragEvent, index: number) {
-    dragFromIndex = index
-    e.dataTransfer?.setData('text/plain', String(index))
-  }
-
-  function onDragOver(e: DragEvent) {
-    e.preventDefault()
-    e.dataTransfer!.dropEffect = 'move'
-  }
-
-  function onDrop(e: DragEvent, toIndex: number) {
-    e.preventDefault()
-    if (dragFromIndex !== -1 && dragFromIndex !== toIndex) {
-      reorderLayer(dragFromIndex, toIndex)
-    }
-    dragFromIndex = -1
+  function onDragEnd({ draggable, droppable }: DragEvent) {
+    if (!droppable || draggable.id === droppable.id) return
+    const fromIndex = doc.layers.findIndex((l) => l.id === draggable.id)
+    const toIndex = doc.layers.findIndex((l) => l.id === droppable.id)
+    if (fromIndex !== -1 && toIndex !== -1) reorderLayer(fromIndex, toIndex)
   }
 
   return (
     <aside class="panel layer-tree">
       <div class="panel__header">
         <span>Layers</span>
-        <button class="btn btn--ghost" onClick={addLayer} title="Add layer">
-          +
-        </button>
+        <button class="btn btn--ghost" onClick={addLayer} title="Add layer">+</button>
       </div>
-      <ul class="layer-tree__list">
-        <For each={doc.layers}>
-          {(layer, index) => (
-            <li
-              class="layer-tree__item"
-              classList={{
-                'layer-tree__item--active': selectedLayerId() === layer.id,
-                'layer-tree__item--hidden': !layer.visible,
-              }}
-              onClick={() => setSelectedLayerId(layer.id)}
-              draggable={true}
-              onDragStart={(e) => onDragStart(e, index())}
-              onDragOver={onDragOver}
-              onDrop={(e) => onDrop(e, index())}
-            >
-              {/* Drag handle */}
-              <span class="layer-tree__drag-handle" title="Drag to reorder">‹›</span>
-
-              {/* Visibility toggle */}
-              <button
-                class="btn btn--ghost layer-tree__visibility"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setLayerVisibility(layer.id, !layer.visible)
-                }}
-                title={layer.visible ? 'Hide layer' : 'Show layer'}
-                aria-label={layer.visible ? 'Hide layer' : 'Show layer'}
-              >
-                {layer.visible ? (
-                  // Eye open
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                    <circle cx="12" cy="12" r="3" />
-                  </svg>
-                ) : (
-                  // Eye closed
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                    <line x1="1" y1="1" x2="23" y2="23" />
-                  </svg>
-                )}
-              </button>
-
-              {/* Layer name — click-to-edit */}
-              {editingId() === layer.id ? (
-                <input
-                  class="layer-tree__name-input"
-                  value={layer.name}
-                  autofocus
-                  onClick={(e) => e.stopPropagation()}
-                  onBlur={(e) => commitRename(layer.id, e.currentTarget.value)}
-                  onKeyDown={(e) => onNameKeyDown(e, layer.id)}
+      <DragDropProvider onDragEnd={onDragEnd} collisionDetector={closestCenter}>
+        <DragDropSensors />
+        <ul class="layer-tree__list">
+          <SortableProvider ids={doc.layers.map((l) => l.id)}>
+            <For each={doc.layers}>
+              {(layer) => (
+                <SortableLayer
+                  layer={layer}
+                  editingId={editingId}
+                  onStartEdit={startEdit}
+                  onCommit={commitRename}
+                  onKeyDown={onNameKeyDown}
                 />
-              ) : (
-                <span
-                  class="layer-tree__name"
-                  onDblClick={(e) => startEdit(e, layer.id)}
-                  title="Double-click to rename"
-                >
-                  {layer.name}
-                </span>
               )}
-
-              {/* Remove */}
-              <button
-                class="btn btn--ghost layer-tree__remove"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  removeLayer(layer.id)
-                }}
-                title="Remove layer"
-              >
-                ✕
-              </button>
-            </li>
-          )}
-        </For>
-      </ul>
+            </For>
+          </SortableProvider>
+        </ul>
+        <DragOverlay>
+          {/* ghost shown during drag */}
+          <div class="layer-tree__drag-ghost" />
+        </DragOverlay>
+      </DragDropProvider>
     </aside>
   )
 }
