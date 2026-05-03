@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  HUSKY: 0
-
 jobs:
   check:
     name: Type Check, Lint & Format
@@ -24,10 +21,10 @@ jobs:
           cache-dependency-path: package.json
 
       - name: Sync lockfile with package.json
-        run: npm install --package-lock-only
+        run: npm install --package-lock-only --ignore-scripts
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Type check
         run: npm run typecheck
@@ -53,10 +50,10 @@ jobs:
           cache-dependency-path: package.json
 
       - name: Sync lockfile with package.json
-        run: npm install --package-lock-only
+        run: npm install --package-lock-only --ignore-scripts
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Build
         run: npm run build
