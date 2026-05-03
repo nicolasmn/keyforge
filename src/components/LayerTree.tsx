@@ -6,6 +6,7 @@ import {
   SortableProvider,
   createSortable,
   closestCenter,
+  sortable as sortableDirective,
   type DragEvent,
 } from '@thisbeyond/solid-dnd'
 import '@/directives'
@@ -27,17 +28,19 @@ function SortableLayer(props: {
   onCommit: (id: string, value: string) => void
   onKeyDown: (e: KeyboardEvent, id: string) => void
 }) {
-  // untrack: id is stable (never changes); avoids solid/reactivity warning
-  const sortable = createSortable(untrack(() => props.layer.id))
+  const id = untrack(() => props.layer.id)
+  const state = createSortable(id)
+  // Directive must be referenced to prevent tree-shaking
+  void sortableDirective
 
   return (
     <li
-      use:sortable
+      use:sortable={state}
       class="layer-tree__item"
       classList={{
         'layer-tree__item--active': selectedLayerId() === props.layer.id,
         'layer-tree__item--hidden': !props.layer.visible,
-        'layer-tree__item--dragging': sortable.isActiveDraggable,
+        'layer-tree__item--dragging': state.isActiveDraggable,
       }}
       onClick={() => setSelectedLayerId(props.layer.id)}
     >

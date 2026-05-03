@@ -1,5 +1,5 @@
 // Augment SolidJS JSX namespace so `use:sortable` is a valid attribute on any element.
-import { createSortable } from '@thisbeyond/solid-dnd'
+import type { createSortable } from '@thisbeyond/solid-dnd'
 
 declare module 'solid-js' {
   namespace JSX {
