@@ -2,10 +2,11 @@
 
 > Status: Planning / Research
 > Added: 2026-05-03
+> Updated: 2026-05-03
 
 ## Problem
 
-The current property inspector uses traditional form inputs (text field for value, dropdown for easing). This is functional but disconnected from the CSS mental model developers already have. The gap between “what I type in the inspector” and “what ends up in the stylesheet” is invisible.
+The current property inspector uses traditional form inputs (text field for value, dropdown for easing). This is functional but disconnected from the CSS mental model developers already have. The gap between "what I type in the inspector" and "what ends up in the stylesheet" is invisible.
 
 The DevTools Token UI closes that gap by making the CSS output the primary editing surface — styled to look and feel like browser DevTools, where values are inline-editable tokens inside a read-only structural context.
 
@@ -40,14 +41,15 @@ Replace (or augment) the property inspector with a structured code view where:
 - Tab / Shift+Tab advances between tokens in document order
 - Value changes update preview in real time (no submit button)
 - Token type detection: color values show a color swatch, numeric values support scroll-to-scrub
-- Easing values open the easing picker (same as current inspector, contextually triggered)
-- Keyboard shortcut to jump between keyframe stops (e.g. `]` / `[` to next/prev keyframe)
+- Easing values open the inline easing editor (see Easing Library below)
+- Keyboard shortcut to jump between keyframe stops (`]` / `[` to next/prev keyframe)
 
 ### Out of scope (explicitly deferred)
 
 - **Full backpropagation** — adding new CSS properties by typing, deleting keyframe blocks, or restructuring the CSS output. The structure (which properties exist, how many keyframes) is controlled by the timeline, not this panel.
 - **Free-text CSS editing** — no Monaco/CodeMirror, no arbitrary text input on the structural parts
 - **Multi-layer editing** — token UI shows one layer at a time (selected layer)
+- **AI-assisted features** — no AI generation, suggestion, or completion
 
 ---
 
@@ -55,13 +57,92 @@ Replace (or augment) the property inspector with a structured code view where:
 
 The UI must detect value types to render appropriate controls:
 
-| Token type    | Detection                                     | Control                        |
-| ------------- | --------------------------------------------- | ------------------------------ | --- | --- | --- | --- | --- | ------- | --------------------------- |
-| Color         | `#`, `rgb(`, `hsl(`, `oklch(`, named colors   | Color swatch + hex/oklch input |
-| Number + unit | `/^-?[\d.]+(?:px                              | ms                             | deg | %   | rem | em  | vw  | vh)?$/` | Scrub on drag, type to edit |
-| Easing        | matches known easing names or `cubic-bezier(` | Easing picker popup            |
-| Transform fn  | `translate(`, `rotate(`, `scale(`, etc.       | Sub-token editing per argument |
-| Plain string  | anything else                                 | Plain text input               |
+| Token type | Detection | Control |
+|---|---|---|
+| Color | `#`, `rgb(`, `hsl(`, `oklch(`, named colors | Inline color swatch; click opens `<input type="color">` |
+| Number + unit | `/^-?[\d.]+(?:px\|ms\|deg\|%\|rem\|em\|vw\|vh)?$/` | Scrub on drag, type to edit |
+| Easing | matches known easing names or `cubic-bezier(` | Inline expandable easing editor (see below) |
+| Transform fn | `translate(`, `rotate(`, `scale(`, etc. | Split per function argument — each argument is its own sub-token |
+| Plain string | anything else | Plain text input |
+
+### Transform sub-token splitting
+
+`translateX(40px) rotate(45deg)` is parsed into individual function tokens, each with their own arguments as sub-tokens. Example:
+
+```
+translateX( [40] [px] )  rotate( [45] [deg] )
+             ↑ editable          ↑ editable
+```
+
+The function name and parentheses are read-only decoration. Only the argument values are editable tokens. On commit, sub-tokens are reassembled into the full transform string before writing to the store.
+
+Each function argument maps to:
+```ts
+type SubToken = {
+  type: 'number'
+  value: string
+  unit: string
+  path: ValueToken['path']  // same keyframe, same field
+  assembler: (tokens: SubToken[]) => string  // rebuilds full value string
+}
+```
+
+### Color tokens
+
+Use the browser-native `<input type="color">` picker. Known limitation: native picker works in sRGB hex only — oklch/hsl values will be converted to hex on open and written back as hex on close. This is acceptable for v1; a custom oklch picker is a future enhancement if demand exists.
+
+---
+
+## Validation
+
+- Invalid values show the token in an **error state**: red underline + red text color (uses `--color-error`)
+- The `title` attribute on the token element carries a short description: e.g. `"Invalid value for opacity — expected a number between 0 and 1"`
+- Invalid values are **not committed** to the store on Enter/blur — the token reverts to the last valid value
+- The preview reflects only committed (valid) values; invalid in-progress edits do not update the preview
+- Validation is property-aware where possible (opacity range 0–1, angle requires deg unit, etc.) and falls back to a basic CSS syntax check for unknown properties
+
+---
+
+## Easing Library
+
+Easing is a first-class concept in Keyforge. Rather than a simple dropdown or text input, easing tokens open a **dedicated inline easing editor** directly in the inspector panel.
+
+### Easing editor UX
+
+- Clicking an easing token **expands an inline panel** below the token row (not a floating popover — avoids z-index and positioning complexity)
+- The panel contains:
+  - **Curve visualiser** — `<canvas>` or SVG, shows the cubic-bezier curve with draggable handles
+  - **Preset library** — horizontal scrollable strip of named presets (ease, ease-in, ease-out, ease-in-out, spring, etc.)
+  - **Custom input** — `cubic-bezier(x1, y1, x2, y2)` raw value with live curve update
+  - **Save to library** — name + save button; persists to the user's custom easing library
+- Only one easing editor open at a time; opening a new one closes the previous
+- `Escape` closes and reverts; `Enter` closes and commits
+
+### Easing library
+
+- Persisted collection of named easings: built-in presets + user-saved customs
+- Accessible from the easing editor panel (preset strip)
+- Future: dedicated library view accessible from the header or a panel tab, for managing/deleting/renaming saved easings
+- Storage: in-memory for now (no localStorage in sandbox); IndexedDB when Save/Load (Phase 4) lands
+
+### Built-in presets
+
+| Name | Value |
+|---|---|
+| `ease` | `cubic-bezier(0.25, 0.1, 0.25, 1)` |
+| `ease-in` | `cubic-bezier(0.42, 0, 1, 1)` |
+| `ease-out` | `cubic-bezier(0, 0, 0.58, 1)` |
+| `ease-in-out` | `cubic-bezier(0.42, 0, 0.58, 1)` |
+| `linear` | `linear` |
+| `ease-in-quad` | `cubic-bezier(0.55, 0.085, 0.68, 0.53)` |
+| `ease-out-quad` | `cubic-bezier(0.25, 0.46, 0.45, 0.94)` |
+| `ease-in-out-quad` | `cubic-bezier(0.455, 0.03, 0.515, 0.955)` |
+| `ease-in-cubic` | `cubic-bezier(0.55, 0.055, 0.675, 0.19)` |
+| `ease-out-cubic` | `cubic-bezier(0.215, 0.61, 0.355, 1)` |
+| `ease-in-out-cubic` | `cubic-bezier(0.645, 0.045, 0.355, 1)` |
+| `ease-in-back` | `cubic-bezier(0.6, -0.28, 0.735, 0.045)` |
+| `ease-out-back` | `cubic-bezier(0.175, 0.885, 0.32, 1.275)` |
+| `ease-in-out-back` | `cubic-bezier(0.68, -0.55, 0.265, 1.55)` |
 
 ---
 
@@ -72,8 +153,8 @@ The UI must detect value types to render appropriate controls:
 1. User clicks a value token
 2. Token becomes an `<input>` (or contenteditable span), sized to content
 3. Structural CSS around it remains static
-4. `input` event → debounced store update → preview updates live
-5. `Enter` / blur → commit final value, return to display mode
+4. `input` event → debounced store update → preview updates live (valid values only)
+5. `Enter` / blur → validate → commit if valid, revert if invalid; return to display mode
 6. `Escape` → revert to original value, return to display mode
 
 ### Scrubbing numeric tokens
@@ -97,15 +178,12 @@ The UI must detect value types to render appropriate controls:
 Three options under consideration. Decision deferred until prototype.
 
 ### Option A — Inspector tab (additive)
-
 Token UI lives in a second tab alongside the existing form inspector. Low risk — existing inspector untouched. User switches between views. Best for initial shipping.
 
 ### Option B — Inspector replacement
-
 Token UI replaces the form inspector entirely. Cleaner, fewer UI surfaces. Requires token UI to be fully capable before shipping.
 
 ### Option C — Side-by-side split
-
 Token UI on the right, existing inspector on the left. Redundant but useful during transition. High visual noise.
 
 **Current lean: Option A** — ship as a tab first, validate, then decide whether to deprecate the form inspector.
@@ -116,7 +194,7 @@ Token UI on the right, existing inspector on the left. Redundant but useful duri
 
 ### Rendering
 
-- Generate a **token AST** from the layer’s CSS output, not raw string manipulation
+- Generate a **token AST** from the layer's CSS output, not raw string manipulation
 - Each token has: `{ type, value, path }` — where `path` maps back to the store (`layerId`, `trackId`, `keyframeId`, `field`)
 - Render token AST as a `<pre>` with spans per token
 - Avoid re-rendering the full token tree on every keystroke — only swap the active input in place
@@ -124,8 +202,6 @@ Token UI on the right, existing inspector on the left. Redundant but useful duri
 ### Store path mapping
 
 The key challenge: a CSS value token must know where it lives in the store so a change can be dispatched. The token AST generation step resolves this — each value token carries a store path that the edit handler uses directly.
-
-Example:
 
 ```ts
 type ValueToken = {
@@ -145,14 +221,16 @@ type ValueToken = {
 - Structural tokens (selectors, property names, braces, at-keywords): styled with CSS variables, no library needed
 - Value tokens: styled by type (color tokens get a swatch, numbers get a different hue)
 - No Shiki/Prism needed for the token UI — the token AST IS the parse result
-- Shiki can be used for the **read-only code view** tab (Phase 1.5 item 3), which is separate
+- Shiki is used for the **read-only code view** tab (Phase 1.5 item 3), which is separate
 
 ---
 
-## Open Questions
+## Resolved Decisions
 
-- **Transform sub-tokens**: `translateX(40px) rotate(45deg)` — edit as one string, or split per function argument? Splitting is better UX but significantly more parsing work.
-- **Color picker**: build minimal inline swatch picker, or open a `<input type="color">`? Native color picker has poor oklch support.
-- **Validation**: what happens when the user types an invalid value? Show inline error, revert on commit, or pass through and let the browser ignore it?
-- **Multiple keyframes visible**: show all keyframe stops for the selected layer, or only the one at the current playhead?
-- **Easing picker trigger**: click on easing token opens picker — but where does the picker render? Popover anchored to token, or fixed panel below the code view?
+| Question | Decision |
+|---|---|
+| Transform sub-tokens | Split per function argument — each arg is its own editable sub-token |
+| Color picker | Browser-native `<input type="color">` — hex only in v1 |
+| Validation | Error state on token (red underline + `title` description); invalid values not committed |
+| Easing picker | Inline expandable panel in inspector; includes curve visualiser, preset library, save-to-library |
+| AI features | None planned |
