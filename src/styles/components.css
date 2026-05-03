@@ -76,10 +76,12 @@
     background: var(--color-accent);
     border-radius: 2px;
     transform: rotate(45deg);
-    transition: background var(--duration-fast), scale var(--duration-fast);
+    transition:
+      background var(--duration-fast),
+      scale var(--duration-fast);
   }
   .keyframe-dot:hover,
-  .keyframe-dot[aria-selected="true"] {
+  .keyframe-dot[aria-selected='true'] {
     background: hsl(0 0% 100%);
     scale: 1.3;
   }

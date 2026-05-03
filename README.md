@@ -19,14 +19,14 @@ npm run dev
 
 ## Scripts
 
-| Command | Description |
-|---|---|
-| `npm run dev` | Start dev server |
-| `npm run build` | Production build |
-| `npm run preview` | Preview production build |
-| `npm run typecheck` | TypeScript check |
-| `npm run lint` | ESLint |
-| `npm run format` | Prettier |
+| Command             | Description              |
+| ------------------- | ------------------------ |
+| `npm run dev`       | Start dev server         |
+| `npm run build`     | Production build         |
+| `npm run preview`   | Preview production build |
+| `npm run typecheck` | TypeScript check         |
+| `npm run lint`      | ESLint                   |
+| `npm run format`    | Prettier                 |
 
 ## Docs
 

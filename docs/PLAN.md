@@ -21,6 +21,7 @@ Keyforge is a visual, browser-native animation editor. It lets developers and de
 ## Architecture
 
 ### Tech Stack
+
 - **SolidJS** + TypeScript — signal-based reactivity, no VDOM, fast partial updates
 - **Vite** — instant HMR, ESNext target
 - **Modern CSS** — `@layer`, custom properties, no utility framework
@@ -28,6 +29,7 @@ Keyforge is a visual, browser-native animation editor. It lets developers and de
 - **Web Animations API** — preview engine and scrubbing
 
 ### Layout
+
 ```
 ┌─────────────────────────────────────────┐
 │  Header (logo, export, playback)         │
@@ -44,31 +46,32 @@ Keyforge is a visual, browser-native animation editor. It lets developers and de
 ```
 
 ### Data Model (core)
+
 ```ts
 type Document = {
   id: string
   name: string
-  duration: number       // ms
+  duration: number // ms
   layers: Layer[]
 }
 
 type Layer = {
   id: string
   name: string
-  element: ElementConfig  // tag, initial CSS, HTML content
+  element: ElementConfig // tag, initial CSS, HTML content
   tracks: Track[]
 }
 
 type Track = {
   property: AnimatableProperty
-  easing: string         // default easing for the track
+  easing: string // default easing for the track
   keyframes: Keyframe[]
 }
 
 type Keyframe = {
-  time: number           // ms
-  value: string          // raw CSS value
-  easing: string         // easing from THIS keyframe to the next
+  time: number // ms
+  value: string // raw CSS value
+  easing: string // easing from THIS keyframe to the next
 }
 ```
 
@@ -77,6 +80,7 @@ type Keyframe = {
 ## Feature Roadmap
 
 ### Phase 1 — Foundation (MVP)
+
 - [ ] App shell: header, sidebar, workspace, inspector, timeline panels
 - [ ] SolidJS store with document/layer/track/keyframe data model
 - [ ] Preview pane: DOM element with generated `<style>` injection
@@ -88,6 +92,7 @@ type Keyframe = {
 - [ ] CSS export: `@keyframes` + `animation` shorthand
 
 ### Phase 2 — Modern CSS
+
 - [ ] `@property` support — register typed custom properties, animate them
 - [ ] `animation-composition: add/accumulate` per track
 - [ ] `offset-path` SVG path editor → motion path animation
@@ -97,6 +102,7 @@ type Keyframe = {
 - [ ] `grid-template-rows: 0fr → 1fr` animated height
 
 ### Phase 3 — Export & Interop
+
 - [ ] WAAPI export: `element.animate([...], { ... })`
 - [ ] React component export (Motion wrapper)
 - [ ] Animation token export (JSON: duration, easing, keyframe values)
@@ -104,6 +110,7 @@ type Keyframe = {
 - [ ] Import existing `@keyframes` CSS (parse and populate timeline)
 
 ### Phase 4 — Power Features
+
 - [ ] Multi-layer sequencing with offset delays
 - [ ] Easing curve editor (cubic-bezier visual, spring preview)
 - [ ] View Transitions API mode: old/new pseudo-element keyframe generation
@@ -117,17 +124,17 @@ type Keyframe = {
 
 Built-in technique presets the user can apply and customise:
 
-| Technique | CSS Mechanism | Notes |
-|---|---|---|
-| Typed value animation | `@property` + `@keyframes` | Smooth HSL, gradient, shadow animations |
-| Additive motion | `animation-composition: add` | Layer bounce on top of translate |
-| Scroll-linked | `animation-timeline: scroll()` | Progress bar, parallax |
-| Viewport reveal | `animation-timeline: view()` | Fade-in on scroll into view |
-| Motion path | `offset-path` + `offset-distance` | Path following with auto-rotate |
-| Shape morphing | `clip-path` polygon keyframes | Enforce same vertex count |
-| Circular reveal | `clip-path: circle()` expand | Click-origin hero transitions |
-| Auto height | `grid-template-rows: 0fr→1fr` | Accordion expand without JS calc |
-| View Transition | `::view-transition-*` keyframes | Shared element page transitions |
+| Technique             | CSS Mechanism                     | Notes                                   |
+| --------------------- | --------------------------------- | --------------------------------------- |
+| Typed value animation | `@property` + `@keyframes`        | Smooth HSL, gradient, shadow animations |
+| Additive motion       | `animation-composition: add`      | Layer bounce on top of translate        |
+| Scroll-linked         | `animation-timeline: scroll()`    | Progress bar, parallax                  |
+| Viewport reveal       | `animation-timeline: view()`      | Fade-in on scroll into view             |
+| Motion path           | `offset-path` + `offset-distance` | Path following with auto-rotate         |
+| Shape morphing        | `clip-path` polygon keyframes     | Enforce same vertex count               |
+| Circular reveal       | `clip-path: circle()` expand      | Click-origin hero transitions           |
+| Auto height           | `grid-template-rows: 0fr→1fr`     | Accordion expand without JS calc        |
+| View Transition       | `::view-transition-*` keyframes   | Shared element page transitions         |
 
 ---
 
