@@ -14,12 +14,24 @@ import {
 import type { AnimatableProperty, EasingName } from '@/types'
 
 const PROPERTIES: AnimatableProperty[] = [
-  'opacity', 'transform', 'background-color', 'color',
-  'border-radius', 'width', 'height', 'scale', 'translate', 'rotate',
+  'opacity',
+  'transform',
+  'background-color',
+  'color',
+  'border-radius',
+  'width',
+  'height',
+  'scale',
+  'translate',
+  'rotate',
 ]
 
 const EASINGS: EasingName[] = [
-  'linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out',
+  'linear',
+  'ease',
+  'ease-in',
+  'ease-out',
+  'ease-in-out',
   'cubic-bezier(0.34,1.56,0.64,1)',
 ]
 
@@ -70,7 +82,9 @@ export default function Inspector() {
                     {(kf) => (
                       <div
                         class="inspector__keyframe"
-                        classList={{ 'inspector__keyframe--selected': selectedKeyframeId() === kf.id }}
+                        classList={{
+                          'inspector__keyframe--selected': selectedKeyframeId() === kf.id,
+                        }}
                         onClick={() => setSelectedKeyframeId(kf.id)}
                       >
                         <span class="inspector__kf-time">{kf.time}ms</span>
@@ -92,9 +106,7 @@ export default function Inspector() {
                             })
                           }
                         >
-                          <For each={EASINGS}>
-                            {(e) => <option value={e}>{e}</option>}
-                          </For>
+                          <For each={EASINGS}>{(e) => <option value={e}>{e}</option>}</For>
                         </select>
                         <button
                           class="btn btn--ghost"
@@ -114,9 +126,7 @@ export default function Inspector() {
             <div class="inspector__add-track">
               <select class="input" onChange={handleAddTrack}>
                 <option value="">+ Add property track</option>
-                <For each={PROPERTIES}>
-                  {(p) => <option value={p}>{p}</option>}
-                </For>
+                <For each={PROPERTIES}>{(p) => <option value={p}>{p}</option>}</For>
               </select>
             </div>
 
@@ -132,12 +142,9 @@ export default function Inspector() {
                       type="number"
                       value={sel().keyframe.time}
                       onBlur={(e) =>
-                        updateKeyframe(
-                          selectedLayerId()!,
-                          sel().track.id,
-                          sel().keyframe.id,
-                          { time: Number(e.currentTarget.value) },
-                        )
+                        updateKeyframe(selectedLayerId()!, sel().track.id, sel().keyframe.id, {
+                          time: Number(e.currentTarget.value),
+                        })
                       }
                     />
                   </label>
@@ -147,12 +154,9 @@ export default function Inspector() {
                       class="input"
                       value={sel().keyframe.value}
                       onBlur={(e) =>
-                        updateKeyframe(
-                          selectedLayerId()!,
-                          sel().track.id,
-                          sel().keyframe.id,
-                          { value: e.currentTarget.value },
-                        )
+                        updateKeyframe(selectedLayerId()!, sel().track.id, sel().keyframe.id, {
+                          value: e.currentTarget.value,
+                        })
                       }
                     />
                   </label>

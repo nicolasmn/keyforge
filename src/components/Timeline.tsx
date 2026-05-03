@@ -22,11 +22,14 @@ export default function Timeline() {
   let scrubbing = false
 
   function timeToX(time: number, width: number) {
-    return LABEL_WIDTH + ((time / doc.duration) * (width - LABEL_WIDTH))
+    return LABEL_WIDTH + (time / doc.duration) * (width - LABEL_WIDTH)
   }
 
   function xToTime(x: number, width: number) {
-    return Math.max(0, Math.min(doc.duration, ((x - LABEL_WIDTH) / (width - LABEL_WIDTH)) * doc.duration))
+    return Math.max(
+      0,
+      Math.min(doc.duration, ((x - LABEL_WIDTH) / (width - LABEL_WIDTH)) * doc.duration),
+    )
   }
 
   function draw() {
@@ -73,9 +76,7 @@ export default function Timeline() {
     doc.layers.forEach((layer) => {
       layer.tracks.forEach((track, ti) => {
         const y = HEADER_HEIGHT + row * TRACK_HEIGHT
-        ctx.fillStyle = selectedLayerId() === layer.id
-          ? 'hsl(220 12% 15%)'
-          : colorBg
+        ctx.fillStyle = selectedLayerId() === layer.id ? 'hsl(220 12% 15%)' : colorBg
         ctx.fillRect(0, y, width, TRACK_HEIGHT)
         ctx.fillStyle = colorBorder
         ctx.fillRect(0, y + TRACK_HEIGHT - 1, width, 1)
@@ -126,7 +127,7 @@ export default function Timeline() {
   }
 
   function getEventX(e: MouseEvent) {
-    return e.offsetX * (window.devicePixelRatio || 1) / (window.devicePixelRatio || 1)
+    return (e.offsetX * (window.devicePixelRatio || 1)) / (window.devicePixelRatio || 1)
   }
 
   function hitTestKeyframe(x: number, y: number) {

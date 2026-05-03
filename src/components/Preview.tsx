@@ -67,10 +67,7 @@ export default function Preview() {
       >
         <For each={doc.layers}>
           {(layer) => (
-            <div
-              data-layer-id={layer.id}
-              style={layer.element.initialCss}
-            >
+            <div data-layer-id={layer.id} style={layer.element.initialCss}>
               {layer.element.text}
             </div>
           )}

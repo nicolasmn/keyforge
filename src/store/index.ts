@@ -30,7 +30,12 @@ const defaultDoc: AnimationDocument = {
           id: nanoid(),
           property: 'transform',
           keyframes: [
-            { id: nanoid(), time: 0, value: 'translateY(40px)', easing: 'cubic-bezier(0.34,1.56,0.64,1)' },
+            {
+              id: nanoid(),
+              time: 0,
+              value: 'translateY(40px)',
+              easing: 'cubic-bezier(0.34,1.56,0.64,1)',
+            },
             { id: nanoid(), time: 1000, value: 'translateY(0px)', easing: 'linear' },
           ],
         },
@@ -74,9 +79,11 @@ export function addLayer() {
 }
 
 export function removeLayer(layerId: string) {
-  setDoc(produce((d) => {
-    d.layers = d.layers.filter((l) => l.id !== layerId)
-  }))
+  setDoc(
+    produce((d) => {
+      d.layers = d.layers.filter((l) => l.id !== layerId)
+    }),
+  )
   if (selectedLayerId() === layerId) setSelectedLayerId(doc.layers[0]?.id ?? null)
 }
 

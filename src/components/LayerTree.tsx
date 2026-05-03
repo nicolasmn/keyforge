@@ -21,7 +21,10 @@ export default function LayerTree() {
               <span class="layer-tree__name">{layer.name}</span>
               <button
                 class="btn btn--ghost layer-tree__remove"
-                onClick={(e) => { e.stopPropagation(); removeLayer(layer.id) }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  removeLayer(layer.id)
+                }}
                 title="Remove layer"
               >
                 ✕

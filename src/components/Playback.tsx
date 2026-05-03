@@ -17,7 +17,9 @@ export default function Playback() {
 
   return (
     <div class="playback">
-      <button class="btn btn--ghost" onClick={stop} title="Stop">⏹</button>
+      <button class="btn btn--ghost" onClick={stop} title="Stop">
+        ⏹
+      </button>
       <button class="btn btn--primary" onClick={toggle}>
         {playing() ? '⏸' : '▶'}
       </button>

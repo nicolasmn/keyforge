@@ -10,9 +10,9 @@ export function generateCss(doc: AnimationDocument): string {
       const animName = `kf-${layer.id}`
 
       // Collect all unique time offsets across all tracks
-      const times = [
-        ...new Set(layer.tracks.flatMap((t) => t.keyframes.map((k) => k.time))),
-      ].sort((a, b) => a - b)
+      const times = [...new Set(layer.tracks.flatMap((t) => t.keyframes.map((k) => k.time)))].sort(
+        (a, b) => a - b,
+      )
 
       if (times.length === 0) return ''
 
@@ -22,14 +22,15 @@ export function generateCss(doc: AnimationDocument): string {
           const props = layer.tracks
             .map((track) => {
               // Find nearest keyframe at or before this time
-              const kf = [...track.keyframes]
-                .reverse()
-                .find((k) => k.time <= time)
+              const kf = [...track.keyframes].reverse().find((k) => k.time <= time)
               if (!kf) return ''
-              const prop = track.property === 'transform' || track.property === 'scale' ||
-                track.property === 'translate' || track.property === 'rotate'
-                ? track.property
-                : track.property
+              const prop =
+                track.property === 'transform' ||
+                track.property === 'scale' ||
+                track.property === 'translate' ||
+                track.property === 'rotate'
+                  ? track.property
+                  : track.property
               return `${prop}:${kf.value};`
             })
             .filter(Boolean)
