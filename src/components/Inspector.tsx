@@ -1,4 +1,4 @@
-import { Show, For, createSignal } from 'solid-js'
+import { Show, For, createSignal, createMemo } from 'solid-js'
 import {
   selectedLayerId,
   selectedKeyframeId,
@@ -10,9 +10,12 @@ import {
   updateKeyframe,
   removeKeyframe,
   playhead,
+  doc,
 } from '@/store'
 import type { AnimatableProperty, EasingName } from '@/types'
 import CodeView from './CodeView'
+import TokenView from './TokenView'
+import { tokenizeLayer } from '@/utils/tokenize'
 
 const PROPERTIES: AnimatableProperty[] = [
   'opacity',
@@ -36,12 +39,18 @@ const EASINGS: EasingName[] = [
   'cubic-bezier(0.34,1.56,0.64,1)',
 ]
 
-type Tab = 'properties' | 'css'
+type Tab = 'properties' | 'css' | 'tokens'
 
 export default function Inspector() {
   const [activeTab, setActiveTab] = createSignal<Tab>('properties')
   const layer = () => getSelectedLayer()
   const selected = () => getSelectedTrackAndKeyframe()
+
+  const tokens = createMemo(() => {
+    const l = layer()
+    if (!l) return []
+    return tokenizeLayer(l, doc)
+  })
 
   function handleAddTrack(e: Event) {
     const sel = e.currentTarget as HTMLSelectElement
@@ -79,6 +88,13 @@ export default function Inspector() {
         >
           CSS
         </button>
+        <button
+          class="inspector__tab"
+          classList={{ 'inspector__tab--active': activeTab() === 'tokens' }}
+          onClick={() => setActiveTab('tokens')}
+        >
+          Tokens
+        </button>
       </div>
 
       {/* Properties tab */}
@@ -86,7 +102,6 @@ export default function Inspector() {
         <Show when={layer()} fallback={<p class="inspector__empty">No layer selected</p>}>
           {(l) => (
             <div class="inspector__body">
-              {/* Property tracks */}
               <For each={l().tracks}>
                 {(track) => (
                   <div class="inspector__track">
@@ -144,7 +159,6 @@ export default function Inspector() {
                 )}
               </For>
 
-              {/* Add property track */}
               <div class="inspector__add-track">
                 <select class="input" onChange={handleAddTrack}>
                   <option value="">+ Add property track</option>
@@ -152,7 +166,6 @@ export default function Inspector() {
                 </select>
               </div>
 
-              {/* Selected keyframe detail editor */}
               <Show when={selected()}>
                 {(sel) => (
                   <div class="inspector__kf-detail">
@@ -193,6 +206,13 @@ export default function Inspector() {
       {/* CSS tab */}
       <Show when={activeTab() === 'css'}>
         <CodeView />
+      </Show>
+
+      {/* Tokens tab */}
+      <Show when={activeTab() === 'tokens'}>
+        <Show when={layer()} fallback={<p class="inspector__empty">No layer selected</p>}>
+          <TokenView tokens={tokens()} layerId={selectedLayerId() ?? ''} />
+        </Show>
       </Show>
     </aside>
   )
