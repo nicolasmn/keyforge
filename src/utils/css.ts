@@ -1,18 +1,17 @@
 import type { AnimationDocument } from '@/types'
 
 /**
- * Generate a full <style> block for all layers in the document.
- * Each layer gets a unique @keyframes rule and animation declaration.
+ * Generate @keyframes + animation declaration for all layers.
+ * play-state and delay are NOT baked in — Preview sets them directly on elements.
  */
 export function generateCss(doc: AnimationDocument): string {
   return doc.layers
     .map((layer) => {
       const animName = `kf-${layer.id}`
 
-      // Collect all unique time offsets across all tracks
-      const times = [...new Set(layer.tracks.flatMap((t) => t.keyframes.map((k) => k.time)))].sort(
-        (a, b) => a - b,
-      )
+      const times = [
+        ...new Set(layer.tracks.flatMap((t) => t.keyframes.map((k) => k.time))),
+      ].sort((a, b) => a - b)
 
       if (times.length === 0) return ''
 
@@ -21,17 +20,9 @@ export function generateCss(doc: AnimationDocument): string {
           const pct = ((time / doc.duration) * 100).toFixed(2)
           const props = layer.tracks
             .map((track) => {
-              // Find nearest keyframe at or before this time
               const kf = [...track.keyframes].reverse().find((k) => k.time <= time)
               if (!kf) return ''
-              const prop =
-                track.property === 'transform' ||
-                track.property === 'scale' ||
-                track.property === 'translate' ||
-                track.property === 'rotate'
-                  ? track.property
-                  : track.property
-              return `${prop}:${kf.value};`
+              return `${track.property}:${kf.value};`
             })
             .filter(Boolean)
             .join(' ')
@@ -43,9 +34,14 @@ export function generateCss(doc: AnimationDocument): string {
         `@keyframes ${animName} {`,
         keyframeBlock,
         `}`,
+        // iteration-count: infinite so fill-mode never freezes the element
+        // play-state and delay are set directly by Preview via inline style
         `[data-layer-id="${layer.id}"] {`,
-        `  animation: ${animName} ${doc.duration}ms linear both;`,
-        `  animation-play-state: var(--play-state, paused);`,
+        `  animation-name: ${animName};`,
+        `  animation-duration: ${doc.duration}ms;`,
+        `  animation-timing-function: linear;`,
+        `  animation-fill-mode: both;`,
+        `  animation-iteration-count: infinite;`,
         `}`,
       ].join('\n')
     })
