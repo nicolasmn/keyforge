@@ -72,6 +72,13 @@ describe('renameLayer', () => {
     renameLayer(id, '   ')
     expect(doc.layers[0].name).toBe(original)
   })
+
+  it('trims whitespace from valid name', () => {
+    addLayer()
+    const id = doc.layers[0].id
+    renameLayer(id, '  Trimmed  ')
+    expect(doc.layers[0].name).toBe('Trimmed')
+  })
 })
 
 describe('reorderLayer', () => {
@@ -92,6 +99,26 @@ describe('reorderLayer', () => {
     reorderLayer(0, 0)
     expect(doc.layers.map((l) => l.id)).toEqual(ids)
   })
+
+  it('moves last to first', () => {
+    addLayer()
+    addLayer()
+    addLayer()
+    const ids = doc.layers.map((l) => l.id)
+    reorderLayer(2, 0)
+    expect(doc.layers[0].id).toBe(ids[2])
+    expect(doc.layers[1].id).toBe(ids[0])
+    expect(doc.layers[2].id).toBe(ids[1])
+  })
+
+  it('preserves all layer ids after reorder', () => {
+    addLayer()
+    addLayer()
+    addLayer()
+    const ids = new Set(doc.layers.map((l) => l.id))
+    reorderLayer(0, 2)
+    expect(new Set(doc.layers.map((l) => l.id))).toEqual(ids)
+  })
 })
 
 describe('setLayerVisibility', () => {
@@ -108,6 +135,15 @@ describe('setLayerVisibility', () => {
     setLayerVisibility(id, false)
     setLayerVisibility(id, true)
     expect(doc.layers[0].visible).toBe(true)
+  })
+
+  it('does not affect other layers', () => {
+    addLayer()
+    addLayer()
+    const id0 = doc.layers[0].id
+    const id1 = doc.layers[1].id
+    setLayerVisibility(id0, false)
+    expect(doc.layers.find((l) => l.id === id1)?.visible).toBe(true)
   })
 })
 

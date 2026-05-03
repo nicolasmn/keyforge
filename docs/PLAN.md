@@ -28,6 +28,7 @@ Keyforge is a visual, browser-native animation editor. It lets developers and de
 - **Native Canvas 2D** — timeline track rendering (DPR-aware, ResizeObserver)
 - **Web Animations API** — scrubbing via negative `animation-delay`
 - **Split.js** — resizable panels (horizontal + vertical splits)
+- **@thisbeyond/solid-dnd** — pointer + touch sortable drag for LayerTree
 - **Vitest** — unit tests for store mutations and CSS generation
 
 ### Layout
@@ -108,14 +109,16 @@ type Keyframe = {
 
 Self-contained improvements with no architectural risk. Priority order:
 
-#### 1. Layer Management
+#### 1. Layer Management ✅
 
-- [ ] **Rename layer** — inline click-to-edit on layer name (`contenteditable` or input swap)
-- [ ] **Reorder layers** — drag handle in LayerTree, updates layer array order in store
-- [ ] **Hide/show layer** — eye icon toggle; sets `visible` boolean on `Layer`
-  - `generateCss` skips hidden layers
-  - Preview pane applies `visibility: hidden` to hidden layer elements
+- [x] **Rename layer** — inline dbl-click edit (input swap; Enter/Esc/blur commit)
+- [x] **Reorder layers** — `@thisbeyond/solid-dnd` sortable; works on pointer + touch
+- [x] **Hide/show layer** — eye icon toggle; `visible: boolean` on `Layer`
+  - `generateCss` skips hidden layers (no CSS emitted)
+  - Preview pane: `visibility: hidden` via style object (not string, per `solid/style-prop`)
   - Store mutation: `setLayerVisibility(layerId, visible)`
+- [x] Layer item: icon alignment fixed (`gap`, `flex-shrink: 0`)
+- [x] Rename input: styled with `color-surface-2` bg + accent border
 
 #### 2. Resizable Panels
 
