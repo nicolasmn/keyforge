@@ -256,108 +256,6 @@
     cursor: crosshair;
   }
 
-  /* ── Inspector ───────────────────────────────────────────── */
-  .inspector__tab-bar {
-    display: flex;
-    border-bottom: 1px solid var(--color-border);
-    flex-shrink: 0;
-  }
-  .inspector__tab {
-    flex: 1;
-    padding: var(--space-2) var(--space-3);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-    border-bottom: 2px solid transparent;
-    transition:
-      color var(--duration-fast),
-      border-color var(--duration-fast);
-  }
-  .inspector__tab:hover {
-    color: var(--color-text);
-  }
-  .inspector__tab--active {
-    color: var(--color-text);
-    border-bottom-color: var(--color-accent);
-  }
-  .inspector__body {
-    padding: var(--space-3);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    flex: 1;
-    overflow-y: auto;
-    min-height: 0;
-    -webkit-overflow-scrolling: touch;
-  }
-  .inspector__empty {
-    padding: var(--space-4);
-    color: var(--color-text-muted);
-    font-size: var(--font-size-sm);
-  }
-  .inspector__track {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .inspector__track-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  /* Renamed from .inspector__prop → .inspector__prop-name for clarity */
-  .inspector__prop-name {
-    font-size: var(--font-size-xs);
-    font-family: var(--font-mono);
-    color: var(--color-accent);
-    font-weight: 600;
-  }
-  .inspector__keyframe {
-    display: grid;
-    grid-template-columns: 52px 1fr 1fr auto;
-    gap: var(--space-1);
-    align-items: center;
-    padding: var(--space-1) var(--space-2);
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: background var(--duration-fast);
-  }
-  .inspector__keyframe:hover {
-    background: var(--color-surface-2);
-  }
-  .inspector__keyframe--selected {
-    background: var(--color-accent-dim);
-  }
-  .inspector__kf-time {
-    font-size: var(--font-size-xs);
-    font-family: var(--font-mono);
-    color: var(--color-text-muted);
-  }
-  .inspector__kf-value {
-    font-size: var(--font-size-xs);
-    font-family: var(--font-mono);
-  }
-  .inspector__kf-easing {
-    font-size: var(--font-size-xs);
-  }
-  .inspector__kf-detail {
-    border-top: 1px solid var(--color-border);
-    padding-top: var(--space-3);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  .inspector__label {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-  }
-  .inspector__add-track {
-    border-top: 1px solid var(--color-border);
-    padding-top: var(--space-3);
-  }
-
   /* ── Code View ───────────────────────────────────────────── */
   .code-view {
     display: flex;
@@ -387,13 +285,11 @@
     font-size: var(--font-size-xs);
     padding: var(--space-1) var(--space-2);
   }
-  /* Shiki-highlighted output */
   .code-view__highlighted {
     flex: 1;
     overflow: auto;
     font-size: var(--font-size-xs);
   }
-  /* Shiki wraps in <pre class="shiki"> — override background to match our surface */
   .code-view__highlighted .shiki {
     margin: 0;
     padding: var(--space-3);
@@ -405,7 +301,6 @@
     white-space: pre;
     overflow-x: auto;
   }
-  /* Plain-text fallback (before Shiki loads) */
   .code-view__plain {
     flex: 1;
     overflow: auto;
