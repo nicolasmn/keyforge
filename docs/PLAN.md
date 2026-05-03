@@ -27,6 +27,7 @@ Keyforge is a visual, browser-native animation editor. It lets developers and de
 - **Modern CSS** — `@layer`, custom properties, no utility framework
 - **Native Canvas 2D** — timeline track rendering (DPR-aware, ResizeObserver)
 - **Web Animations API** — scrubbing via negative `animation-delay`
+- **Split.js** — resizable panels (horizontal + vertical splits)
 - **Vitest** — unit tests for store mutations and CSS generation
 
 ### Layout
@@ -37,14 +38,18 @@ Keyforge is a visual, browser-native animation editor. It lets developers and de
 ├──────────┬──────────────────┬───────────┤
 │  Layer   │                  │ Property  │
 │  Tree    │   Preview Pane   │ Inspector │
-│          │   (real DOM +    │ (tracks,  │
+│  (resize)│   (real DOM +    │ (tracks,  │
 │          │   injected CSS)  │  keyframes│
 ├──────────┴──────────────────┴───────────┤
-│  Playback controls                       │
+│  Playback controls         (resize ↕)   │
 │  Timeline (native Canvas 2D)             │
 │  scrubber · tracks · keyframe diamonds   │
 └─────────────────────────────────────────┘
 ```
+
+Panel splits:
+- **Horizontal** (Split.js): LayerTree | Preview | Inspector
+- **Vertical** (Split.js): top area | Timeline
 
 ### Data Model (core)
 
@@ -59,7 +64,8 @@ type AnimationDocument = {
 type Layer = {
   id: string
   name: string
-  element: LayerElement // tag, initialCss, text
+  visible: boolean        // added Phase 1.5
+  element: LayerElement   // tag, initialCss, text
   tracks: Track[]
 }
 
@@ -94,8 +100,42 @@ type Keyframe = {
 - [x] Add keyframe at playhead position
 - [x] Playback controls: play/pause/stop, loop toggle, time counter
 - [x] Basic properties: `transform`, `opacity`, `background-color` + 7 more
-- [x] CSS export: `@keyframes` + `animation` shorthand → clipboard
+- [x] CSS export: `@keyframes` + `animation` longhand → clipboard
 - [x] Unit tests: store mutations + CSS generation
+
+### Phase 1.5 — UX Foundations 🚧
+
+Self-contained improvements with no architectural risk. Priority order:
+
+#### 1. Layer Management
+- [ ] **Rename layer** — inline click-to-edit on layer name (`contenteditable` or input swap)
+- [ ] **Reorder layers** — drag handle in LayerTree, updates layer array order in store
+- [ ] **Hide/show layer** — eye icon toggle; sets `visible` boolean on `Layer`
+  - `generateCss` skips hidden layers
+  - Preview pane applies `visibility: hidden` to hidden layer elements
+  - Store mutation: `setLayerVisibility(layerId, visible)`
+
+#### 2. Resizable Panels
+- [ ] Integrate **Split.js** (2.7kb, zero deps, CSS Grid/Flex aware)
+- [ ] Horizontal split: LayerTree | Preview | Inspector with min/max constraints
+  - LayerTree: min 160px, max 320px
+  - Inspector: min 220px, max 400px
+  - Preview: takes remaining space
+- [ ] Vertical split: top workspace | Timeline
+  - Timeline: min 120px, max 50vh
+- [ ] Sizes reset on double-click of drag handle
+
+#### 3. Read-only Code View
+- [ ] Second tab in Inspector panel: **CSS** tab alongside **Properties** tab
+- [ ] Renders live output of `generateCss(doc)` — updates on every store change
+- [ ] Syntax highlighting via **Shiki** (loads only the `css` grammar + one theme)
+- [ ] Copy-to-clipboard button (reuses existing export util)
+- [ ] Scoped to selected layer only; toggle to show full document CSS
+
+#### 4. DevTools Token UI
+See `docs/DEVTOOLS-TOKEN-UI.md` — tracked separately due to scope and UX research required.
+
+---
 
 ### Phase 2 — Modern CSS
 
@@ -169,3 +209,4 @@ Built-in technique presets the user can apply and customise:
 - Multiplayer / share-by-URL collaboration?
 - Plugin system for custom property types?
 - AI-assisted animation generation (describe motion → keyframes)?
+- DevTools Token UI backpropagation — full round-trip editing vs. token-only? (see `docs/DEVTOOLS-TOKEN-UI.md`)
