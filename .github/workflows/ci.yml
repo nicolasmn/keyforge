@@ -6,13 +6,19 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
-  check:
-    name: Type Check, Lint & Format
+  fix:
+    name: Auto-fix & Typecheck
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - uses: actions/setup-node@v4
         with:
@@ -20,28 +26,40 @@ jobs:
           cache: npm
           cache-dependency-path: package.json
 
-      - name: Sync lockfile with package.json
+      - name: Sync lockfile
         run: npm install --package-lock-only --ignore-scripts
 
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
+      - name: Lint fix
+        run: npx eslint src --ext .ts,.tsx --fix
+
+      - name: Format fix
+        run: npm run format
+
+      - name: Commit auto-fixes
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --quiet && git diff --staged --quiet || (
+            git add -A &&
+            git commit -m "style: auto-fix lint & format [skip ci]" &&
+            git push
+          )
+
       - name: Type check
         run: npm run typecheck
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Format check
-        run: npm run format:check
 
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: check
+    needs: fix
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - uses: actions/setup-node@v4
         with:
@@ -49,7 +67,7 @@ jobs:
           cache: npm
           cache-dependency-path: package.json
 
-      - name: Sync lockfile with package.json
+      - name: Sync lockfile
         run: npm install --package-lock-only --ignore-scripts
 
       - name: Install dependencies
