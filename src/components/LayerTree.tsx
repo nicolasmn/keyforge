@@ -8,6 +8,7 @@ import {
   closestCenter,
   type DragEvent,
 } from '@thisbeyond/solid-dnd'
+import '../../src/directives' // ensure directive augmentation is loaded
 import {
   doc,
   selectedLayerId,
@@ -26,7 +27,9 @@ function SortableLayer(props: {
   onCommit: (id: string, value: string) => void
   onKeyDown: (e: KeyboardEvent, id: string) => void
 }) {
-  const sortable = createSortable(props.layer.id)
+  // Capture id synchronously — createSortable must not read reactive props in its body
+  const id = props.layer.id
+  const sortable = createSortable(id)
 
   return (
     <li
@@ -155,7 +158,6 @@ export default function LayerTree() {
           </SortableProvider>
         </ul>
         <DragOverlay>
-          {/* ghost shown during drag */}
           <div class="layer-tree__drag-ghost" />
         </DragOverlay>
       </DragDropProvider>
