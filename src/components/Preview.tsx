@@ -8,18 +8,35 @@ import { generateCss } from '@/utils/css'
  * CSS animations are ALWAYS paused. Position driven exclusively by
  * `animation-delay: -${playhead}ms` set as inline style on each layer element.
  * The RAF loop advances the playhead signal; everything else reacts to it.
+ *
+ * Hidden layers (visible === false) are excluded from generated CSS and
+ * rendered with `visibility: hidden` so they hold their layout space.
  */
+
+/** Parse a semicolon-separated inline CSS string into a style object. */
+function parseCssString(css: string): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const decl of css.split(';')) {
+    const colon = decl.indexOf(':')
+    if (colon === -1) continue
+    const prop = decl.slice(0, colon).trim()
+    const value = decl.slice(colon + 1).trim()
+    if (prop && value) result[prop] = value
+  }
+  return result
+}
+
 export default function Preview() {
   let styleEl: HTMLStyleElement | undefined
   let rafId = 0
   let lastTs = 0
 
-  // Structural fingerprint: only changes on layers/tracks/keyframes/duration edits.
-  // createMemo ensures a stable reactive dependency — no `void` trick.
+  // Structural fingerprint: only changes on layers/tracks/keyframes/duration/visibility edits.
   const docStructure = createMemo(() =>
     JSON.stringify(
       doc.layers.map((l) => ({
         id: l.id,
+        visible: l.visible,
         duration: doc.duration,
         tracks: l.tracks.map((t) => ({
           id: t.id,
@@ -36,12 +53,10 @@ export default function Preview() {
   )
 
   // Re-inject CSS only when structure changes.
-  // generateCss receives a plain-object snapshot — no reactive reads inside untrack.
   createEffect(() => {
-    const _structure = docStructure() // reactive subscription
+    const _structure = docStructure()
     untrack(() => {
       if (!styleEl) return
-      // Snapshot: spread doc into a plain object so generateCss reads no signals
       const snapshot = JSON.parse(_structure) as typeof doc.layers
       styleEl.textContent = generateCss({ ...doc, layers: snapshot })
     })
@@ -55,7 +70,7 @@ export default function Preview() {
     })
   })
 
-  // RAF loop — advances playhead when playing; calls setPlaying(false) at end
+  // RAF loop
   createEffect(() => {
     if (!playing()) {
       cancelAnimationFrame(rafId)
@@ -76,9 +91,8 @@ export default function Preview() {
         if (isLoop) {
           next = next % duration
         } else {
-          // Reached end: snap to duration, stop playing
           setPlayhead(duration)
-          setPlaying(false) // resets play button state
+          setPlaying(false)
           return
         }
       }
@@ -98,7 +112,13 @@ export default function Preview() {
       <div class="preview__canvas">
         <For each={doc.layers}>
           {(layer) => (
-            <div data-layer-id={layer.id} style={layer.element.initialCss}>
+            <div
+              data-layer-id={layer.id}
+              style={{
+                ...parseCssString(layer.element.initialCss),
+                ...(layer.visible === false ? { visibility: 'hidden' } : {}),
+              }}
+            >
               {layer.element.text}
             </div>
           )}

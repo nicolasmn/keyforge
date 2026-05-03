@@ -19,6 +19,7 @@
     "**/*.{ts,tsx,js,json,css,md}": "prettier --write --ignore-unknown"
   },
   "dependencies": {
+    "@thisbeyond/solid-dnd": "^0.7.4",
     "solid-js": "^1.9.0"
   },
   "devDependencies": {

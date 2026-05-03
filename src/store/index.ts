@@ -3,7 +3,7 @@ import { createSignal } from 'solid-js'
 import type { AnimationDocument, Layer, Track, Keyframe, AnimatableProperty } from '@/types'
 import { nanoid } from '@/utils/nanoid'
 
-// ── Default document ──────────────────────────────────────────
+// ── Default document ──────────────────────────────────────────────────
 const defaultDoc: AnimationDocument = {
   id: nanoid(),
   name: 'Untitled',
@@ -12,6 +12,7 @@ const defaultDoc: AnimationDocument = {
     {
       id: nanoid(),
       name: 'Box',
+      visible: true,
       element: {
         tag: 'div',
         text: '',
@@ -44,21 +45,21 @@ const defaultDoc: AnimationDocument = {
   ],
 }
 
-// ── Store ─────────────────────────────────────────────────────
+// ── Store ─────────────────────────────────────────────────────────────
 export const [doc, setDoc] = createStore<AnimationDocument>(defaultDoc)
 
-// ── Selection ─────────────────────────────────────────────────
+// ── Selection ──────────────────────────────────────────────────────────
 export const [selectedLayerId, setSelectedLayerId] = createSignal<string | null>(
   defaultDoc.layers[0]?.id ?? null,
 )
 export const [selectedKeyframeId, setSelectedKeyframeId] = createSignal<string | null>(null)
 
-// ── Playhead ──────────────────────────────────────────────────
+// ── Playhead ────────────────────────────────────────────────────────────
 export const [playhead, setPlayhead] = createSignal(0) // ms
 export const [playing, setPlaying] = createSignal(false)
 export const [loop, setLoop] = createSignal(true)
 
-// ── Mutations ─────────────────────────────────────────────────
+// ── Mutations ───────────────────────────────────────────────────────────
 export function addLayer() {
   const id = nanoid()
   setDoc(
@@ -66,6 +67,7 @@ export function addLayer() {
       d.layers.push({
         id,
         name: `Layer ${d.layers.length + 1}`,
+        visible: true,
         element: {
           tag: 'div',
           text: '',
@@ -85,6 +87,35 @@ export function removeLayer(layerId: string) {
     }),
   )
   if (selectedLayerId() === layerId) setSelectedLayerId(doc.layers[0]?.id ?? null)
+}
+
+export function renameLayer(layerId: string, name: string) {
+  setDoc(
+    produce((d) => {
+      const layer = d.layers.find((l) => l.id === layerId)
+      if (layer) layer.name = name.trim() || layer.name
+    }),
+  )
+}
+
+/** Move layer at `fromIndex` to `toIndex`. */
+export function reorderLayer(fromIndex: number, toIndex: number) {
+  if (fromIndex === toIndex) return
+  setDoc(
+    produce((d) => {
+      const [layer] = d.layers.splice(fromIndex, 1)
+      d.layers.splice(toIndex, 0, layer)
+    }),
+  )
+}
+
+export function setLayerVisibility(layerId: string, visible: boolean) {
+  setDoc(
+    produce((d) => {
+      const layer = d.layers.find((l) => l.id === layerId)
+      if (layer) layer.visible = visible
+    }),
+  )
 }
 
 export function addTrack(layerId: string, property: AnimatableProperty) {

@@ -10,6 +10,7 @@ const doc: AnimationDocument = {
     {
       id: 'layer-1',
       name: 'Box',
+      visible: true,
       element: { tag: 'div', initialCss: '' },
       tracks: [
         {
