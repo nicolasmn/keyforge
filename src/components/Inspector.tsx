@@ -1,4 +1,4 @@
-import { Show, For } from 'solid-js'
+import { Show, For, createSignal } from 'solid-js'
 import {
   selectedLayerId,
   selectedKeyframeId,
@@ -12,6 +12,7 @@ import {
   playhead,
 } from '@/store'
 import type { AnimatableProperty, EasingName } from '@/types'
+import CodeView from './CodeView'
 
 const PROPERTIES: AnimatableProperty[] = [
   'opacity',
@@ -35,7 +36,10 @@ const EASINGS: EasingName[] = [
   'cubic-bezier(0.34,1.56,0.64,1)',
 ]
 
+type Tab = 'properties' | 'css'
+
 export default function Inspector() {
+  const [activeTab, setActiveTab] = createSignal<Tab>('properties')
   const layer = () => getSelectedLayer()
   const selected = () => getSelectedTrackAndKeyframe()
 
@@ -59,112 +63,136 @@ export default function Inspector() {
 
   return (
     <aside class="panel inspector">
-      <div class="panel__header">Inspector</div>
+      {/* Tab bar */}
+      <div class="inspector__tab-bar">
+        <button
+          class="inspector__tab"
+          classList={{ 'inspector__tab--active': activeTab() === 'properties' }}
+          onClick={() => setActiveTab('properties')}
+        >
+          Properties
+        </button>
+        <button
+          class="inspector__tab"
+          classList={{ 'inspector__tab--active': activeTab() === 'css' }}
+          onClick={() => setActiveTab('css')}
+        >
+          CSS
+        </button>
+      </div>
 
-      <Show when={layer()} fallback={<p class="inspector__empty">No layer selected</p>}>
-        {(l) => (
-          <div class="inspector__body">
-            {/* Tracks */}
-            <For each={l().tracks}>
-              {(track) => (
-                <div class="inspector__track">
-                  <div class="inspector__track-header">
-                    <span class="inspector__prop">{track.property}</span>
-                    <button
-                      class="btn btn--ghost"
-                      onClick={() => handleAddKeyframe(track.id)}
-                      title="Add keyframe at playhead"
-                    >
-                      + KF
-                    </button>
-                  </div>
-                  <For each={track.keyframes}>
-                    {(kf) => (
-                      <div
-                        class="inspector__keyframe"
-                        classList={{
-                          'inspector__keyframe--selected': selectedKeyframeId() === kf.id,
-                        }}
-                        onClick={() => setSelectedKeyframeId(kf.id)}
+      {/* Properties tab */}
+      <Show when={activeTab() === 'properties'}>
+        <Show when={layer()} fallback={<p class="inspector__empty">No layer selected</p>}>
+          {(l) => (
+            <div class="inspector__body">
+              {/* Property tracks */}
+              <For each={l().tracks}>
+                {(track) => (
+                  <div class="inspector__track">
+                    <div class="inspector__track-header">
+                      <span class="inspector__prop-name">{track.property}</span>
+                      <button
+                        class="btn btn--ghost"
+                        onClick={() => handleAddKeyframe(track.id)}
+                        title="Add keyframe at playhead"
                       >
-                        <span class="inspector__kf-time">{kf.time}ms</span>
-                        <input
-                          class="input inspector__kf-value"
-                          value={kf.value}
-                          onBlur={(e) =>
-                            updateKeyframe(l().id, track.id, kf.id, {
-                              value: e.currentTarget.value,
-                            })
-                          }
-                        />
-                        <select
-                          class="input inspector__kf-easing"
-                          value={kf.easing}
-                          onChange={(e) =>
-                            updateKeyframe(l().id, track.id, kf.id, {
-                              easing: e.currentTarget.value as EasingName,
-                            })
-                          }
+                        + KF
+                      </button>
+                    </div>
+                    <For each={track.keyframes}>
+                      {(kf) => (
+                        <div
+                          class="inspector__keyframe"
+                          classList={{
+                            'inspector__keyframe--selected': selectedKeyframeId() === kf.id,
+                          }}
+                          onClick={() => setSelectedKeyframeId(kf.id)}
                         >
-                          <For each={EASINGS}>{(e) => <option value={e}>{e}</option>}</For>
-                        </select>
-                        <button
-                          class="btn btn--ghost"
-                          onClick={() => removeKeyframe(l().id, track.id, kf.id)}
-                          title="Remove"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    )}
-                  </For>
-                </div>
-              )}
-            </For>
+                          <span class="inspector__kf-time">{kf.time}ms</span>
+                          <input
+                            class="input inspector__kf-value"
+                            value={kf.value}
+                            onBlur={(e) =>
+                              updateKeyframe(l().id, track.id, kf.id, {
+                                value: e.currentTarget.value,
+                              })
+                            }
+                          />
+                          <select
+                            class="input inspector__kf-easing"
+                            value={kf.easing}
+                            onChange={(e) =>
+                              updateKeyframe(l().id, track.id, kf.id, {
+                                easing: e.currentTarget.value as EasingName,
+                              })
+                            }
+                          >
+                            <For each={EASINGS}>{(e) => <option value={e}>{e}</option>}</For>
+                          </select>
+                          <button
+                            class="btn btn--ghost"
+                            onClick={() => removeKeyframe(l().id, track.id, kf.id)}
+                            title="Remove"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      )}
+                    </For>
+                  </div>
+                )}
+              </For>
 
-            {/* Add track */}
-            <div class="inspector__add-track">
-              <select class="input" onChange={handleAddTrack}>
-                <option value="">+ Add property track</option>
-                <For each={PROPERTIES}>{(p) => <option value={p}>{p}</option>}</For>
-              </select>
+              {/* Add property track */}
+              <div class="inspector__add-track">
+                <select class="input" onChange={handleAddTrack}>
+                  <option value="">+ Add property track</option>
+                  <For each={PROPERTIES}>{(p) => <option value={p}>{p}</option>}</For>
+                </select>
+              </div>
+
+              {/* Selected keyframe detail editor */}
+              <Show when={selected()}>
+                {(sel) => (
+                  <div class="inspector__kf-detail">
+                    <div class="panel__header">Selected Keyframe</div>
+                    <label class="inspector__label">
+                      Time (ms)
+                      <input
+                        class="input"
+                        type="number"
+                        value={sel().keyframe.time}
+                        onBlur={(e) =>
+                          updateKeyframe(selectedLayerId()!, sel().track.id, sel().keyframe.id, {
+                            time: Number(e.currentTarget.value),
+                          })
+                        }
+                      />
+                    </label>
+                    <label class="inspector__label">
+                      Value
+                      <input
+                        class="input"
+                        value={sel().keyframe.value}
+                        onBlur={(e) =>
+                          updateKeyframe(selectedLayerId()!, sel().track.id, sel().keyframe.id, {
+                            value: e.currentTarget.value,
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
+                )}
+              </Show>
             </div>
+          )}
+        </Show>
+      </Show>
 
-            {/* Selected keyframe detail */}
-            <Show when={selected()}>
-              {(sel) => (
-                <div class="inspector__kf-detail">
-                  <div class="panel__header">Selected Keyframe</div>
-                  <label class="inspector__label">
-                    Time (ms)
-                    <input
-                      class="input"
-                      type="number"
-                      value={sel().keyframe.time}
-                      onBlur={(e) =>
-                        updateKeyframe(selectedLayerId()!, sel().track.id, sel().keyframe.id, {
-                          time: Number(e.currentTarget.value),
-                        })
-                      }
-                    />
-                  </label>
-                  <label class="inspector__label">
-                    Value
-                    <input
-                      class="input"
-                      value={sel().keyframe.value}
-                      onBlur={(e) =>
-                        updateKeyframe(selectedLayerId()!, sel().track.id, sel().keyframe.id, {
-                          value: e.currentTarget.value,
-                        })
-                      }
-                    />
-                  </label>
-                </div>
-              )}
-            </Show>
-          </div>
-        )}
+      {/* CSS tab */}
+      <Show when={activeTab() === 'css'}>
+        <CodeView />
       </Show>
     </aside>
   )
