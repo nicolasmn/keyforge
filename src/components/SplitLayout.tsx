@@ -34,37 +34,31 @@ export default function SplitLayout(props: Props) {
   let timelineRef!: HTMLDivElement
 
   onMount(() => {
-    const hSplit = Split(
-      [layerTreeRef, previewRef, inspectorRef],
-      {
-        sizes: [18, 56, 26],
-        minSize: [160, 300, 220],
-        maxSize: [320, Infinity, 400],
-        gutterSize: 4,
-        snapOffset: 0,
-        direction: 'horizontal',
-        cursor: 'col-resize',
-        gutter(_index, direction) {
-          return makeGutter(direction)
-        },
+    const hSplit = Split([layerTreeRef, previewRef, inspectorRef], {
+      sizes: [18, 56, 26],
+      minSize: [160, 300, 220],
+      maxSize: [320, Infinity, 400],
+      gutterSize: 4,
+      snapOffset: 0,
+      direction: 'horizontal',
+      cursor: 'col-resize',
+      gutter(_index, direction) {
+        return makeGutter(direction)
       },
-    )
+    })
 
-    const vSplit = Split(
-      [topRowRef, timelineRef],
-      {
-        sizes: [70, 30],
-        minSize: [200, 120],
-        maxSize: [Infinity, Math.round(window.innerHeight * 0.5)],
-        gutterSize: 4,
-        snapOffset: 0,
-        direction: 'vertical',
-        cursor: 'row-resize',
-        gutter(_index, direction) {
-          return makeGutter(direction)
-        },
+    const vSplit = Split([topRowRef, timelineRef], {
+      sizes: [70, 30],
+      minSize: [200, 120],
+      maxSize: [Infinity, Math.round(window.innerHeight * 0.5)],
+      gutterSize: 4,
+      snapOffset: 0,
+      direction: 'vertical',
+      cursor: 'row-resize',
+      gutter(_index, direction) {
+        return makeGutter(direction)
       },
-    )
+    })
 
     document.querySelectorAll<HTMLElement>('.gutter--horizontal').forEach((g) => {
       g.addEventListener('dblclick', () => hSplit.setSizes([18, 56, 26]))
