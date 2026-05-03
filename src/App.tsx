@@ -17,7 +17,7 @@ export default function App() {
   const isMobile = createMediaQuery('(max-width: 768px)')
 
   return (
-    <div class="app">
+    <>
       <Header />
 
       {/* Desktop — resizable panels via Split.js */}
@@ -60,6 +60,6 @@ export default function App() {
         </div>
         <MobileTabs />
       </Show>
-    </div>
+    </>
   )
 }
