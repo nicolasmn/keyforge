@@ -35,21 +35,56 @@ export const CSS_TRANSFORM_COMPLETIONS = [
   'matrix(1, 0, 0, 1, 0, 0)',
 ]
 
-export const CSS_NUMBER_UNITS = [
-  'px', 'rem', 'em', '%', 'vw', 'vh', 'deg', 'rad', 'turn',
-  'ms', 's', 'fr',
+/** Length + percentage units (for width, height, border-radius, translate, etc.) */
+export const LENGTH_UNITS = ['px', 'rem', 'em', '%', 'vw', 'vh', 'vmin', 'vmax', 'dvw', 'dvh', 'cm', 'mm', 'in', 'pt', 'pc', 'ch', 'ex', 'fr'] as const
+
+/** Angle units */
+export const ANGLE_UNITS = ['deg', 'rad', 'turn', 'grad'] as const
+
+/** Time units */
+export const TIME_UNITS = ['ms', 's'] as const
+
+/** Unitless (opacity, scale, etc.) */
+export const UNITLESS: readonly string[] = [''] as const
+
+/** All number units in display order */
+export const CSS_NUMBER_UNITS: readonly string[] = [
+  ...LENGTH_UNITS, ...ANGLE_UNITS, ...TIME_UNITS, '',
 ]
+
+/** Unit groups for the unit selector dropdown */
+export const UNIT_GROUPS: { label: string; units: readonly string[] }[] = [
+  { label: 'Length',   units: LENGTH_UNITS },
+  { label: 'Angle',    units: ANGLE_UNITS },
+  { label: 'Time',     units: TIME_UNITS },
+  { label: 'Unitless', units: UNITLESS },
+]
+
+/** Returns true when the unit is an angle unit */
+export function isAngleUnit(unit: string): boolean {
+  return (ANGLE_UNITS as readonly string[]).includes(unit)
+}
+
+/** Convert an angle value+unit to degrees (for visual preview) */
+export function toDeg(value: number, unit: string): number {
+  switch (unit) {
+    case 'deg':  return value
+    case 'rad':  return value * (180 / Math.PI)
+    case 'turn': return value * 360
+    case 'grad': return value * 0.9
+    default:     return value
+  }
+}
 
 /** Build a sorted, unique completion list for a given token type + current value */
 export function completionsFor(type: string, current: string): string[] {
   switch (type) {
-    case 'color':    return CSS_NAMED_COLORS
-    case 'easing':   return CSS_EASING_COMPLETIONS
+    case 'color':     return CSS_NAMED_COLORS
+    case 'easing':    return CSS_EASING_COMPLETIONS
     case 'transform': return CSS_TRANSFORM_COMPLETIONS
     case 'number': {
-      // suggest current value with each unit appended
       const num = current.replace(/[^\d.-]/g, '') || '0'
-      return CSS_NUMBER_UNITS.map((u) => `${num}${u}`)
+      return CSS_NUMBER_UNITS.filter(Boolean).map((u) => `${num}${u}`)
     }
     default: return []
   }

@@ -3,13 +3,11 @@
  *
  * Design decisions:
  * - UNCONTROLLED inputs: set value once on open, commit on blur/Enter/Tab/Escape.
- * - No drag-scrub anywhere (removed). Numbers use type="number" spinner/keyboard.
- * - Transform args are editable via tap → inline number input per sub-token.
- * - <datalist> rendered in a portal div appended to document.body so it is
- *   never clipped by overflow:hidden parents. This is the only reliable way
- *   to show the dropdown on all browsers including iOS Safari.
- * - autocomplete="on" + list= is required for datalist on iOS. "off" breaks it.
- * - autocorrect="off" autocapitalize="none" prevents iOS mangling CSS values.
+ * - No drag-scrub anywhere. Numbers use type="number" + unit <select>.
+ * - Transform args editable via tap → inline NumberUnitField per sub-token.
+ * - Rotation values (deg/rad/turn/grad) show a small SVG dial preview.
+ * - <datalist> rendered in a body portal to escape overflow:hidden clipping.
+ * - autocomplete="on" + list= required for datalist on iOS Safari.
  */
 import {
   createSignal, createMemo, For, Show, onCleanup,
@@ -29,14 +27,19 @@ import {
 import type { AnimatableProperty, EasingName, ValueToken, SubToken } from '@/types'
 import EasingEditor from './EasingEditor'
 import { tokenizeLayer, NUMBER_UNIT_RE } from '@/utils/tokenize'
-import { completionsFor } from '@/utils/cssCompletions'
+import {
+  completionsFor,
+  UNIT_GROUPS,
+  isAngleUnit,
+  toDeg,
+} from '@/utils/cssCompletions'
 
 const PROPERTIES: AnimatableProperty[] = [
   'opacity', 'transform', 'background-color', 'color',
   'border-radius', 'width', 'height', 'scale', 'translate', 'rotate',
 ]
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── helpers ────────────────────────────────────────────────────────────────────
 
 function commit(path: ValueToken['path'], value: string) {
   if (path.field === 'value') {
@@ -56,8 +59,8 @@ function validate(type: ValueToken['type'], value: string): boolean {
 }
 
 /**
- * Mount a <datalist> into document.body (portal) so it is never clipped
- * by overflow:hidden ancestors. Returns a cleanup function.
+ * Mount a <datalist> into document.body so it is never clipped by
+ * overflow:hidden ancestors. Returns cleanup fn.
  */
 function mountDatalist(id: string, options: string[]): () => void {
   const host = document.createElement('div')
@@ -69,6 +72,116 @@ function mountDatalist(id: string, options: string[]): () => void {
     </datalist>
   ), host)
   return () => { dispose(); document.body.removeChild(host) }
+}
+
+// ── RotationDial ───────────────────────────────────────────────────────────────
+// Small 20×20 SVG dial showing the angle. Purely decorative.
+
+function RotationDial(props: { deg: number }) {
+  const R = 8
+  const cx = 10, cy = 10
+  // needle tip: angle 0 = pointing up (12 o'clock), clockwise
+  const rad = () => ((props.deg - 90) * Math.PI) / 180
+  const nx  = () => +(cx + R * Math.cos(rad())).toFixed(2)
+  const ny  = () => +(cy + R * Math.sin(rad())).toFixed(2)
+
+  return (
+    <svg
+      class="kf-rot-dial"
+      width="20" height="20" viewBox="0 0 20 20"
+      aria-hidden="true"
+      style={{ display: 'inline-block', 'vertical-align': 'middle', 'flex-shrink': '0' }}
+    >
+      {/* track circle */}
+      <circle cx={cx} cy={cy} r={R} fill="none"
+        stroke="currentColor" stroke-opacity="0.2" stroke-width="1.5" />
+      {/* needle */}
+      <line
+        x1={cx} y1={cy} x2={nx()} y2={ny()}
+        stroke="currentColor" stroke-width="1.5"
+        stroke-linecap="round"
+      />
+      {/* center dot */}
+      <circle cx={cx} cy={cy} r="1.5" fill="currentColor" />
+    </svg>
+  )
+}
+
+// ── NumberUnitField ────────────────────────────────────────────────────────────
+// Shared between ValueChip (standalone number token) and SubScrub (transform arg).
+// Shows: [number input] [unit select] [rotation dial?]
+
+interface NumberUnitFieldProps {
+  numStr:   string   // numeric part only, e.g. "40"
+  unit:     string   // current unit, e.g. "deg"
+  class?:   string
+  onCommit: (num: string, unit: string) => void
+  onCancel: () => void
+}
+
+function NumberUnitField(props: NumberUnitFieldProps) {
+  let inputEl: HTMLInputElement | undefined
+  // local unit state so changing select previews immediately
+  const [localUnit, setLocalUnit] = createSignal(props.unit)
+  const [localNum,  setLocalNum]  = createSignal(props.numStr)
+
+  const deg = () =>
+    isAngleUnit(localUnit()) ? toDeg(parseFloat(localNum()) || 0, localUnit()) : null
+
+  function finish() {
+    props.onCommit(inputEl?.value ?? localNum(), localUnit())
+  }
+
+  return (
+    <span class={`kf-num-field${props.class ? ` ${props.class}` : ''}`}>
+      <input
+        ref={(el) => {
+          inputEl = el
+          setTimeout(() => { el?.focus(); el?.select() }, 0)
+        }}
+        class="kf-num-field__num"
+        type="number"
+        value={props.numStr}
+        onInput={(e) => setLocalNum((e.currentTarget as HTMLInputElement).value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); finish() }
+          if (e.key === 'Escape') props.onCancel()
+        }}
+        onBlur={finish}
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="none"
+        spellcheck={false}
+      />
+      <select
+        class="kf-num-field__unit"
+        value={localUnit()}
+        onChange={(e) => {
+          const u = (e.currentTarget as HTMLSelectElement).value
+          setLocalUnit(u)
+          // commit immediately on unit change
+          props.onCommit(inputEl?.value ?? localNum(), u)
+        }}
+      >
+        <For each={UNIT_GROUPS}>
+          {(group) => (
+            <optgroup label={group.label}>
+              <For each={group.units}>
+                {(u) => (
+                  <option value={u} selected={u === localUnit()}>
+                    {u === '' ? '—' : u}
+                  </option>
+                )}
+              </For>
+            </optgroup>
+          )}
+        </For>
+      </select>
+      <Show when={deg() !== null}>
+        <RotationDial deg={deg()!} />
+      </Show>
+    </span>
+  )
 }
 
 // ── Color swatch ──────────────────────────────────────────────────────────────
@@ -100,20 +213,18 @@ function ColorSwatch(props: { token: ValueToken }) {
   )
 }
 
-// ── SubScrub: editable sub-token chip (transform arg) ────────────────────────
-// Tap to open an inline number input. No drag.
+// ── SubScrub: editable sub-token chip (transform arg) ─────────────────────────
+// Tap to open NumberUnitField. No drag.
 
 function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
   const [editing, setEditing] = createSignal(false)
-  let inputEl: HTMLInputElement | undefined
 
-  function commitSub() {
-    const raw = inputEl?.value ?? ''
-    const n = parseFloat(raw)
+  function commitSub(num: string, unit: string) {
+    const n = parseFloat(num)
     if (!isNaN(n)) {
       const updated = props.parent.subTokens!.map((st) =>
         st.argIndex === props.sub.argIndex
-          ? { ...st, value: String(n) }
+          ? { ...st, value: String(n), unit }
           : st
       ) as SubToken[]
       commit(props.parent.path, props.sub.assembler(updated))
@@ -134,46 +245,37 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
         </span>
       }
     >
-      <input
-        ref={(el) => {
-          inputEl = el
-          setTimeout(() => { el?.focus(); el?.select() }, 0)
-        }}
-        class="kf-chip kf-chip--number kf-chip--sub kf-chip--editing kf-chip__input"
-        type="number"
-        value={props.sub.value}
-        style={{ width: `${Math.max(4, props.sub.value.length + 2)}ch` }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); commitSub() }
-          if (e.key === 'Escape') setEditing(false)
-        }}
-        onBlur={commitSub}
-        autocomplete="off"
-        autocorrect="off"
-        autocapitalize="none"
-        spellcheck={false}
+      <NumberUnitField
+        numStr={props.sub.value}
+        unit={props.sub.unit || 'px'}
+        class="kf-chip--sub"
+        onCommit={commitSub}
+        onCancel={() => setEditing(false)}
       />
     </Show>
   )
 }
 
 // ── ValueChip ─────────────────────────────────────────────────────────────────
-// UNCONTROLLED. No drag. Tap to open, blur/Enter/Escape to close.
+// UNCONTROLLED. Tap to open, blur/Enter/Escape to close.
 
 function ValueChip(props: { token: ValueToken }) {
   const [editing, setEditing] = createSignal(false)
   const [invalid,  setInvalid]  = createSignal(false)
   let inputEl: HTMLInputElement | undefined
   let cleanupDl: (() => void) | null = null
-
-  // Mount datalist portal lazily on first open, clean up on chip unmount
   onCleanup(() => { cleanupDl?.() })
 
   const dlId = `kf-dl-${Math.random().toString(36).slice(2)}`
 
+  // parse current value into num + unit
+  const parsed = () => {
+    const m = NUMBER_UNIT_RE.exec(props.token.value)
+    return m ? { num: m[1], unit: m[2] ?? '' } : { num: props.token.value, unit: '' }
+  }
+
   function open() {
     if (props.token.type === 'transform') return
-    // Mount datalist portal once
     if (!cleanupDl) {
       cleanupDl = mountDatalist(dlId, completionsFor(props.token.type, props.token.value))
     }
@@ -182,22 +284,26 @@ function ValueChip(props: { token: ValueToken }) {
   }
 
   function close(revert = false) {
-    const raw = inputEl?.value ?? props.token.value
     if (!revert) {
+      const raw = inputEl?.value ?? props.token.value
       if (validate(props.token.type, raw)) {
-        // For numbers, preserve unit from original value if user typed bare number
-        if (props.token.type === 'number' && !NUMBER_UNIT_RE.test(raw)) {
-          const m = NUMBER_UNIT_RE.exec(props.token.value)
-          const unit = m?.[2] ?? ''
-          commit(props.token.path, `${raw}${unit}`)
-        } else {
-          commit(props.token.path, raw)
-        }
         setInvalid(false)
+        commit(props.token.path, raw)
       } else {
         setInvalid(true)
         commit(props.token.path, props.token.value)
       }
+    }
+    setEditing(false)
+  }
+
+  function closeWithNum(num: string, unit: string) {
+    const value = `${num}${unit}`
+    if (validate('number', value)) {
+      commit(props.token.path, value)
+      setInvalid(false)
+    } else {
+      setInvalid(true)
     }
     setEditing(false)
   }
@@ -213,7 +319,13 @@ function ValueChip(props: { token: ValueToken }) {
     setInvalid(!validate(props.token.type, v))
   }
 
-  const isNumber = () => props.token.type === 'number'
+  // rotation dial for non-editing number tokens with angle unit
+  const angleDeg = () => {
+    if (props.token.type !== 'number') return null
+    const { num, unit } = parsed()
+    if (!isAngleUnit(unit)) return null
+    return toDeg(parseFloat(num) || 0, unit)
+  }
 
   return (
     <>
@@ -235,8 +347,35 @@ function ValueChip(props: { token: ValueToken }) {
         </span>
       </Show>
 
-      {/* all other types */}
-      <Show when={props.token.type !== 'transform'}>
+      {/* number type: NumberUnitField when editing */}
+      <Show when={props.token.type === 'number'}>
+        <Show
+          when={editing()}
+          fallback={
+            <span
+              class="kf-chip kf-chip--number"
+              classList={{ 'kf-chip--error': invalid() }}
+              onClick={() => open()}
+              title="Tap to edit"
+            >
+              <span class="kf-chip__label">{props.token.value}</span>
+              <Show when={angleDeg() !== null}>
+                <RotationDial deg={angleDeg()!} />
+              </Show>
+            </span>
+          }
+        >
+          <NumberUnitField
+            numStr={parsed().num}
+            unit={parsed().unit}
+            onCommit={closeWithNum}
+            onCancel={() => setEditing(false)}
+          />
+        </Show>
+      </Show>
+
+      {/* all other non-transform types */}
+      <Show when={props.token.type !== 'transform' && props.token.type !== 'number'}>
         <span
           class="kf-chip"
           classList={{
@@ -258,21 +397,13 @@ function ValueChip(props: { token: ValueToken }) {
                 setTimeout(() => { el?.focus(); el?.select() }, 0)
               }}
               class="kf-chip__input"
-              // datalist portal is mounted in body; reference it by id
               list={dlId}
-              // type=number for number tokens: native spinner + numeric keyboard on mobile
-              type={isNumber() ? 'number' : 'text'}
-              // For numbers, pass just the numeric part so the number input is happy
-              value={isNumber()
-                ? (NUMBER_UNIT_RE.exec(props.token.value)?.[1] ?? props.token.value)
-                : props.token.value
-              }
+              type="text"
+              value={props.token.value}
               style={{ width: `${Math.max(6, props.token.value.length + 2)}ch` }}
               onInput={onInputChange}
               onKeyDown={onKeyDown}
               onBlur={() => close()}
-              // autocomplete="on" + list= is the correct combo for datalist on iOS Safari
-              // "off" suppresses the dropdown entirely on iOS
               autocomplete="on"
               autocorrect="off"
               autocapitalize="none"
