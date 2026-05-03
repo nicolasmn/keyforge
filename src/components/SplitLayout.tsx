@@ -14,11 +14,16 @@ import { onMount, onCleanup, type JSX } from 'solid-js'
 import Split from 'split.js'
 
 interface Props {
-  // Slots passed as children in order: [layerTree, preview, inspector, timelineArea]
   layerTree: JSX.Element
   preview: JSX.Element
   inspector: JSX.Element
   timelineArea: JSX.Element
+}
+
+function makeGutter(direction: 'horizontal' | 'vertical'): HTMLElement {
+  const g = document.createElement('div')
+  g.className = `gutter gutter--${direction}`
+  return g
 }
 
 export default function SplitLayout(props: Props) {
@@ -29,7 +34,7 @@ export default function SplitLayout(props: Props) {
   let timelineRef!: HTMLDivElement
 
   onMount(() => {
-    // ── Horizontal split ──────────────────────────────────────
+    // ── Horizontal split ─────────────────────────────────────
     const hSplit = Split(
       [layerTreeRef, previewRef, inspectorRef],
       {
@@ -40,15 +45,13 @@ export default function SplitLayout(props: Props) {
         snapOffset: 0,
         direction: 'horizontal',
         cursor: 'col-resize',
-        gutter(index, direction) {
-          const g = document.createElement('div')
-          g.className = `gutter gutter--${direction}`
-          return g
+        gutter(_index, direction) {
+          return makeGutter(direction)
         },
       },
     )
 
-    // ── Vertical split ────────────────────────────────────────
+    // ── Vertical split ───────────────────────────────────────
     const vSplit = Split(
       [topRowRef, timelineRef],
       {
@@ -59,10 +62,8 @@ export default function SplitLayout(props: Props) {
         snapOffset: 0,
         direction: 'vertical',
         cursor: 'row-resize',
-        gutter(index, direction) {
-          const g = document.createElement('div')
-          g.className = `gutter gutter--${direction}`
-          return g
+        gutter(_index, direction) {
+          return makeGutter(direction)
         },
       },
     )
@@ -83,7 +84,6 @@ export default function SplitLayout(props: Props) {
 
   return (
     <div class="split-shell">
-      {/* Top row — split horizontally */}
       <div class="split-top-row" ref={topRowRef}>
         <div class="split-panel split-panel--sidebar" ref={layerTreeRef}>
           {props.layerTree}
@@ -96,7 +96,6 @@ export default function SplitLayout(props: Props) {
         </div>
       </div>
 
-      {/* Timeline row */}
       <div class="split-panel split-panel--timeline" ref={timelineRef}>
         {props.timelineArea}
       </div>
