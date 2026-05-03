@@ -1,46 +1,128 @@
 @layer layout {
+  /* ── App shell ────────────────────────────────────────────────
+     Header is a fixed-height row at the top.
+     Below it: SplitLayout fills the remaining space.
+  ──────────────────────────────────────────────────────────── */
   .app {
     display: grid;
     height: 100vh;
-    grid-template-columns: var(--panel-sidebar-width) 1fr var(--panel-inspector-width);
-    grid-template-rows: var(--header-height) 1fr var(--panel-timeline-height);
+    grid-template-rows: var(--header-height) 1fr;
     grid-template-areas:
-      'header     header      header'
-      'sidebar    workspace   inspector'
-      'sidebar    timeline    timeline';
+      'header'
+      'body';
     overflow: hidden;
   }
 
   .app__header {
     grid-area: header;
   }
+
+  /* ── Split shell ──────────────────────────────────────────────
+     Fills the 'body' row. Split.js controls widths/heights via
+     inline styles on .split-panel children.
+  ──────────────────────────────────────────────────────────── */
+  .split-shell {
+    grid-area: body;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  /* Top row — holds LayerTree | Preview | Inspector side by side */
+  .split-top-row {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Every split panel fills its container */
+  .split-panel {
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /* Sidebar (LayerTree) */
+  .split-panel--sidebar {
+    display: flex;
+    flex-direction: column;
+    border-right: none; /* gutter provides visual separation */
+  }
+
+  /* Preview */
+  .split-panel--preview {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Inspector */
+  .split-panel--inspector {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Timeline row */
+  .split-panel--timeline {
+    display: flex;
+    flex-direction: column;
+    border-top: none; /* gutter provides separation */
+  }
+
+  /* ── Gutters ──────────────────────────────────────────────────
+     Split.js injects .gutter elements between panels.
+     We style them to match the app's border aesthetic.
+  ──────────────────────────────────────────────────────────── */
+  .gutter {
+    background: var(--color-border);
+    flex-shrink: 0;
+    transition: background var(--duration-fast);
+    position: relative;
+    z-index: 10;
+  }
+  .gutter:hover,
+  .gutter:active {
+    background: var(--color-accent);
+  }
+  .gutter--horizontal {
+    cursor: col-resize;
+    width: 4px !important;
+  }
+  .gutter--vertical {
+    cursor: row-resize;
+    height: 4px !important;
+  }
+
+  /* Legacy grid areas — kept for panel border/radius resets */
   .layer-tree {
-    grid-area: sidebar;
     border-radius: 0;
     border-top: none;
     border-bottom: none;
     border-left: none;
-  }
-  .preview {
-    grid-area: workspace;
+    border-right: none;
+    flex: 1;
+    min-height: 0;
   }
   .inspector {
-    grid-area: inspector;
     border-radius: 0;
     border-top: none;
     border-right: none;
     border-bottom: none;
+    border-left: none;
     display: flex;
     flex-direction: column;
+    flex: 1;
     min-height: 0;
     overflow: hidden;
   }
   .app__timeline-area {
-    grid-area: timeline;
     display: flex;
     flex-direction: column;
-    border-top: 1px solid var(--color-border);
     background: var(--color-surface);
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
   }
 }
 
@@ -155,6 +237,7 @@
     background: var(--color-bg);
     overflow: hidden;
     position: relative;
+    flex: 1;
   }
   .preview__canvas {
     position: relative;
