@@ -1,97 +1,139 @@
 import { createSignal, For, Show } from 'solid-js'
-import type { ValueToken, TokenPath } from '@/types'
+import type { ValueToken, SubToken } from '@/types'
 import { updateKeyframe } from '@/store'
 import { NUMBER_UNIT_RE } from '@/utils/tokenize'
 import EasingEditor from './EasingEditor'
 
 interface Props {
   tokens: ValueToken[]
-  layerId: string
 }
 
-function commitToken(path: TokenPath, value: string) {
+function commit(path: ValueToken['path'], value: string) {
   if (path.field === 'value') {
     updateKeyframe(path.layerId, path.trackId, path.keyframeId, { value })
   } else {
-    // easing field — cast via unknown since EasingName is a union
     updateKeyframe(path.layerId, path.trackId, path.keyframeId, {
       easing: value as Parameters<typeof updateKeyframe>[3]['easing'],
     })
   }
 }
 
-export default function TokenView(props: Props) {
-  const [editingId, setEditingId] = createSignal<string | null>(null)
-  const [editingEasingId, setEditingEasingId] = createSignal<string | null>(null)
-  const [editValue, setEditValue] = createSignal('')
-  const [invalid, setInvalid] = createSignal(false)
-  const [scrubOrigin, setScrubOrigin] = createSignal<{ x: number; orig: number; token: ValueToken } | null>(null)
+function validate(type: ValueToken['type'], value: string): boolean {
+  if (type === 'color')  return CSS.supports('color', value)
+  if (type === 'number') return NUMBER_UNIT_RE.test(value)
+  if (type === 'easing') return value === 'linear' || /^cubic-bezier\(/.test(value)
+  return value.length > 0
+}
 
-  function tokenId(t: ValueToken) {
-    return `${t.path.keyframeId}:${t.path.field}`
+// ── Inline sub-token row for transform arguments ─────────────────────────────
+function SubTokenScrub(props: {
+  sub: SubToken
+  parentToken: ValueToken
+}) {
+  let scrubOrigin: { x: number; orig: number } | null = null
+  const [display, setDisplay] = createSignal(`${props.sub.value}${props.sub.unit}`)
+
+  function rebuildAndCommit(newVal: number) {
+    const updated = props.parentToken.subTokens!.map((st) =>
+      st.argIndex === props.sub.argIndex
+        ? { ...st, value: String(+newVal.toFixed(3)) }
+        : st
+    ) as SubToken[]
+    const assembled = props.sub.assembler(updated)
+    commit(props.parentToken.path, assembled)
+    setDisplay(`${+newVal.toFixed(3)}${props.sub.unit}`)
+  }
+
+  function onPointerDown(e: PointerEvent) {
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    scrubOrigin = { x: e.clientX, orig: parseFloat(props.sub.value) }
+  }
+  function onPointerMove(e: PointerEvent) {
+    if (!scrubOrigin) return
+    const mult = e.shiftKey ? 10 : e.altKey ? 0.1 : 1
+    rebuildAndCommit(scrubOrigin.orig + (e.clientX - scrubOrigin.x) * mult)
+  }
+  function onPointerUp() { scrubOrigin = null }
+
+  return (
+    <span
+      class="token token--number token--sub"
+      title={`arg ${props.sub.argIndex % 100} · Drag · Shift×10 · Alt÷10`}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+    >
+      {display()}
+    </span>
+  )
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+export default function TokenView(props: Props) {
+  const [editingId,      setEditingId]      = createSignal<string | null>(null)
+  const [editingEasingId,setEditingEasingId]= createSignal<string | null>(null)
+  const [editValue,      setEditValue]      = createSignal('')
+  const [invalid,        setInvalid]        = createSignal(false)
+  const [scrubOrigin,    setScrubOrigin]    = createSignal<{ x: number; orig: number; token: ValueToken } | null>(null)
+
+  function tid(t: ValueToken) {
+    return `${t.path.trackId}:${t.path.keyframeId}:${t.path.field}`
   }
 
   function startEdit(t: ValueToken) {
     if (t.type === 'easing') {
-      const id = tokenId(t)
+      const id = tid(t)
       setEditingEasingId(editingEasingId() === id ? null : id)
       return
     }
-    setEditingId(tokenId(t))
+    // Transform tokens are edited via sub-tokens, not inline
+    if (t.type === 'transform') return
+    setEditingId(tid(t))
     setEditValue(t.value)
     setInvalid(false)
   }
 
-  function onEditInput(e: Event, t: ValueToken) {
+  function onInput(e: Event, t: ValueToken) {
     const v = (e.currentTarget as HTMLInputElement).value
     setEditValue(v)
-    // Live preview for valid values
-    if (validateToken(t.type, v)) {
+    if (validate(t.type, v)) {
       setInvalid(false)
-      commitToken(t.path, v)
+      commit(t.path, v)
     } else {
       setInvalid(true)
     }
   }
 
-  function onEditKeyDown(e: KeyboardEvent, t: ValueToken) {
+  function onKeyDown(e: KeyboardEvent, t: ValueToken) {
     if (e.key === 'Enter') {
-      if (!invalid()) {
-        commitToken(t.path, editValue())
-      } else {
-        commitToken(t.path, t.value) // revert
-      }
+      invalid() ? commit(t.path, t.value) : commit(t.path, editValue())
       setEditingId(null)
     } else if (e.key === 'Escape') {
-      commitToken(t.path, t.value) // revert
+      commit(t.path, t.value)
       setEditingId(null)
     } else if (e.key === 'Tab') {
       e.preventDefault()
-      if (!invalid()) commitToken(t.path, editValue())
-      const tokens = props.tokens
-      const idx = tokens.findIndex((tk) => tokenId(tk) === tokenId(t))
+      if (!invalid()) commit(t.path, editValue())
+      const all = props.tokens
+      const idx = all.findIndex((tk) => tid(tk) === tid(t))
       const next = e.shiftKey
-        ? tokens[(idx - 1 + tokens.length) % tokens.length]
-        : tokens[(idx + 1) % tokens.length]
+        ? all[(idx - 1 + all.length) % all.length]
+        : all[(idx + 1) % all.length]
       setEditingId(null)
       setTimeout(() => startEdit(next), 0)
     }
   }
 
-  function onEditBlur(t: ValueToken) {
-    if (!invalid()) {
-      commitToken(t.path, editValue())
-    } else {
-      commitToken(t.path, t.value) // revert
-    }
+  function onBlur(t: ValueToken) {
+    invalid() ? commit(t.path, t.value) : commit(t.path, editValue())
     setEditingId(null)
     setInvalid(false)
   }
 
-  // Numeric scrub
-  function onScrubStart(e: PointerEvent, t: ValueToken) {
+  function onScrubDown(e: PointerEvent, t: ValueToken) {
     if (t.type !== 'number') return
-    if (editingId() === tokenId(t)) return
+    if (editingId() === tid(t)) return
     e.preventDefault()
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     const m = NUMBER_UNIT_RE.exec(t.value)
@@ -104,25 +146,14 @@ export default function TokenView(props: Props) {
     const mult = e.shiftKey ? 10 : e.altKey ? 0.1 : 1
     const delta = (e.clientX - o.x) * mult
     const m = NUMBER_UNIT_RE.exec(t.value)
-    const unit = m ? m[2] ?? '' : ''
-    const newVal = `${+(o.orig + delta).toFixed(3)}${unit}`
-    commitToken(t.path, newVal)
+    const unit = m ? (m[2] ?? '') : ''
+    commit(t.path, `${+(o.orig + delta).toFixed(3)}${unit}`)
   }
 
-  function onScrubEnd() {
-    setScrubOrigin(null)
-  }
+  function onScrubUp() { setScrubOrigin(null) }
 
-  function validateToken(type: ValueToken['type'], value: string): boolean {
-    if (type === 'color') return CSS.supports('color', value)
-    if (type === 'number') return NUMBER_UNIT_RE.test(value)
-    if (type === 'easing') {
-      return value === 'linear' || /^cubic-bezier\(/.test(value)
-    }
-    return value.length > 0
-  }
-
-  function colorSwatch(value: string) {
+  function colorSwatch(token: ValueToken) {
+    const value = token.value
     if (!CSS.supports('color', value)) return null
     return (
       <span
@@ -130,30 +161,29 @@ export default function TokenView(props: Props) {
         style={{ background: value }}
         onClick={(e) => {
           e.stopPropagation()
-          const input = document.createElement('input')
-          input.type = 'color'
-          // Convert to hex for native picker
           const tmp = document.createElement('div')
           tmp.style.color = value
           document.body.appendChild(tmp)
-          const computed = getComputedStyle(tmp).color
+          const rgb = getComputedStyle(tmp).color
           document.body.removeChild(tmp)
-          const m = computed.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
+          const m = rgb.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
+          const input = document.createElement('input')
+          input.type = 'color'
           if (m) {
-            const toHex = (n: number) => n.toString(16).padStart(2, '0')
-            input.value = `#${toHex(+m[1])}${toHex(+m[2])}${toHex(+m[3])}`
+            const h = (n: number) => n.toString(16).padStart(2, '0')
+            input.value = `#${h(+m[1])}${h(+m[2])}${h(+m[3])}`
           }
-          input.oninput = () => commitToken({ layerId: props.layerId, trackId: '', keyframeId: '', field: 'value', ...{} }, input.value)
-          input.onchange = () => commitToken({ ...{ layerId: props.layerId, trackId: '', keyframeId: '', field: 'value' } }, input.value)
+          // Use token.path directly — no broken partial object
+          input.oninput  = () => commit(token.path, input.value)
+          input.onchange = () => commit(token.path, input.value)
           input.click()
         }}
       />
     )
   }
 
-  // Group tokens by track/keyframe for rendering
   const grouped = () => {
-    const map = new Map<string, { trackId: string; kfId: string; time?: number; tokens: ValueToken[] }>()
+    const map = new Map<string, { trackId: string; kfId: string; tokens: ValueToken[] }>()
     for (const t of props.tokens) {
       const key = `${t.path.trackId}::${t.path.keyframeId}`
       if (!map.has(key)) map.set(key, { trackId: t.path.trackId, kfId: t.path.keyframeId, tokens: [] })
@@ -172,9 +202,9 @@ export default function TokenView(props: Props) {
           <div class="token-view__group">
             <For each={group.tokens}>
               {(token) => {
-                const id = () => tokenId(token)
-                const isEditing = () => editingId() === id()
-                const isEasingOpen = () => editingEasingId() === id()
+                const id = () => tid(token)
+                const isEditing     = () => editingId()       === id()
+                const isEasingOpen  = () => editingEasingId() === id()
 
                 return (
                   <>
@@ -182,38 +212,59 @@ export default function TokenView(props: Props) {
                       class="token"
                       classList={{
                         [`token--${token.type}`]: true,
-                        'token--editing': isEditing(),
-                        'token--error': isEditing() && invalid(),
-                        'token--easing-open': isEasingOpen(),
+                        'token--editing':    isEditing(),
+                        'token--error':      isEditing() && invalid(),
+                        'token--easing-open':isEasingOpen(),
                       }}
-                      title={token.type === 'number' ? 'Drag to scrub · Shift×10 · Alt÷10' : undefined}
+                      title={token.type === 'number' ? 'Drag · Shift×10 · Alt÷10' : undefined}
                       onClick={() => !isEditing() && startEdit(token)}
-                      onPointerDown={(e) => onScrubStart(e, token)}
+                      onPointerDown={(e) => onScrubDown(e, token)}
                       onPointerMove={(e) => onScrubMove(e, token)}
-                      onPointerUp={onScrubEnd}
+                      onPointerUp={onScrubUp}
                     >
                       <Show when={token.type === 'color'}>
-                        {colorSwatch(token.value)}
+                        {colorSwatch(token)}
                       </Show>
-                      <Show when={isEditing()}>
-                        <input
-                          class="token__input"
-                          value={editValue()}
-                          onInput={(e) => onEditInput(e, token)}
-                          onKeyDown={(e) => onEditKeyDown(e, token)}
-                          onBlur={() => onEditBlur(token)}
-                          ref={(el) => setTimeout(() => el?.focus(), 0)}
-                          style={{ width: `${Math.max(4, editValue().length)}ch` }}
-                        />
+
+                      {/* Transform: render sub-tokens as scrubable args */}
+                      <Show when={token.type === 'transform' && token.subTokens && token.subTokens.length > 0}>
+                        <span class="token__fn-label">{token.value.split('(')[0]}(</span>
+                        <For each={token.subTokens}>
+                          {(sub, i) => (
+                            <>
+                              <SubTokenScrub sub={sub} parentToken={token} />
+                              <Show when={i() < (token.subTokens!.length - 1)}>
+                                <span class="token__sep">, </span>
+                              </Show>
+                            </>
+                          )}
+                        </For>
+                        <span class="token__fn-label">)</span>
                       </Show>
-                      <Show when={!isEditing()}>
-                        <span class="token__value">{token.value}</span>
+
+                      {/* All other types */}
+                      <Show when={token.type !== 'transform'}>
+                        <Show when={isEditing()}>
+                          <input
+                            class="token__input"
+                            value={editValue()}
+                            onInput={(e) => onInput(e, token)}
+                            onKeyDown={(e) => onKeyDown(e, token)}
+                            onBlur={() => onBlur(token)}
+                            ref={(el) => setTimeout(() => el?.focus(), 0)}
+                            style={{ width: `${Math.max(4, editValue().length)}ch` }}
+                          />
+                        </Show>
+                        <Show when={!isEditing()}>
+                          <span class="token__value">{token.value}</span>
+                        </Show>
                       </Show>
                     </span>
+
                     <Show when={isEasingOpen()}>
                       <EasingEditor
                         value={token.value}
-                        onChange={(v) => commitToken(token.path, v)}
+                        onChange={(v) => commit(token.path, v)}
                         onClose={() => setEditingEasingId(null)}
                       />
                     </Show>

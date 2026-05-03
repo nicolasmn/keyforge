@@ -12,6 +12,7 @@ import '@/styles/components.css'
 import '@/styles/utils.css'
 import '@/styles/app.css'
 import '@/styles/mobile.css'
+import '@/styles/token-view.css'
 
 export default function App() {
   const isMobile = createMediaQuery('(max-width: 768px)')
