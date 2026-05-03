@@ -1,10 +1,9 @@
-// Augment SolidJS JSX namespace so `use:sortable` is a valid attribute on any element.
-import type { createSortable } from '@thisbeyond/solid-dnd'
-
+// Augment SolidJS JSX namespace so `use:sortable` is a valid JSX attribute.
 declare module 'solid-js' {
   namespace JSX {
     interface Directives {
-      sortable: ReturnType<typeof createSortable>
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      sortable: any
     }
   }
 }
