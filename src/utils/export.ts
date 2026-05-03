@@ -1,12 +1,9 @@
 import type { AnimationDocument } from '@/types'
-import { generateCss } from './css'
 
 /**
- * Export clean CSS — collapse animation properties into shorthand,
- * strip the infinite iteration count used for preview scrubbing.
+ * Export clean CSS — finite iteration shorthand, no preview-only properties.
  */
 export function exportCss(doc: AnimationDocument): string {
-  // Build a clean version: finite iteration, shorthand animation
   const css = doc.layers
     .map((layer) => {
       const animName = `kf-${layer.id}`
