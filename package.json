@@ -10,7 +10,11 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts,.tsx",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "**/*.{ts,tsx,js,json,css,md}": "prettier --write --ignore-unknown"
   },
   "dependencies": {
     "solid-js": "^1.9.0"
@@ -24,6 +28,8 @@
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "eslint-plugin-solid": "^0.14.0",
-    "prettier": "^3.4.0"
+    "prettier": "^3.4.0",
+    "husky": "^9.0.0",
+    "lint-staged": "^15.0.0"
   }
 }
