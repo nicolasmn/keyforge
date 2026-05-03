@@ -31,7 +31,6 @@ function SubTokenScrub(props: {
   parentToken: ValueToken
 }) {
   let scrubOrigin: { x: number; orig: number } | null = null
-  // Read sub props inside a getter so reactivity is tracked
   const subValue = () => props.sub.value
   const subUnit  = () => props.sub.unit
   const [display, setDisplay] = createSignal(`${subValue()}${subUnit()}`)
@@ -69,6 +68,37 @@ function SubTokenScrub(props: {
     >
       {display()}
     </span>
+  )
+}
+
+// ── Color swatch sub-component ────────────────────────────────────────────────
+function ColorSwatch(props: { token: ValueToken }) {
+  const value = () => props.token.value
+  if (!CSS.supports('color', value())) return null
+
+  return (
+    <span
+      class="token__swatch"
+      style={{ background: value() }}
+      onClick={(e) => {
+        e.stopPropagation()
+        const tmp = document.createElement('div')
+        tmp.style.color = value()
+        document.body.appendChild(tmp)
+        const rgb = getComputedStyle(tmp).color
+        document.body.removeChild(tmp)
+        const m = rgb.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
+        const input = document.createElement('input')
+        input.type = 'color'
+        if (m) {
+          const h = (n: number) => n.toString(16).padStart(2, '0')
+          input.value = `#${h(+m[1])}${h(+m[2])}${h(+m[3])}`
+        }
+        input.oninput  = () => commit(props.token.path, input.value)
+        input.onchange = () => commit(props.token.path, input.value)
+        input.click()
+      }}
+    />
   )
 }
 
@@ -154,35 +184,6 @@ export default function TokenView(props: Props) {
 
   function onScrubUp() { setScrubOrigin(null) }
 
-  function colorSwatch(token: ValueToken) {
-    const value = token.value
-    if (!CSS.supports('color', value)) return null
-    return (
-      <span
-        class="token__swatch"
-        style={{ background: value }}
-        onClick={(e) => {
-          e.stopPropagation()
-          const tmp = document.createElement('div')
-          tmp.style.color = value
-          document.body.appendChild(tmp)
-          const rgb = getComputedStyle(tmp).color
-          document.body.removeChild(tmp)
-          const m = rgb.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
-          const input = document.createElement('input')
-          input.type = 'color'
-          if (m) {
-            const h = (n: number) => n.toString(16).padStart(2, '0')
-            input.value = `#${h(+m[1])}${h(+m[2])}${h(+m[3])}`
-          }
-          input.oninput  = () => commit(token.path, input.value)
-          input.onchange = () => commit(token.path, input.value)
-          input.click()
-        }}
-      />
-    )
-  }
-
   const grouped = () => {
     const map = new Map<string, { trackId: string; kfId: string; tokens: ValueToken[] }>()
     for (const t of props.tokens) {
@@ -224,7 +225,7 @@ export default function TokenView(props: Props) {
                       onPointerUp={onScrubUp}
                     >
                       <Show when={token.type === 'color'}>
-                        {colorSwatch(token)}
+                        <ColorSwatch token={token} />
                       </Show>
 
                       <Show when={token.type === 'transform' && token.subTokens && token.subTokens.length > 0}>

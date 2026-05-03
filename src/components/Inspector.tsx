@@ -8,7 +8,7 @@
  * - Autocomplete via native <datalist>. Zero deps, works on iOS Safari.
  * - Mobile: larger touch targets via @media (pointer: coarse) in inspector.css.
  */
-import { createSignal, createMemo, For, Show, onCleanup } from 'solid-js'
+import { createSignal, createMemo, For, Show, onCleanup, type Component } from 'solid-js'
 import {
   selectedLayerId,
   getSelectedLayer,
@@ -30,7 +30,7 @@ const PROPERTIES: AnimatableProperty[] = [
   'border-radius', 'width', 'height', 'scale', 'translate', 'rotate',
 ]
 
-// ── helpers ──────────────────────────────────────────────────────────────
+// ── helpers ────────────────────────────────────────────────────────────────────
 
 function commit(path: ValueToken['path'], value: string) {
   if (path.field === 'value') {
@@ -53,7 +53,7 @@ function validate(type: ValueToken['type'], value: string): boolean {
 let _dlId = 0
 function nextDlId() { return `kf-dl-${++_dlId}` }
 
-// ── Sub-token scrub chip (transform args) ──────────────────────────────────
+// ── Sub-token scrub chip (transform args) ────────────────────────────────────
 
 function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
   let origin: { x: number; orig: number } | null = null
@@ -90,7 +90,36 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
   )
 }
 
-// ── ValueChip ────────────────────────────────────────────────────────────
+// ── Color swatch ──────────────────────────────────────────────────────────────
+
+function ColorSwatch(props: { token: ValueToken }) {
+  return (
+    <span
+      class="kf-chip__swatch"
+      style={{ background: props.token.value }}
+      onClick={(e) => {
+        e.stopPropagation()
+        const tmp = document.createElement('div')
+        tmp.style.color = props.token.value
+        document.body.appendChild(tmp)
+        const rgb = getComputedStyle(tmp).color
+        document.body.removeChild(tmp)
+        const m = rgb.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
+        const inp = document.createElement('input')
+        inp.type = 'color'
+        if (m) {
+          const h = (n: number) => n.toString(16).padStart(2, '0')
+          inp.value = `#${h(+m[1])}${h(+m[2])}${h(+m[3])}`
+        }
+        inp.oninput  = () => commit(props.token.path, inp.value)
+        inp.onchange = () => commit(props.token.path, inp.value)
+        inp.click()
+      }}
+    />
+  )
+}
+
+// ── ValueChip ─────────────────────────────────────────────────────────────────
 //
 // IMPORTANT: uses UNCONTROLLED <input> (no value= binding).
 // We set defaultValue once when editing starts, then read el.value
@@ -118,7 +147,6 @@ function ValueChip(props: { token: ValueToken }) {
         setInvalid(false)
       } else {
         setInvalid(true)
-        // revert to last known good
         commit(props.token.path, props.token.value)
       }
     }
@@ -128,40 +156,12 @@ function ValueChip(props: { token: ValueToken }) {
   function onKeyDown(e: KeyboardEvent) {
     if (e.key === 'Enter') { e.preventDefault(); close() }
     if (e.key === 'Escape') { e.preventDefault(); close(true) }
-    if (e.key === 'Tab')   { close() } // let browser move focus naturally
+    if (e.key === 'Tab')   { close() }
   }
 
-  // live validation only — does NOT commit to store
   function onInputChange(e: Event) {
     const v = (e.currentTarget as HTMLInputElement).value
     setInvalid(!validate(props.token.type, v))
-  }
-
-  function Swatch() {
-    return (
-      <span
-        class="kf-chip__swatch"
-        style={{ background: props.token.value }}
-        onClick={(e) => {
-          e.stopPropagation()
-          const tmp = document.createElement('div')
-          tmp.style.color = props.token.value
-          document.body.appendChild(tmp)
-          const rgb = getComputedStyle(tmp).color
-          document.body.removeChild(tmp)
-          const m = rgb.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
-          const inp = document.createElement('input')
-          inp.type = 'color'
-          if (m) {
-            const h = (n: number) => n.toString(16).padStart(2, '0')
-            inp.value = `#${h(+m[1])}${h(+m[2])}${h(+m[3])}`
-          }
-          inp.oninput  = () => commit(props.token.path, inp.value)
-          inp.onchange = () => commit(props.token.path, inp.value)
-          inp.click()
-        }}
-      />
-    )
   }
 
   return (
@@ -186,7 +186,6 @@ function ValueChip(props: { token: ValueToken }) {
 
       {/* all other types */}
       <Show when={props.token.type !== 'transform'}>
-        {/* datalist for autocomplete — rendered outside chip so it never re-mounts */}
         <datalist id={dlId}>
           <For each={completionsFor(props.token.type, props.token.value)}>
             {(opt) => <option value={opt} />}
@@ -220,26 +219,20 @@ function ValueChip(props: { token: ValueToken }) {
           onPointerUp={() => { scrubOrigin = null }}
         >
           <Show when={props.token.type === 'color'}>
-            <Swatch />
+            <ColorSwatch token={props.token} />
           </Show>
 
           <Show when={editing()}>
-            {/*
-              UNCONTROLLED: defaultValue set once. SolidJS will NOT re-render
-              this input when the store changes because editing() is true and
-              the input never reads from props.token.value after mount.
-            */}
             <input
               ref={(el) => {
                 inputEl = el
-                // defer focus so the chip finishes rendering first
                 setTimeout(() => { el?.focus(); el?.select() }, 0)
               }}
               class="kf-chip__input"
               list={dlId}
-              value={props.token.value}  /* SolidJS: sets DOM value once, uncontrolled thereafter */
+              value={props.token.value}
               style={{ width: `${Math.max(6, props.token.value.length + 2)}ch` }}
-              onInput={onInputChange}    /* validation only, no store commit */
+              onInput={onInputChange}
               onKeyDown={onKeyDown}
               onBlur={() => close()}
               spellcheck={false}
@@ -256,7 +249,7 @@ function ValueChip(props: { token: ValueToken }) {
   )
 }
 
-// ── KeyframeRow ───────────────────────────────────────────────────────────
+// ── KeyframeRow ────────────────────────────────────────────────────────────────
 
 function KeyframeRow(props: {
   layerId: string
@@ -281,7 +274,6 @@ function KeyframeRow(props: {
     <div class="kf-row">
       <div class="kf-row__main">
 
-        {/* time pill — uncontrolled input */}
         <Show when={!editTime()}>
           <span
             class="kf-time"
@@ -307,10 +299,8 @@ function KeyframeRow(props: {
           />
         </Show>
 
-        {/* value token chip */}
         <ValueChip token={props.valueToken} />
 
-        {/* easing chip */}
         <span
           class="kf-chip kf-chip--easing"
           classList={{ 'kf-chip--easing-open': easingOpen() }}
@@ -320,7 +310,6 @@ function KeyframeRow(props: {
           {props.easingToken.value}
         </span>
 
-        {/* delete */}
         <button
           class="kf-row__delete"
           onClick={() => removeKeyframe(props.layerId, props.trackId, props.kfId)}
@@ -342,7 +331,7 @@ function KeyframeRow(props: {
   )
 }
 
-// ── TrackSection ──────────────────────────────────────────────────────────
+// ── TrackSection ──────────────────────────────────────────────────────────────
 
 function TrackSection(props: {
   layerId: string
@@ -366,7 +355,11 @@ function TrackSection(props: {
         </button>
         <span class="track__prop">{props.property}</span>
         <span class="track__count">{props.kfTokenPairs.length}</span>
-        <button class="track__add" onClick={props.onAddKeyframe} title="Add keyframe at playhead">
+        <button
+          class="track__add"
+          onClick={() => props.onAddKeyframe()}
+          title="Add keyframe at playhead"
+        >
           + KF
         </button>
       </div>
@@ -374,7 +367,7 @@ function TrackSection(props: {
       <Show when={!collapsed()}>
         <div class="track__keyframes">
           <For each={props.kfTokenPairs} fallback={
-            <span class="track__empty">No keyframes — tap + KF to add</span>
+            <span class="track__empty">No keyframes — tap +&nbsp;KF to add</span>
           }>
             {(pair) => (
               <KeyframeRow
@@ -393,7 +386,7 @@ function TrackSection(props: {
   )
 }
 
-// ── Inspector root ──────────────────────────────────────────────────────────
+// ── Inspector root ────────────────────────────────────────────────────────────
 
 type Tab = 'inspector' | 'css'
 
@@ -424,17 +417,17 @@ export default function Inspector() {
     sel.value = ''
   }
 
-  // Import CodeView lazily so it doesn't pull Shiki into the main bundle on mobile
-  let CodeView: ReturnType<typeof import('./CodeView')['default']> | undefined
+  // Lazy-load CodeView so Shiki stays out of the main bundle
+  let CodeViewComponent: Component | undefined
   const [codeViewReady, setCodeViewReady] = createSignal(false)
   function loadCodeView() {
     if (codeViewReady()) return
-    import('./CodeView').then((m) => {
-      CodeView = m.default
+    void import('./CodeView').then((m) => {
+      CodeViewComponent = m.default as Component
       setCodeViewReady(true)
     })
   }
-  onCleanup(() => { CodeView = undefined })
+  onCleanup(() => { CodeViewComponent = undefined })
 
   return (
     <aside class="panel inspector">
@@ -504,11 +497,11 @@ export default function Inspector() {
       </Show>
 
       <Show when={activeTab() === 'css'}>
-        <Show when={codeViewReady() && CodeView}
+        <Show when={codeViewReady() && CodeViewComponent}
           fallback={<p class="inspector__empty">Loading…</p>}
         >
-          {/* @ts-ignore dynamic import */}
-          <CodeView />
+          {/* @ts-expect-error: dynamic import resolved at runtime */}
+          <CodeViewComponent />
         </Show>
       </Show>
     </aside>
