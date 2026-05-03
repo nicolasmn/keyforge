@@ -76,7 +76,7 @@ describe('generateCss', () => {
       ],
     })
     const css = generateCss(doc)
-    expect(css).toContain('@keyframes kf-layer-1')
+    expect(css).toContain('@keyframes kf-box')
     expect(css).toContain('0.00%')
     expect(css).toContain('100.00%')
     expect(css).toContain('opacity:0')
@@ -102,8 +102,8 @@ describe('generateCss', () => {
       ],
     })
     const css = generateCss(doc)
-    expect(css).toContain('[data-layer-id="layer-1"]')
-    expect(css).toContain('animation-name: kf-layer-1')
+    expect(css).toContain('[data-layer-id="box"]')
+    expect(css).toContain('animation-name: kf-box')
     expect(css).toContain('animation-duration: 1000ms')
     expect(css).toContain('animation-play-state: paused')
   })
