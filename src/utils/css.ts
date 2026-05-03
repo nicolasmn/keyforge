@@ -2,7 +2,11 @@ import type { AnimationDocument } from '@/types'
 
 /**
  * Generate @keyframes + animation declaration for all layers.
- * play-state and delay are NOT baked in — Preview sets them directly on elements.
+ *
+ * animation-play-state is set to `paused` here as the default.
+ * Preview drives position exclusively via `animation-delay: -${playhead}ms`
+ * set as inline style on each [data-layer-id] element.
+ * The browser never advances the animation on its own.
  */
 export function generateCss(doc: AnimationDocument): string {
   return doc.layers
@@ -34,14 +38,13 @@ export function generateCss(doc: AnimationDocument): string {
         `@keyframes ${animName} {`,
         keyframeBlock,
         `}`,
-        // iteration-count: infinite so fill-mode never freezes the element
-        // play-state and delay are set directly by Preview via inline style
         `[data-layer-id="${layer.id}"] {`,
         `  animation-name: ${animName};`,
         `  animation-duration: ${doc.duration}ms;`,
         `  animation-timing-function: linear;`,
         `  animation-fill-mode: both;`,
         `  animation-iteration-count: infinite;`,
+        `  animation-play-state: paused;`,
         `}`,
       ].join('\n')
     })
