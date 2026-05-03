@@ -7,6 +7,7 @@ import Inspector from '@/components/Inspector'
 import Timeline from '@/components/Timeline'
 import Playback from '@/components/Playback'
 import MobileTabs, { activeTab } from '@/components/MobileTabs'
+import SplitLayout from '@/components/SplitLayout'
 import '@/styles/components.css'
 import '@/styles/utils.css'
 import '@/styles/app.css'
@@ -19,15 +20,19 @@ export default function App() {
     <div class="app">
       <Header />
 
-      {/* Desktop */}
+      {/* Desktop — resizable panels via Split.js */}
       <Show when={!isMobile()}>
-        <LayerTree />
-        <Preview />
-        <Inspector />
-        <div class="app__timeline-area">
-          <Playback />
-          <Timeline />
-        </div>
+        <SplitLayout
+          layerTree={<LayerTree />}
+          preview={<Preview />}
+          inspector={<Inspector />}
+          timelineArea={
+            <div class="app__timeline-area">
+              <Playback />
+              <Timeline />
+            </div>
+          }
+        />
       </Show>
 
       {/* Mobile */}

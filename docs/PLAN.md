@@ -66,7 +66,7 @@ type AnimationDocument = {
 type Layer = {
   id: string
   name: string
-  visible: boolean // added Phase 1.5
+  visible: boolean
   element: LayerElement // tag, initialCss, text
   tracks: Track[]
 }
@@ -120,16 +120,18 @@ Self-contained improvements with no architectural risk. Priority order:
 - [x] Layer item: icon alignment fixed (`gap`, `flex-shrink: 0`)
 - [x] Rename input: styled with `color-surface-2` bg + accent border
 
-#### 2. Resizable Panels
+#### 2. Resizable Panels ✅
 
-- [ ] Integrate **Split.js** (2.7kb, zero deps, CSS Grid/Flex aware)
-- [ ] Horizontal split: LayerTree | Preview | Inspector with min/max constraints
-  - LayerTree: min 160px, max 320px
-  - Inspector: min 220px, max 400px
-  - Preview: takes remaining space
-- [ ] Vertical split: top workspace | Timeline
-  - Timeline: min 120px, max 50vh
-- [ ] Sizes reset on double-click of drag handle
+- [x] **Split.js** integrated (2.7kb, zero deps)
+- [x] Horizontal split: LayerTree | Preview | Inspector
+  - LayerTree: min 160px, max 320px; default 18%
+  - Inspector: min 220px, max 400px; default 26%
+  - Preview: takes remaining space; min 300px
+- [x] Vertical split: top workspace | Timeline
+  - Timeline: min 120px, max 50vh; default 30%
+- [x] Double-click any gutter → resets that split to defaults
+- [x] Gutters: 4px wide, accent color on hover, `col-resize`/`row-resize` cursors
+- [x] `SplitLayout` component encapsulates all Split.js logic; `App.tsx` stays clean
 
 #### 3. Read-only Code View
 
