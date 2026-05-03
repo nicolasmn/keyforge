@@ -1,4 +1,4 @@
-import { For, createSignal } from 'solid-js'
+import { For, createSignal, untrack } from 'solid-js'
 import {
   DragDropProvider,
   DragDropSensors,
@@ -8,7 +8,7 @@ import {
   closestCenter,
   type DragEvent,
 } from '@thisbeyond/solid-dnd'
-import '../../src/directives' // ensure directive augmentation is loaded
+import '@/directives'
 import {
   doc,
   selectedLayerId,
@@ -27,9 +27,8 @@ function SortableLayer(props: {
   onCommit: (id: string, value: string) => void
   onKeyDown: (e: KeyboardEvent, id: string) => void
 }) {
-  // Capture id synchronously — createSortable must not read reactive props in its body
-  const id = props.layer.id
-  const sortable = createSortable(id)
+  // untrack: id is stable (never changes); avoids solid/reactivity warning
+  const sortable = createSortable(untrack(() => props.layer.id))
 
   return (
     <li
@@ -42,7 +41,6 @@ function SortableLayer(props: {
       }}
       onClick={() => setSelectedLayerId(props.layer.id)}
     >
-      {/* Drag handle */}
       <span class="layer-tree__drag-handle" title="Drag to reorder">
         <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
           <circle cx="4" cy="3" r="1" /><circle cx="8" cy="3" r="1" />
@@ -51,7 +49,6 @@ function SortableLayer(props: {
         </svg>
       </span>
 
-      {/* Visibility toggle */}
       <button
         class="btn btn--ghost layer-tree__visibility"
         onClick={(e) => {
@@ -74,7 +71,6 @@ function SortableLayer(props: {
         )}
       </button>
 
-      {/* Layer name */}
       {props.editingId() === props.layer.id ? (
         <input
           class="layer-tree__name-input"
@@ -94,7 +90,6 @@ function SortableLayer(props: {
         </span>
       )}
 
-      {/* Remove */}
       <button
         class="btn btn--ghost layer-tree__remove"
         onClick={(e) => {
