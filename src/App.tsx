@@ -5,6 +5,7 @@ import Preview from '@/components/Preview'
 import Inspector from '@/components/Inspector'
 import Timeline from '@/components/Timeline'
 import Playback from '@/components/Playback'
+import DocBar from '@/components/DocBar'
 import MobileTabs, { activeTab } from '@/components/MobileTabs'
 import SplitLayout from '@/components/SplitLayout'
 import EmptyState from '@/components/EmptyState'
@@ -30,6 +31,13 @@ export default function App() {
 
   return (
     <>
+      {/* Document bar — name + import/export; hidden on mobile (space) */}
+      <Show when={!isMobile()}>
+        <header class="app__doc-header">
+          <DocBar />
+          <Playback />
+        </header>
+      </Show>
       {/* Desktop — resizable panels via Split.js */}
       <Show when={!isMobile()}>
         <SplitLayout
@@ -38,7 +46,6 @@ export default function App() {
           inspector={<Inspector />}
           timelineArea={
             <div class="app__timeline-area">
-              <Playback />
               <Timeline />
             </div>
           }
