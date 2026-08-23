@@ -1,0 +1,166 @@
+name: PR Preview
+
+# Deploys a live preview of every pull request to GitHub Pages under
+# /keyforge/pr-preview/pr-<number>/ so it can be verified in the browser
+# before merging. The main site is never touched.
+#
+# NOTE: pull_request_target runs this workflow from the base branch with a
+# write token while building the PR's merge commit. This is safe here because
+# the repository is private with trusted collaborators only — do not enable it
+# on a public fork-facing repo without extra hardening.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, closed]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number
+        required: true
+        type: string
+      action:
+        description: What to do
+        type: choice
+        options:
+          - deploy
+          - remove
+        default: deploy
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Serialize publications to gh-pages.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+
+jobs:
+  preview:
+    name: Publish PR preview
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Resolve action
+        id: resolve
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "action=${{ inputs.action }}" >> "$GITHUB_OUTPUT"
+          else
+            case "${{ github.event.action }}" in
+              opened|reopened|synchronize) echo "action=deploy" >> "$GITHUB_OUTPUT" ;;
+              closed)                      echo "action=remove" >> "$GITHUB_OUTPUT" ;;
+              *)                           echo "action=none"   >> "$GITHUB_OUTPUT" ;;
+            esac
+          fi
+
+      # --- Build the PR (deploy only) -------------------------------------
+
+      - name: Checkout PR merge commit
+        if: steps.resolve.outputs.action == 'deploy'
+        uses: actions/checkout@v6
+        with:
+          ref: refs/pull/${{ env.PR_NUMBER }}/merge
+
+      - name: Setup Node.js
+        if: steps.resolve.outputs.action == 'deploy'
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.resolve.outputs.action == 'deploy'
+        run: npm ci --ignore-scripts
+
+      # --base overrides vite.config.ts so all asset URLs point at the
+      # preview subdirectory instead of the site root.
+      - name: Build app
+        if: steps.resolve.outputs.action == 'deploy'
+        run: npx vite build --base=/keyforge/pr-preview/pr-${{ env.PR_NUMBER }}/
+
+      # --- Publish ---------------------------------------------------------
+
+      # Worktree of the SAME repository instead of a second actions/checkout:
+      # a nested checkout once made `git -C publish` resolve to the root repo,
+      # committing site files onto the wrong branch. A worktree cannot be
+      # mistaken for another repository, and the explicit HEAD:gh-pages
+      # refspec makes the push destination deterministic.
+      - name: Prepare gh-pages worktree
+        run: |
+          set -euo pipefail
+          unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+          git fetch origin gh-pages
+          rm -rf publish
+          git worktree add --detach publish origin/gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Deploy preview
+        if: steps.resolve.outputs.action == 'deploy'
+        run: |
+          set -euo pipefail
+          unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+          mkdir -p "publish/pr-preview/pr-${PR_NUMBER}"
+          rsync -a --delete dist/ "publish/pr-preview/pr-${PR_NUMBER}/"
+          git -C publish add -A
+          if git -C publish diff --cached --quiet; then
+            echo "Preview unchanged"
+            exit 0
+          fi
+          # --no-verify: generated app bundles must not run through the
+          # husky/lint-staged hooks (they lint source, not dist output)
+          git -C publish commit --no-verify -m "Deploy preview pr-${PR_NUMBER} (${GITHUB_SHA})"
+          git -C publish push origin "HEAD:gh-pages" --force-with-lease=gh-pages
+
+      - name: Remove preview
+        if: steps.resolve.outputs.action == 'remove'
+        run: |
+          set -euo pipefail
+          unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
+          rm -rf "publish/pr-preview/pr-${PR_NUMBER}"
+          git -C publish add -A
+          if git -C publish diff --cached --quiet; then
+            echo "Nothing to remove"
+            exit 0
+          fi
+          git -C publish commit --no-verify -m "Remove preview pr-${PR_NUMBER}"
+          git -C publish push origin "HEAD:gh-pages" --force-with-lease=gh-pages
+
+      - name: Comment preview URL on PR
+        if: steps.resolve.outputs.action == 'deploy'
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ env.PR_NUMBER }}
+        with:
+          script: |
+            const prNumber = Number(process.env.PR_NUMBER);
+            const marker = `<!-- keyforge-pr-preview:${prNumber} -->`;
+            const url = `https://${context.repo.owner}.github.io/${context.repo.repo}/pr-preview/pr-${prNumber}/`;
+            const body = [
+              marker,
+              `🔍 **Preview deployment:** ${url}`,
+              '',
+              'Rebuilt automatically on every push to this PR. Removed when the PR is closed.',
+            ].join('\n');
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number: prNumber,
+            });
+            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: prNumber,
+                body,
+              });
+            }
