@@ -313,6 +313,23 @@ function ValueChip(props: { token: ValueToken }) {
     return toDeg(parseFloat(num) || 0, unit)
   }
 
+  // Group transform sub-tokens by their owning function so multi-function
+  // values render as `fnA(a, b) fnB(c)` instead of one merged pseudo-function.
+  // argIndex encodes fnIndex * 100 + argInFn (see tokenize.ts), which is
+  // stable even when a function has non-numeric args that produce no chip.
+  const transformGroups = () => {
+    const subs = props.token.subTokens ?? []
+    const names = [...props.token.value.matchAll(/([\w-]+)\(/g)].map((m) => m[1])
+    const groups: { fi: number; fn: string; subs: SubToken[] }[] = []
+    for (const st of subs) {
+      const fi = Math.floor(st.argIndex / 100)
+      const last = groups[groups.length - 1]
+      if (last && last.fi === fi) last.subs.push(st)
+      else groups.push({ fi, fn: names[fi] ?? '?', subs: [st] })
+    }
+    return groups
+  }
+
   function open() {
     if (props.token.type === 'transform') return
     if (!cleanupDl) {
@@ -368,21 +385,30 @@ function ValueChip(props: { token: ValueToken }) {
 
   return (
     <>
-      {/* transform: sub-token chips */}
+      {/* transform: sub-token chips, grouped per function */}
       <Show when={props.token.type === 'transform' && (props.token.subTokens?.length ?? 0) > 0}>
         <span class="kf-chip kf-chip--transform">
-          <span class="kf-chip__fn">{props.token.value.split('(')[0]}(</span>
-          <For each={props.token.subTokens}>
-            {(sub, i) => (
+          <For each={transformGroups()}>
+            {(g, gi) => (
               <>
-                <SubScrub sub={sub} parent={props.token} />
-                <Show when={i() < props.token.subTokens!.length - 1}>
-                  <span class="kf-chip__sep">, </span>
+                <Show when={gi() > 0}>
+                  <span class="kf-chip__sep"> </span>
                 </Show>
+                <span class="kf-chip__fn">{g.fn}(</span>
+                <For each={g.subs}>
+                  {(sub, i) => (
+                    <>
+                      <SubScrub sub={sub} parent={props.token} />
+                      <Show when={i() < g.subs.length - 1}>
+                        <span class="kf-chip__sep">, </span>
+                      </Show>
+                    </>
+                  )}
+                </For>
+                <span class="kf-chip__fn">)</span>
               </>
             )}
           </For>
-          <span class="kf-chip__fn">)</span>
         </span>
       </Show>
 
