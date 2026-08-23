@@ -24,6 +24,7 @@ import {
   addKeyframe,
   updateKeyframe,
   removeKeyframe,
+  removeTrack,
   playhead,
   doc,
 } from '@/store'
@@ -682,6 +683,14 @@ function TrackSection(props: {
           title="Add keyframe at playhead"
         >
           + KF
+        </button>
+        <button
+          class="track__remove"
+          onClick={() => removeTrack(props.layerId, props.track.id)}
+          title={`Remove ${props.property} track`}
+          aria-label={`Remove ${props.property} track and all its keyframes`}
+        >
+          ✕
         </button>
       </div>
 

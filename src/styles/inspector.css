@@ -768,3 +768,23 @@
 .easing-editor__spring-apply {
   align-self: flex-start;
 }
+
+/* ── Track removal ───────────────────────────────────────── */
+.track__remove {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: var(--chip-fs);
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm, 3px);
+  opacity: 0.6;
+}
+.track__remove:hover {
+  color: var(--color-danger);
+  opacity: 1;
+}
+.track__remove:focus-visible {
+  outline: 1px solid var(--color-danger);
+}
