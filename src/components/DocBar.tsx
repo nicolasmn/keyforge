@@ -2,6 +2,8 @@ import { createSignal, Show } from 'solid-js'
 import { doc, setDoc, replaceDoc, setSelectedLayerId } from '@/store'
 import { serializeDoc, deserializeDoc, validatePersisted } from '@/utils/persistence'
 import { parseCssToDoc } from '@/utils/cssImport'
+import { exportCssReducedMotion } from '@/utils/export'
+import { generateCss } from '@/utils/css'
 
 /**
  * DocBar — document identity + save state + import/export.
@@ -47,6 +49,20 @@ export default function DocBar() {
     const a = document.createElement('a')
     a.href = url
     a.download = `${doc.name.replace(/[^\w-]+/g, '_') || 'animation'}.keyforge.json`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  /** Download the current document as production CSS. */
+  function exportCssFile(reducedMotionSafe: boolean) {
+    const css = reducedMotionSafe ? exportCssReducedMotion(doc) : generateCss(doc)
+    const blob = new Blob([css], { type: 'text/css' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${doc.name.replace(/[^\w-]+/g, '_') || 'animation'}${reducedMotionSafe ? '.rm' : ''}.css`
     document.body.appendChild(a)
     a.click()
     a.remove()
@@ -118,6 +134,20 @@ export default function DocBar() {
 
       <button class="btn btn--ghost" onClick={exportJson} title="Export as JSON">
         Export
+      </button>
+      <button
+        class="btn btn--ghost"
+        onClick={() => exportCssFile(false)}
+        title="Download production CSS"
+      >
+        CSS
+      </button>
+      <button
+        class="btn btn--ghost"
+        onClick={() => exportCssFile(true)}
+        title="Download CSS with prefers-reduced-motion fallback (opacity-only reduce variant)"
+      >
+        CSS·RM
       </button>
       <button
         class="btn btn--ghost"
