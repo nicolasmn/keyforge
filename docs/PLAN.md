@@ -106,7 +106,9 @@ type Keyframe = {
 - [x] CSS export: `@keyframes` + `animation` longhand → clipboard
 - [x] Unit tests: store mutations + CSS generation
 
-### Phase 1.5 — UX Foundations 🚧
+### Phase 1.5 — UX Foundations ✅
+
+_(all four sections shipped as of 2026-08-23: #12 code view, #13 duration control, #14 token UI; remaining polish items live in each section's open-tasks list)_
 
 Self-contained improvements with no architectural risk. Priority order:
 
@@ -134,15 +136,19 @@ Self-contained improvements with no architectural risk. Priority order:
 - [x] Gutters: 4px wide, accent color on hover, `col-resize`/`row-resize` cursors
 - [x] `SplitLayout` component encapsulates all Split.js logic; `App.tsx` stays clean
 
-#### 3. Read-only Code View 🚧
+#### 3. Read-only Code View ✅
 
-- [ ] Second tab in Inspector panel: **CSS** tab alongside **Properties** tab
-- [ ] Renders live output of `generateCss(doc)` — updates on every store change
-- [ ] Syntax highlighting via **Shiki** (loads only the `css` grammar + one theme)
-- [ ] Copy-to-clipboard button (reuses existing export util)
-- [ ] Scoped to selected layer only; toggle to show full document CSS
+_(merged 2026-08-23 as #12)_
 
-#### 4. DevTools Token UI 🚧
+- [x] Second tab in Inspector panel: **CSS** tab alongside the Inspector tab
+- [x] Renders live output of `generateCss(doc)` — updates on every store change
+- [x] Syntax highlighting via **Shiki** (loaded lazily from esm.sh on first render; plain `<pre>` fallback)
+- [x] Copy-to-clipboard button (writes the raw unhighlighted string)
+- [x] Scoped to selected layer only; toggle to show full document CSS
+
+#### 4. DevTools Token UI ✅
+
+_(merged 2026-08-23 as #14; QA fix list completed in the same pass — see `docs/DEVTOOLS-TOKEN-UI.md` for the revised spec)_
 
 See `docs/DEVTOOLS-TOKEN-UI.md`.
 
