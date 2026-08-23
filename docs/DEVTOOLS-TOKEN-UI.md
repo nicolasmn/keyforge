@@ -1,8 +1,8 @@
 # DevTools Token UI — Feature Spec
 
-> Status: Planning / Research
+> Status: Implemented (Phase 1.5 §4)
 > Added: 2026-05-03
-> Updated: 2026-05-03
+> Updated: 2026-08-23 — layout decision revised to Option B (unified Inspector); interaction model updated (tap-to-edit, no drag-scrub); keyboard/a11y baseline added
 
 ## Problem
 
@@ -37,10 +37,11 @@ Replace (or augment) the property inspector with a structured code view where:
 ### In scope
 
 - Render the generated CSS for the selected layer as a styled code block
-- Value tokens are interactive: click → editable input, Enter → commit to store, Escape → cancel
-- Tab / Shift+Tab advances between tokens in document order
+- Value tokens are interactive: click (or Enter/Space when focused) → editable input, Enter → commit to store, Escape → cancel
+- ~~Tab / Shift+Tab advances between tokens in document order~~ _(not implemented — see Tab order note below)_
 - Value changes update preview in real time (no submit button)
-- Token type detection: color values show a color swatch, numeric values support scroll-to-scrub
+- Token type detection: color values show a color swatch; numeric values are tap-to-edit via an inline number+unit field _(drag-scrub was removed — 3302ef4/3526b55)_
+- Transform values render as per-function chip groups (`fnA(a, b) fnB(c)`), each argument individually editable
 - Easing values open the inline easing editor (see Easing Library below)
 - Keyboard shortcut to jump between keyframe stops (`]` / `[` to next/prev keyframe)
 
@@ -112,19 +113,20 @@ Easing is a first-class concept in Keyforge. Rather than a simple dropdown or te
 
 - Clicking an easing token **expands an inline panel** below the token row (not a floating popover — avoids z-index and positioning complexity)
 - The panel contains:
-  - **Curve visualiser** — `<canvas>` or SVG, shows the cubic-bezier curve with draggable handles
-  - **Preset library** — horizontal scrollable strip of named presets (ease, ease-in, ease-out, ease-in-out, spring, etc.)
+  - **Curve visualiser** — `<canvas>` with draggable handles
+  - **Preset library** — horizontal scrollable strip of named presets (built-in + user-saved custom)
   - **Custom input** — `cubic-bezier(x1, y1, x2, y2)` raw value with live curve update
-  - **Save to library** — name + save button; persists to the user's custom easing library
+  - **Save to library** — name input + Save button (Enter to confirm); upserts by name
+  - **Delete from library** — ✕ button appears on hover of each custom preset
 - Only one easing editor open at a time; opening a new one closes the previous
 - `Escape` closes and reverts; `Enter` closes and commits
 
 ### Easing library
 
-- Persisted collection of named easings: built-in presets + user-saved customs
-- Accessible from the easing editor panel (preset strip)
-- Future: dedicated library view accessible from the header or a panel tab, for managing/deleting/renaming saved easings
-- Storage: in-memory for now (no localStorage in sandbox); IndexedDB when Save/Load (Phase 4) lands
+- Reactive in-memory store via `@solid-primitives/storage` `makePersisted` + `makeObjectStorage`
+- API (`src/store/easingLibrary.ts`): `customEasings` (signal), `addEasing(name, value)`, `removeEasing(name)`, `hasEasing(name)`
+- Storage: `makeObjectStorage` (in-memory, no localStorage) — swap to `localforage` (IndexedDB) in Phase 4 with zero other changes
+- Upsert semantics: saving a name that already exists updates its value
 
 ### Built-in presets
 
@@ -152,9 +154,9 @@ Easing is a first-class concept in Keyforge. Rather than a simple dropdown or te
 ### Editing a token
 
 1. User clicks a value token
-2. Token becomes an `<input>` (or contenteditable span), sized to content
+2. Token becomes an `<input>`, sized to content
 3. Structural CSS around it remains static
-4. `input` event → debounced store update → preview updates live (valid values only)
+4. `input` event → store update → preview updates live (valid values only)
 5. `Enter` / blur → validate → commit if valid, revert if invalid; return to display mode
 6. `Escape` → revert to original value, return to display mode
 
@@ -167,30 +169,18 @@ Easing is a first-class concept in Keyforge. Rather than a simple dropdown or te
 
 ### Tab order
 
-- Tab advances through tokens **in the order they appear in the rendered CSS output**
-- Shift+Tab reverses
-- Wraps at end of keyframe block to first token
-- `]` / `[` jumps to same token in next/previous keyframe stop
+> **Status note (2026-08-23):** Tab/Shift+Tab token traversal described below is **not implemented** in the current tree — it existed only in the removed TokenView prototype. Chips are individually focusable (Tab reaches them) and activate with Enter/Space, but there is no token-to-token Tab chaining or wrap-around. Tracked as an open task in PLAN.md.
+
+- ~~Tab advances through tokens **in the order they appear in the rendered CSS output**~~ _(not implemented)_
+- ~~Shift+Tab reverses~~ _(not implemented)_
+- ~~Wraps at end of keyframe block to first token~~ _(not implemented)_
+- `]` / `[` jumps to same token in next/previous keyframe stop _(open task — see PLAN.md)_
 
 ---
 
 ## Layout Options
 
-Three options under consideration. Decision deferred until prototype.
-
-### Option A — Inspector tab (additive)
-
-Token UI lives in a second tab alongside the existing form inspector. Low risk — existing inspector untouched. User switches between views. Best for initial shipping.
-
-### Option B — Inspector replacement
-
-Token UI replaces the form inspector entirely. Cleaner, fewer UI surfaces. Requires token UI to be fully capable before shipping.
-
-### Option C — Side-by-side split
-
-Token UI on the right, existing inspector on the left. Redundant but useful during transition. High visual noise.
-
-**Current lean: Option A** — ship as a tab first, validate, then decide whether to deprecate the form inspector.
+Decision: **Option B — unified Inspector** _(revised 2026-08-23; originally Option A)_. The token chips were merged directly into the existing **Inspector** tab (replacing the old form-style Properties content), so the panel has two tabs: **Inspector** and **CSS**. There is no separate third Tokens tab. See commit a5a849f ("refactor: merge Properties+Tokens into unified devtools inspector").
 
 ---
 
@@ -199,13 +189,11 @@ Token UI on the right, existing inspector on the left. Redundant but useful duri
 ### Rendering
 
 - Generate a **token AST** from the layer's CSS output, not raw string manipulation
-- Each token has: `{ type, value, path }` — where `path` maps back to the store (`layerId`, `trackId`, `keyframeId`, `field`)
-- Render token AST as a `<pre>` with spans per token
+- Each token has: `{ type, value, path }` — where `path` maps back to the store
+- Render token AST as inline `<span>` elements
 - Avoid re-rendering the full token tree on every keystroke — only swap the active input in place
 
 ### Store path mapping
-
-The key challenge: a CSS value token must know where it lives in the store so a change can be dispatched. The token AST generation step resolves this — each value token carries a store path that the edit handler uses directly.
 
 ```ts
 type ValueToken = {
@@ -217,24 +205,26 @@ type ValueToken = {
     keyframeId: string
     field: 'value' | 'easing'
   }
+  subTokens?: SubToken[] // transform only
 }
 ```
 
 ### Syntax highlighting
 
-- Structural tokens (selectors, property names, braces, at-keywords): styled with CSS variables, no library needed
-- Value tokens: styled by type (color tokens get a swatch, numbers get a different hue)
-- No Shiki/Prism needed for the token UI — the token AST IS the parse result
-- Shiki is used for the **read-only code view** tab (Phase 1.5 item 3), which is separate
+- Structural tokens styled via CSS variables, no library needed
+- Value tokens styled by type (color swatch, number `ew-resize`, easing accent color)
+- Shiki used for the **read-only CSS tab** (Phase 1.5 §3), separate from this feature
 
 ---
 
 ## Resolved Decisions
 
-| Question             | Decision                                                                                         |
-| -------------------- | ------------------------------------------------------------------------------------------------ |
-| Transform sub-tokens | Split per function argument — each arg is its own editable sub-token                             |
-| Color picker         | Browser-native `<input type="color">` — hex only in v1                                           |
-| Validation           | Error state on token (red underline + `title` description); invalid values not committed         |
-| Easing picker        | Inline expandable panel in inspector; includes curve visualiser, preset library, save-to-library |
-| AI features          | None planned                                                                                     |
+| Question             | Decision                                                                                           |
+| -------------------- | -------------------------------------------------------------------------------------------------- |
+| Transform sub-tokens | Split per function argument — each arg is its own editable sub-token                               |
+| Color picker         | Browser-native `<input type="color">` — hex only in v1                                             |
+| Validation           | Error state on token (red underline + `title` description); invalid values not committed           |
+| Easing picker        | Inline expandable panel in inspector; canvas visualiser + preset library + save/delete + raw input |
+| Easing persistence   | `@solid-primitives/storage` `makePersisted` + `makeObjectStorage`; IndexedDB swap in Phase 4       |
+| AI features          | None planned                                                                                       |
+| Inspector placement  | Option B — token chips unified into the Inspector tab (two tabs: Inspector, CSS). No third tab.    |

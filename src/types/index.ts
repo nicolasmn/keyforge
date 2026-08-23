@@ -51,3 +51,30 @@ export interface AnimationDocument {
   duration: number // ms
   layers: Layer[]
 }
+
+// ── DevTools Token UI ───────────────────────────────────────
+
+export type TokenType = 'color' | 'number' | 'easing' | 'transform' | 'string'
+
+export interface TokenPath {
+  layerId: string
+  trackId: string
+  keyframeId: string
+  field: 'value' | 'easing'
+}
+
+export interface SubToken {
+  type: 'number'
+  value: string
+  unit: string
+  argIndex: number
+  assembler: (subs: SubToken[]) => string
+}
+
+export interface ValueToken {
+  type: TokenType
+  value: string
+  path: TokenPath
+  /** Only present when type === 'transform' */
+  subTokens?: SubToken[]
+}
