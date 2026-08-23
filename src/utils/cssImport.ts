@@ -1,5 +1,6 @@
 import type { AnimationDocument, Layer, Track, Keyframe, AnimatableProperty } from '@/types'
 import { nanoid } from './nanoid'
+import { toCssPropertyValue } from './propertyRegistry'
 
 /**
  * Parse pasted CSS containing `@keyframes` rules into a Keyforge document.
@@ -242,7 +243,10 @@ export function parseCssToDoc(css: string): CssImportResult {
       const keyframes: Keyframe[] = entries.map((e) => ({
         id: nanoid(),
         time: e.time,
-        value: e.value,
+        // Normalize to the individual property's own syntax (e.g. a legacy
+        // export's invalid `rotate: rotate(45deg)` becomes `45deg`), so
+        // imported docs re-export valid CSS and round-trip stably.
+        value: toCssPropertyValue(animatable, e.value),
         easing: (e.easing ?? 'linear') as Keyframe['easing'],
       }))
       tracks.push({ id: nanoid(), property: animatable, keyframes })

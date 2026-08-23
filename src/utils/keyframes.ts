@@ -1,4 +1,5 @@
 import type { Layer, AnimationDocument, Track } from '@/types'
+import { toCssPropertyValue } from './propertyRegistry'
 
 /**
  * Shared keyframe building logic used by css.ts (preview) and export.ts (export).
@@ -44,7 +45,8 @@ function stopBody(layer: Layer, time: number): string {
         r.exact && r.easing && r.easing !== 'linear'
           ? ` animation-timing-function:${r.easing};`
           : ''
-      return `${track.property}:${r.value};${timing}`
+      const value = toCssPropertyValue(track.property, r.value)
+      return `${track.property}:${value};${timing}`
     })
     .filter(Boolean)
     .join(' ')
@@ -141,7 +143,12 @@ export function buildSplitKeyframeBlocks(
             r.exact && r.easing && r.easing !== 'linear'
               ? ` animation-timing-function:${r.easing};`
               : ''
-          return `  ${pct}% { ${track.property}:${r.value};${timing} }`
+          // Normalize to the individual property's own syntax: a rotate
+          // track storing `rotate(360deg)` must emit `rotate:360deg;` —
+          // the function form is invalid CSS here and browsers silently
+          // drop it, leaving the property at its initial value (none).
+          const value = toCssPropertyValue(track.property, r.value)
+          return `  ${pct}% { ${track.property}:${value};${timing} }`
         })
         .filter(Boolean)
         .join('\n')
