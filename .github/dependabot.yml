@@ -22,6 +22,9 @@ updates:
       - dependency-name: '@typescript-eslint/*'
         update-types:
           - version-update:semver-major
+      # 4.4 breaks makePersisted typings in easingLibrary.ts (see #14 QA);
+      # pinned ~4.3 deliberately until migration.
+      - dependency-name: '@solid-primitives/storage'
 
   - package-ecosystem: github-actions
     directory: /
