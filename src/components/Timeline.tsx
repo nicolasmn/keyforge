@@ -97,8 +97,12 @@ export default function Timeline() {
     const cy = (HEADER_HEIGHT / 2) * dpr
     const aw = 3 * dpr
     ctx.beginPath()
-    ctx.moveTo(cx - aw, cy - aw); ctx.lineTo(cx - aw * 2, cy); ctx.lineTo(cx - aw, cy + aw)
-    ctx.moveTo(cx + aw, cy - aw); ctx.lineTo(cx + aw * 2, cy); ctx.lineTo(cx + aw, cy + aw)
+    ctx.moveTo(cx - aw, cy - aw)
+    ctx.lineTo(cx - aw * 2, cy)
+    ctx.lineTo(cx - aw, cy + aw)
+    ctx.moveTo(cx + aw, cy - aw)
+    ctx.lineTo(cx + aw * 2, cy)
+    ctx.lineTo(cx + aw, cy + aw)
     ctx.strokeStyle = colorPrimary
     ctx.lineWidth = 1.5 * dpr
     ctx.stroke()
