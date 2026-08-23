@@ -192,7 +192,7 @@ See `docs/DEVTOOLS-TOKEN-UI.md`.
 - [ ] `animation-timeline: scroll()` binding — map keyframes to scroll position
 - [ ] `animation-timeline: view()` binding — viewport entry/exit ranges
 - [ ] `grid-template-rows: 0fr → 1fr` animated height
-- [ ] Easing curve editor (cubic-bezier visual handles)
+- [x] Easing curve editor (cubic-bezier visual handles) — shipped with DevTools Token UI (#14), incl. saveable custom-curve library
 
 ### Phase 3 — Export & Interop
 
@@ -200,7 +200,7 @@ See `docs/DEVTOOLS-TOKEN-UI.md`.
 - [ ] React component export (Motion wrapper)
 - [ ] Animation token export (JSON: duration, easing, keyframe values)
 - [ ] Copy-to-clipboard single keyframe snippet
-- [ ] Import existing `@keyframes` CSS (parse and populate timeline)
+- [x] Import existing `@keyframes` CSS (parse and populate timeline) — #32, lossless round-trip via #33
 
 ### Phase 4 — Power Features
 
