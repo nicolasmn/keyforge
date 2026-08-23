@@ -3,12 +3,23 @@ import type { AnimationDocument } from '@/types'
 
 const NUMBER_UNIT_RE = /^(-?[\d.]+)(px|ms|deg|%|rem|em|vw|vh|fr|s|turn|rad)?$/
 const EASING_NAMES = new Set([
-  'linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out',
-  'ease-in-quad', 'ease-out-quad', 'ease-in-out-quad',
-  'ease-in-cubic', 'ease-out-cubic', 'ease-in-out-cubic',
-  'ease-in-back', 'ease-out-back', 'ease-in-out-back',
+  'linear',
+  'ease',
+  'ease-in',
+  'ease-out',
+  'ease-in-out',
+  'ease-in-quad',
+  'ease-out-quad',
+  'ease-in-out-quad',
+  'ease-in-cubic',
+  'ease-out-cubic',
+  'ease-in-out-cubic',
+  'ease-in-back',
+  'ease-out-back',
+  'ease-in-out-back',
 ])
-const TRANSFORM_FN_RE = /^(translateX|translateY|translateZ|translate3d|translate|rotateX|rotateY|rotateZ|rotate3d|rotate|scaleX|scaleY|scaleZ|scale3d|scale|skewX|skewY|skew|perspective|matrix3d|matrix)\(/
+const TRANSFORM_FN_RE =
+  /^(translateX|translateY|translateZ|translate3d|translate|rotateX|rotateY|rotateZ|rotate3d|rotate|scaleX|scaleY|scaleZ|scale3d|scale|skewX|skewY|skew|perspective|matrix3d|matrix)\(/
 
 function detectType(value: string, field: 'value' | 'easing'): TokenType {
   if (field === 'easing') return 'easing'
@@ -20,8 +31,11 @@ function detectType(value: string, field: 'value' | 'easing'): TokenType {
     v.startsWith('hsl') ||
     v.startsWith('oklch') ||
     v.startsWith('color(')
-  ) return 'color'
-  if (/^[a-z]+$/.test(v) && CSS.supports('color', v)) return 'color'
+  )
+    return 'color'
+  // Guarded so pure-node contexts (tests, tooling) don't crash on the
+  // named-color heuristic; browsers always define CSS.
+  if (/^[a-z]+$/.test(v) && typeof CSS !== 'undefined' && CSS.supports('color', v)) return 'color'
   if (NUMBER_UNIT_RE.test(v)) return 'number'
   if (EASING_NAMES.has(v) || v.startsWith('cubic-bezier(')) return 'easing'
   return 'string'
@@ -41,10 +55,12 @@ function parseTransformSubTokens(value: string, path: TokenPath): SubToken[] {
         let fnIdx = 0
         result = result.replace(/([\w-]+)\(([^)]+)\)/g, (_full, fn: string, argsStr: string) => {
           const argArr = argsStr.split(',').map((a: string) => a.trim())
-          const rebuilt = argArr.map((_: string, i: number) => {
-            const t = tokens.find((st) => st.argIndex === fnIdx * 100 + i)
-            return t ? `${t.value}${t.unit}` : argArr[i]
-          }).join(', ')
+          const rebuilt = argArr
+            .map((_: string, i: number) => {
+              const t = tokens.find((st) => st.argIndex === fnIdx * 100 + i)
+              return t ? `${t.value}${t.unit}` : argArr[i]
+            })
+            .join(', ')
           fnIdx++
           return `${fn}(${rebuilt})`
         })
