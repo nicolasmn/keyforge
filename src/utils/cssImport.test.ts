@@ -39,10 +39,11 @@ describe('parseCssToDoc', () => {
     expect(layer.name).toBe('pulse')
     expect(layer.tracks).toHaveLength(1)
     expect(layer.tracks[0].property).toBe('opacity')
+    // Percent stops convert to ms against the sniffed/default duration (2000ms)
     expect(layer.tracks[0].keyframes.map((k) => [k.time, k.value])).toEqual([
       [0, '0'],
-      [50, '1'],
-      [100, '0'],
+      [1000, '1'],
+      [2000, '0'],
     ])
   })
 

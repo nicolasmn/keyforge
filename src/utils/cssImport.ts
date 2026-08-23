@@ -55,16 +55,19 @@ function extractKeyframesBlock(css: string, from: number): { body: string; end: 
 }
 
 function parseName(header: string): string {
-  return header
+  let name = header
     .replace(/^@keyframes\s+/, '')
     .trim()
     .replace(/["']/g, '')
+  // Keyforge's own exports prefix kf-; importing an exported document
+  // shouldn't accumulate prefixes on every round-trip.
+  if (name.startsWith('kf-')) name = name.slice(3)
+  return name
 }
 
 interface RawStop {
   pct: number
-  props: Map<string, string>
-  timing?: string
+  props: Map<string, { value: string; easing?: string }>
 }
 
 /** Parse "0% { ... } 50% { ... }" style stops inside a keyframes body. */
@@ -81,8 +84,15 @@ function parseStops(body: string): RawStop[] {
     for (const sel of selectors) {
       const pct = parseSelectorPercent(sel)
       if (pct === null) continue
+      // A timing-function pairs with the property declaration that
+      // immediately precedes it (our exporter emits it right after the
+      // property whose keyframe carries that easing). A leading
+      // timing-function with no preceding property applies to the stop
+      // as a whole — matching CSS's per-stop semantics.
       const props = new Map<string, string>()
-      let timing: string | undefined
+      const propTiming = new Map<string, string>()
+      let pendingTiming: string | undefined
+      let lastProp: string | null = null
       for (const decl of decls.split(';')) {
         const colon = decl.indexOf(':')
         if (colon === -1) continue
@@ -90,12 +100,30 @@ function parseStops(body: string): RawStop[] {
         const value = decl.slice(colon + 1).trim()
         if (!prop || !value) continue
         if (prop === 'animation-timing-function') {
-          timing = value
+          if (lastProp) {
+            propTiming.set(lastProp, value)
+          } else {
+            pendingTiming = value
+          }
         } else {
           props.set(prop, value)
+          if (pendingTiming && !propTiming.has(prop)) {
+            propTiming.set(prop, pendingTiming)
+            pendingTiming = undefined
+          }
+          lastProp = prop
         }
       }
-      stops.push({ pct, props, timing })
+      for (const sel2 of [sel]) {
+        void sel2
+        const stopProps = new Map(props)
+        // Apply stop-wide timing to properties without their own pairing.
+        const resolved = new Map<string, { value: string; easing?: string }>()
+        for (const [p, v] of stopProps) {
+          resolved.set(p, { value: v, easing: propTiming.get(p) ?? pendingTiming })
+        }
+        stops.push({ pct, props: resolved })
+      }
     }
   }
   return stops.sort((a, b) => a.pct - b.pct)
@@ -146,9 +174,9 @@ export function parseCssToDoc(css: string): CssImportResult {
     // Group property values across stops into tracks.
     const byProp = new Map<string, { time: number; value: string; easing?: string }[]>()
     for (const stop of stops) {
-      for (const [prop, value] of stop.props) {
+      for (const [prop, decl] of stop.props) {
         const list = byProp.get(prop) ?? []
-        list.push({ time: stop.pct, value, easing: stop.timing })
+        list.push({ time: stop.pct, value: decl.value, easing: decl.easing })
         byProp.set(prop, list)
       }
     }
@@ -164,7 +192,7 @@ export function parseCssToDoc(css: string): CssImportResult {
         id: nanoid(),
         time: e.time,
         value: e.value,
-        easing: 'linear',
+        easing: (e.easing ?? 'linear') as Keyframe['easing'],
       }))
       tracks.push({ id: nanoid(), property: animatable, keyframes })
     }
@@ -172,16 +200,6 @@ export function parseCssToDoc(css: string): CssImportResult {
     if (tracks.length === 0) {
       warnings.push(`@keyframes ${name}: no supported properties, skipped.`)
       continue
-    }
-
-    // Per-stop timing functions apply to all tracks' KFs at that stop.
-    if (stops.some((s) => s.timing)) {
-      for (const track of tracks) {
-        for (const kf of track.keyframes) {
-          const timing = stops.find((s) => s.pct === kf.time)?.timing
-          if (timing) (kf as { easing?: string }).easing = timing
-        }
-      }
     }
 
     index++
@@ -202,10 +220,33 @@ export function parseCssToDoc(css: string): CssImportResult {
     return { doc: null, warnings: [...warnings, 'Nothing importable was found.'] }
   }
 
+  // Percent stops are relative to the animation duration; Keyforge stores
+  // keyframe times in milliseconds. Convert after the duration is known.
+  const duration = sniffDurationMs(css)
+  for (const layer of layers) {
+    for (const track of layer.tracks) {
+      for (const kf of track.keyframes) {
+        kf.time = Math.round((kf.time / 100) * duration)
+      }
+      track.keyframes.sort((a, b) => a.time - b.time)
+      // Exporters synthesize gap-fill stops (a stop whose value merely
+      // repeats the previous one with default timing). They have zero
+      // visual effect — CSS holds the value anyway — so drop them:
+      // keeping them would multiply on every export→import cycle.
+      const kept: Keyframe[] = []
+      for (const kf of track.keyframes) {
+        const prev = kept[kept.length - 1]
+        const isFill = prev !== undefined && prev.value === kf.value && kf.easing === 'linear'
+        if (!isFill) kept.push(kf)
+      }
+      track.keyframes = kept
+    }
+  }
+
   const doc: AnimationDocument = {
     id: nanoid(),
     name: 'Imported animation',
-    duration: sniffDurationMs(css),
+    duration,
     layers,
   }
   return { doc, warnings }

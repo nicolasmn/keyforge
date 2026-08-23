@@ -21,12 +21,21 @@ export function buildKeyframeBlock(
       const pct = ((time / duration) * 100).toFixed(2)
       const props = layer.tracks
         .map((track) => {
-          // Find the active keyframe: last one at or before this time
           const sorted = [...track.keyframes].sort((a, b) => a.time - b.time)
+          if (sorted.length === 0) return ''
+          // Exact keyframe at this time: emit its value AND its easing so
+          // export→import round-trips per-stop timing functions.
+          const exact = sorted.find((k) => k.time === time)
+          if (exact) {
+            const timing =
+              exact.easing && exact.easing !== 'linear'
+                ? ` animation-timing-function:${exact.easing};`
+                : ''
+            return `${track.property}:${exact.value};${timing}`
+          }
+          // Gap time: hold the last keyframe at-or-before (existing semantics).
           const kf = [...sorted].reverse().find((k) => k.time <= time)
-          // If no keyframe yet (time is before first kf), use the first one
           const active = kf ?? sorted[0]
-          if (!active) return ''
           return `${track.property}:${active.value};`
         })
         .filter(Boolean)
