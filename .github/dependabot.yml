@@ -13,6 +13,15 @@ updates:
         dependency-type: development
       dependencies:
         dependency-type: production
+    ignore:
+      # TypeScript 7 breaks @typescript-eslint (peer < 6.1) — lint and build
+      # both fail. Revisit when the eslint ecosystem catches up.
+      - dependency-name: typescript
+        update-types:
+          - version-update:semver-major
+      - dependency-name: '@typescript-eslint/*'
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: /
