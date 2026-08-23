@@ -783,6 +783,7 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
   // Per-row token derivation from the store proxy: reactive to this row's
   // fields only, so sibling rows never recompute (or remount) on a commit.
   const valueToken = createMemo(() => tokenizeKeyframe(props.layerId, props.track, props.kf)[0])
+  const easingToken = createMemo(() => tokenizeKeyframe(props.layerId, props.track, props.kf)[1])
 
   function commitTime() {
     const n = Number(timeInputEl?.value)
@@ -867,14 +868,7 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
       <Show when={easingOpen()}>
         <EasingEditor
           value={props.kf.easing}
-          onChange={(v) =>
-            commit(
-              valueToken().path.field === 'value'
-                ? valueToken().path
-                : { ...valueToken().path, field: 'easing' },
-              v,
-            )
-          }
+          onChange={(v) => commit(easingToken().path, v)}
           onClose={() => setEasingOpen(false)}
         />
       </Show>
