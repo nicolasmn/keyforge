@@ -1,6 +1,5 @@
 import { Show } from 'solid-js'
 import { createMediaQuery } from '@/utils/mediaQuery'
-import Header from '@/components/Header'
 import LayerTree from '@/components/LayerTree'
 import Preview from '@/components/Preview'
 import Inspector from '@/components/Inspector'
@@ -18,8 +17,6 @@ export default function App() {
 
   return (
     <>
-      <Header />
-
       {/* Desktop — resizable panels via Split.js */}
       <Show when={!isMobile()}>
         <SplitLayout
