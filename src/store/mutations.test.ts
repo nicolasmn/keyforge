@@ -156,6 +156,33 @@ describe('addTrack', () => {
     expect(doc.layers[0].tracks).toHaveLength(1)
     expect(doc.layers[0].tracks[0].property).toBe('opacity')
   })
+
+  it('returns the new track id', () => {
+    addLayer()
+    const layerId = doc.layers[0].id
+    const id = addTrack(layerId, 'transform')
+    expect(id).toBe(doc.layers[0].tracks[0].id)
+  })
+
+  it('deduplicates: requesting an existing property returns its track', () => {
+    addLayer()
+    const layerId = doc.layers[0].id
+    const first = addTrack(layerId, 'transform')
+    const second = addTrack(layerId, 'transform')
+    expect(second).toBe(first)
+    // still exactly one transform track — same-property animations cannot
+    // compose (css-animations-1: last animation in the list overrides the
+    // others), so a duplicate track would silently kill the first.
+    expect(doc.layers[0].tracks).toHaveLength(1)
+  })
+
+  it('allows the same property on different layers', () => {
+    addLayer()
+    addLayer()
+    const a = addTrack(doc.layers[0].id, 'opacity')
+    const b = addTrack(doc.layers[1].id, 'opacity')
+    expect(a).not.toBe(b)
+  })
 })
 
 describe('addKeyframe', () => {

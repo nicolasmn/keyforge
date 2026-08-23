@@ -1020,7 +1020,14 @@ export default function Inspector() {
               <div class="inspector__add-track">
                 <select class="input" onChange={handleAddTrack}>
                   <option value="">+ Add property track</option>
-                  <For each={PROPERTIES}>{(p) => <option value={p}>{p}</option>}</For>
+                  <For each={PROPERTIES}>
+                    {(p) => (
+                      <option value={p} disabled={l().tracks.some((t) => t.property === p)}>
+                        {p}
+                        {l().tracks.some((t) => t.property === p) ? ' (tracked)' : ''}
+                      </option>
+                    )}
+                  </For>
                 </select>
               </div>
             </div>

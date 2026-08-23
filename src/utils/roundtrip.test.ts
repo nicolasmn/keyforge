@@ -48,10 +48,12 @@ function makeDoc(): AnimationDocument {
         tracks: [
           {
             id: nanoid(),
+            // Individual-property track: bare angle values (css-transforms-2
+            // syntax), not rotate() function values.
             property: 'rotate',
             keyframes: [
-              { id: nanoid(), time: 0, value: 'rotate(0deg)', easing: 'linear' },
-              { id: nanoid(), time: 2400, value: 'rotate(360deg)', easing: 'linear' },
+              { id: nanoid(), time: 0, value: '0deg', easing: 'linear' },
+              { id: nanoid(), time: 2400, value: '360deg', easing: 'linear' },
             ],
           },
         ],

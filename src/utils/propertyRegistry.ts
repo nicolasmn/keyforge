@@ -82,13 +82,13 @@ export const PROPERTY_REGISTRY: Record<AnimatableProperty, PropertyMeta> = {
   },
   translate: {
     units: LENGTH_UNITS,
-    defaultValue: 'translate(0px, 0px)',
+    defaultValue: '0px 0px',
     kind: 'interpolable',
-    hint: 'translate takes length pairs like translate(10px, 20px)',
+    hint: 'translate takes space-separated lengths like "10px 20px"',
   },
   rotate: {
     units: ['deg', 'rad', 'turn'],
-    defaultValue: 'rotate(0deg)',
+    defaultValue: '0deg',
     kind: 'interpolable',
     hint: 'rotate takes angles (deg, rad, turn)',
   },

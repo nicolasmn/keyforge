@@ -50,4 +50,15 @@ describe('property registry', () => {
   it('color properties take no numeric units', () => {
     expect(isValidNumberForProperty('background-color', '10', 'px')).toBe(false)
   })
+
+  it('individual transform properties default to VALID individual syntax', () => {
+    // The rotate property takes a bare angle — NOT rotate(angle), which is
+    // a transform FUNCTION and invalid as a property value (browsers drop
+    // the declaration entirely). Same for translate pairs and scale.
+    expect(PROPERTY_REGISTRY.rotate.defaultValue).toBe('0deg')
+    expect(PROPERTY_REGISTRY.translate.defaultValue).toBe('0px 0px')
+    expect(PROPERTY_REGISTRY.scale.defaultValue).toBe('1')
+    expect(PROPERTY_REGISTRY.rotate.defaultValue).not.toContain('(')
+    expect(PROPERTY_REGISTRY.translate.defaultValue).not.toContain('(')
+  })
 })
