@@ -3,6 +3,7 @@ import { createSignal } from 'solid-js'
 import type { AnimationDocument, Layer, Track, Keyframe, AnimatableProperty } from '@/types'
 import { nanoid } from '@/utils/nanoid'
 import { serializeDoc, saveToStorage, loadFromStorage } from '@/utils/persistence'
+import { interpolatedValueAt } from '@/utils/interpolate'
 
 // ── Default document ──────────────────────────────────────────────────
 const defaultDoc: AnimationDocument = {
@@ -210,14 +211,21 @@ export function addKeyframe(layerId: string, trackId: string, kf: Omit<Keyframe,
       const track = d.layers.find((l) => l.id === layerId)?.tracks.find((t) => t.id === trackId)
       if (!track) return
       // Smart defaults: an empty value means "pick something useful".
-      // First KF on a track gets a per-property starting value; later KFs
-      // inherit the previous keyframe's value so a fresh two-KF track
-      // animates out of the box instead of holding still.
+      // 1. Playhead strictly between two keyframes → capture the
+      //    interpolated pose the preview shows right now (pose-to-pose).
+      // 2. First KF on a track → per-property starting value.
+      // 3. Otherwise → inherit the previous keyframe's value.
       if (kf.value === '') {
-        if (track.keyframes.length === 0) {
+        const interpolated = interpolatedValueAt(track, kf.time)
+        const sorted = [...track.keyframes].sort((a, b) => a.time - b.time)
+        const isBetween =
+          sorted.length > 0 && kf.time > sorted[0].time && kf.time < sorted[sorted.length - 1].time
+        if (isBetween && interpolated !== null) {
+          kf.value = interpolated
+        } else if (track.keyframes.length === 0) {
           kf.value = DEFAULT_FIRST_VALUE[track.property] ?? '0'
         } else {
-          const prev = [...track.keyframes].sort((a, b) => a.time - b.time).pop()
+          const prev = sorted[sorted.length - 1]
           kf.value = prev?.value ?? '0'
         }
       }

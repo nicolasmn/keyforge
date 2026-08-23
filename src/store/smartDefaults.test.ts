@@ -52,6 +52,30 @@ describe('smart keyframe defaults', () => {
     expect(track.keyframes[0].value).toBe('300px')
   })
 
+  it('captures the interpolated pose when playhead sits between keyframes', () => {
+    addTrack(layerId(), 'opacity')
+    const track = lastTrack()
+    const id = layerId()
+    addKeyframe(id, track.id, { time: 0, value: '0', easing: 'linear' })
+    addKeyframe(id, track.id, { time: 1000, value: '1', easing: 'linear' })
+    // playhead at 400ms → preview shows opacity 0.4
+    addKeyframe(id, track.id, { time: 400, value: '', easing: 'ease-out' })
+    expect(track.keyframes).toHaveLength(3)
+    const mid = track.keyframes.find((k) => k.time === 400)!
+    expect(mid.value).toBe('0.4')
+  })
+
+  it('before-first / after-last KF still inherits instead of interpolating', () => {
+    addTrack(layerId(), 'width')
+    const track = lastTrack()
+    const id = layerId()
+    addKeyframe(id, track.id, { time: 500, value: '100px', easing: 'linear' })
+    addKeyframe(id, track.id, { time: 200, value: '', easing: 'linear' }) // before first → inherit
+    addKeyframe(id, track.id, { time: 900, value: '', easing: 'linear' }) // after last → inherit
+    expect(track.keyframes.find((k) => k.time === 200)!.value).toBe('100px')
+    expect(track.keyframes.find((k) => k.time === 900)!.value).toBe('100px')
+  })
+
   it('every AnimatableProperty has a default entry', () => {
     // If a new property is added to the union this test fails until a
     // default is chosen — deliberate guardrail.
