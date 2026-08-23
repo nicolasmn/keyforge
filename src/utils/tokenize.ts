@@ -1,4 +1,4 @@
-import type { Layer, ValueToken, SubToken, TokenType, TokenPath } from '@/types'
+import type { Layer, ValueToken, SubToken, TokenType, TokenPath, Track, Keyframe } from '@/types'
 import type { AnimationDocument } from '@/types'
 
 const NUMBER_UNIT_RE = /^(-?[\d.]+)(px|ms|deg|%|rem|em|vw|vh|fr|s|turn|rad)?$/
@@ -84,37 +84,50 @@ export function tokenizeLayer(layer: Layer, doc: AnimationDocument): ValueToken[
   const tokens: ValueToken[] = []
   for (const track of layer.tracks) {
     for (const kf of track.keyframes) {
-      const valuePath: TokenPath = {
-        layerId: layer.id,
-        trackId: track.id,
-        keyframeId: kf.id,
-        field: 'value',
-      }
-      const valueType = detectType(kf.value, 'value')
-      const valueToken: ValueToken = {
-        type: valueType,
-        value: kf.value,
-        path: valuePath,
-      }
-      if (valueType === 'transform') {
-        valueToken.subTokens = parseTransformSubTokens(kf.value, valuePath)
-      }
-      tokens.push(valueToken)
-
-      tokens.push({
-        type: 'easing',
-        value: kf.easing,
-        path: {
-          layerId: layer.id,
-          trackId: track.id,
-          keyframeId: kf.id,
-          field: 'easing',
-        },
-      })
+      tokens.push(...tokenizeKeyframe(layer.id, track, kf))
+      void doc
     }
   }
-  void doc
   return tokens
+}
+
+/**
+ * Tokenize one keyframe into its value + easing tokens. Operates on the
+ * store's stable keyframe proxy so callers can keep component identity
+ * across commits (Inspector rows).
+ */
+export function tokenizeKeyframe(
+  layerId: string,
+  track: Pick<Track, 'id' | 'keyframes'>,
+  kf: Keyframe,
+): [ValueToken, ValueToken] {
+  const valuePath: TokenPath = {
+    layerId,
+    trackId: track.id,
+    keyframeId: kf.id,
+    field: 'value',
+  }
+  const valueType = detectType(kf.value, 'value')
+  const valueToken: ValueToken = {
+    type: valueType,
+    value: kf.value,
+    path: valuePath,
+  }
+  if (valueType === 'transform') {
+    valueToken.subTokens = parseTransformSubTokens(kf.value, valuePath)
+  }
+
+  const easingToken: ValueToken = {
+    type: 'easing',
+    value: kf.easing,
+    path: {
+      layerId,
+      trackId: track.id,
+      keyframeId: kf.id,
+      field: 'easing',
+    },
+  }
+  return [valueToken, easingToken]
 }
 
 export { detectType, NUMBER_UNIT_RE, EASING_NAMES }
