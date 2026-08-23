@@ -1,5 +1,5 @@
 import type { AnimationDocument } from '@/types'
-import { buildKeyframeBlock } from './keyframes'
+import { buildKeyframeBlock, hasCoTimedEasingConflict, buildSplitKeyframeBlocks } from './keyframes'
 import { slugify } from './slugify'
 
 export function generateLayerCss(doc: AnimationDocument, layerId: string): string {
@@ -12,6 +12,26 @@ export function generateLayerCss(doc: AnimationDocument, layerId: string): strin
 
   const slug = slugify(layer.name)
   const animName = `kf-${slug}`
+
+  // Co-timed stops with differing easings can't share one @keyframes rule
+  // (CSS last-wins would corrupt a curve) — split per track when needed.
+  if (hasCoTimedEasingConflict(layer)) {
+    const { blocks } = buildSplitKeyframeBlocks(layer, doc.duration, animName)
+    const names = blocks.map((b) => b.name).join(', ')
+    return [
+      ...blocks.map((b) => b.css),
+      ``,
+      `[data-layer-id="${slug}"] {`,
+      `  animation-name: ${names};`,
+      `  animation-duration: ${doc.duration}ms;`,
+      `  animation-timing-function: linear;`,
+      `  animation-fill-mode: both;`,
+      `  animation-iteration-count: infinite;`,
+      `  animation-play-state: paused;`,
+      `}`,
+    ].join('\n')
+  }
+
   const { keyframeBlock } = buildKeyframeBlock(layer, doc.duration)
   if (!keyframeBlock.trim()) return ''
 
@@ -40,6 +60,23 @@ export function generateCss(doc: AnimationDocument): string {
 
       const slug = slugify(layer.name)
       const animName = `kf-${slug}`
+
+      if (hasCoTimedEasingConflict(layer)) {
+        const { blocks } = buildSplitKeyframeBlocks(layer, doc.duration, animName)
+        const names = blocks.map((b) => b.name).join(', ')
+        return [
+          ...blocks.map((b) => b.css),
+          `[data-layer-id="${slug}"] {`,
+          `  animation-name: ${names};`,
+          `  animation-duration: ${doc.duration}ms;`,
+          `  animation-timing-function: linear;`,
+          `  animation-fill-mode: both;`,
+          `  animation-iteration-count: infinite;`,
+          `  animation-play-state: paused;`,
+          `}`,
+        ].join('\n')
+      }
+
       const { keyframeBlock } = buildKeyframeBlock(layer, doc.duration)
       if (!keyframeBlock.trim()) return ''
 
