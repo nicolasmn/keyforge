@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { exportCss } from './export'
+import { exportCss, exportCssReducedMotion } from './export'
 import type { AnimationDocument } from '@/types'
 
 const doc: AnimationDocument = {
@@ -41,5 +41,52 @@ describe('exportCss', () => {
 
   it('contains valid @keyframes block', () => {
     expect(exportCss(doc)).toContain('@keyframes')
+  })
+})
+
+describe('exportCssReducedMotion', () => {
+  const rmDoc: AnimationDocument = {
+    id: 'doc-rm',
+    name: 'Slide',
+    duration: 800,
+    layers: [
+      {
+        id: 'L1',
+        name: 'Box',
+        visible: true,
+        element: { tag: 'div', initialCss: '' },
+        tracks: [
+          {
+            id: 'T1',
+            property: 'transform',
+            keyframes: [
+              { id: 'K1', time: 0, value: 'translateY(40px)', easing: 'ease-out' },
+              { id: 'K2', time: 800, value: 'translateY(0px)', easing: 'linear' },
+            ],
+          },
+        ],
+      },
+    ],
+  }
+
+  it('gates full-motion CSS behind no-preference', () => {
+    const out = exportCssReducedMotion(rmDoc)
+    expect(out).toContain('@media (prefers-reduced-motion: no-preference)')
+    expect(out).toContain('translateY(40px)')
+  })
+
+  it('provides an opacity-only reduced fallback at half duration', () => {
+    const out = exportCssReducedMotion(rmDoc)
+    expect(out).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(out).toContain('kf-L1-reduced')
+    expect(out).toContain('animation: kf-L1-reduced 400ms ease-out both;')
+    // reduced variant must not contain movement
+    const reduceBlock = out.split('(prefers-reduced-motion: reduce)')[1]
+    expect(reduceBlock).not.toContain('translateY')
+  })
+
+  it('default exportCss output is unchanged (no media gates)', () => {
+    const out = exportCss(rmDoc)
+    expect(out).not.toContain('prefers-reduced-motion')
   })
 })
