@@ -11,6 +11,7 @@ import {
   addKeyframe,
   updateKeyframe,
   removeKeyframe,
+  removeTrack,
   setDuration,
 } from '@/store'
 import type { AnimationDocument } from '@/types'
@@ -225,5 +226,28 @@ describe('setDuration', () => {
   it('updates document duration', () => {
     setDuration(3000)
     expect(doc.duration).toBe(3000)
+  })
+})
+
+describe('removeTrack', () => {
+  it('removes only the target track', () => {
+    setDoc(blankDoc())
+    addLayer()
+    addTrack(doc.layers[0].id, 'opacity')
+    addTrack(doc.layers[0].id, 'width')
+    const [t1, t2] = doc.layers[0].tracks
+    removeTrack(doc.layers[0].id, t1.id)
+    expect(doc.layers[0].tracks).toHaveLength(1)
+    expect(doc.layers[0].tracks[0].property).toBe('width')
+    void t2
+  })
+
+  it('is a no-op for unknown track ids', () => {
+    setDoc(blankDoc())
+    addLayer()
+    addTrack(doc.layers[0].id, 'opacity')
+    const before = doc.layers[0].tracks.length
+    removeTrack(doc.layers[0].id, 'nonexistent')
+    expect(doc.layers[0].tracks.length).toBe(before)
   })
 })

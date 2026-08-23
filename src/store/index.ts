@@ -205,6 +205,17 @@ export function addTrack(layerId: string, property: AnimatableProperty) {
   )
 }
 
+/** Remove an entire property track (and all its keyframes) from a layer. */
+export function removeTrack(layerId: string, trackId: string) {
+  setDoc(
+    produce((d) => {
+      const layer = d.layers.find((l) => l.id === layerId)
+      if (!layer) return
+      layer.tracks = layer.tracks.filter((t) => t.id !== trackId)
+    }),
+  )
+}
+
 export function addKeyframe(layerId: string, trackId: string, kf: Omit<Keyframe, 'id'>) {
   setDoc(
     produce((d) => {
