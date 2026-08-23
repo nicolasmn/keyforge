@@ -21,7 +21,7 @@
   "dependencies": {
     "@solid-primitives/storage": "~4.3.0",
     "@thisbeyond/solid-dnd": "^0.7.4",
-    "solid-js": "^1.9.13",
+    "solid-js": "^1.9.15",
     "split.js": "^1.6.5"
   },
   "devDependencies": {
