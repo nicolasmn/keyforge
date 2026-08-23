@@ -175,6 +175,18 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* rename affordance: pencil icon appears on hover/focus next to the name */
+  .layer-tree__rename-hint {
+    opacity: 0;
+    margin-left: var(--space-1);
+    flex-shrink: 0;
+    color: var(--color-text-muted);
+    transition: opacity var(--duration-fast, 120ms);
+  }
+  .layer-tree__item:hover .layer-tree__rename-hint,
+  .layer-tree__name:focus-visible .layer-tree__rename-hint {
+    opacity: 1;
+  }
   .layer-tree__name-input {
     flex: 1;
     min-width: 0;
@@ -354,5 +366,27 @@
 }
 .doc-bar__error {
   font-size: var(--font-size-xs, 11px);
+  color: var(--color-danger);
+}
+
+/* ── Duration affordance in playback time display ────────── */
+.playback__duration {
+  cursor: pointer;
+  border-bottom: 1px dashed var(--color-text-muted);
+  padding-inline: 1px;
+}
+.playback__duration:hover,
+.playback__duration:focus-visible {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+}
+.playback__duration-input {
+  width: 6ch;
+  font-size: inherit;
+  font-family: inherit;
+  padding: 0 2px;
+}
+.playback__duration-input--invalid {
+  border-color: var(--color-danger);
   color: var(--color-danger);
 }
