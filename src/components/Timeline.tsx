@@ -8,6 +8,7 @@ import {
   selectedLayerId,
   selectedKeyframeId,
   setSelectedKeyframeId,
+  setSelectedLayerId,
   updateKeyframe,
 } from '@/store'
 
@@ -17,6 +18,8 @@ const LABEL_WIDTH = 120
 const KF_RADIUS = 6
 const TOUCH_SLOP = 10
 const HANDLE_HIT = 12
+/** Extra px added below the last track row when sizing the canvas. */
+const CONTENT_PAD_BOTTOM = 2
 
 export default function Timeline() {
   let canvas: HTMLCanvasElement | undefined
@@ -24,9 +27,12 @@ export default function Timeline() {
   let draggingKf: { layerId: string; trackId: string; kfId: string } | null = null
   let scrubbing = false
   let resizingDuration = false
-  let touchStartX = 0
-  let touchStartY = 0
-  let touchMoved = false
+  /** pointerId of the gesture currently owning the canvas, if any */
+  let activePointerId: number | null = null
+  let downX = 0
+  let downY = 0
+  let downPointerType = 'mouse'
+  let movedPastSlop = false
 
   function timeToX(time: number, width: number) {
     return LABEL_WIDTH + (time / doc.duration) * (width - LABEL_WIDTH)
@@ -148,22 +154,33 @@ export default function Timeline() {
     ctx.fill()
   }
 
+  /** Number of track rows drawn below the ruler header. */
+  function totalTrackRows() {
+    let rows = 0
+    for (const layer of doc.layers) rows += layer.tracks.length
+    return rows
+  }
+
   function resize() {
     if (!canvas) return
     const dpr = window.devicePixelRatio || 1
     const rect = canvas.parentElement!.getBoundingClientRect()
+    // Grow beyond the visible panel when there are more rows than fit, so the
+    // container can scroll vertically instead of clipping tracks.
+    const contentHeight = HEADER_HEIGHT + totalTrackRows() * TRACK_HEIGHT + CONTENT_PAD_BOTTOM
+    const height = Math.max(rect.height, contentHeight)
     canvas.width = rect.width * dpr
-    canvas.height = rect.height * dpr
+    canvas.height = height * dpr
     canvas.style.width = `${rect.width}px`
-    canvas.style.height = `${rect.height}px`
+    canvas.style.height = `${height}px`
     draw()
   }
 
-  function cssX(e: MouseEvent | Touch) {
+  function cssX(e: PointerEvent | MouseEvent) {
     return e.clientX - canvas!.getBoundingClientRect().left
   }
 
-  function cssY(e: MouseEvent | Touch) {
+  function cssY(e: PointerEvent | MouseEvent) {
     return e.clientY - canvas!.getBoundingClientRect().top
   }
 
@@ -202,9 +219,33 @@ export default function Timeline() {
     }
   }
 
-  function onMouseDown(e: MouseEvent) {
-    const x = cssX(e)
-    const y = cssY(e)
+  function beginDrag(e: PointerEvent) {
+    activePointerId = e.pointerId
+    downX = cssX(e)
+    downY = cssY(e)
+    downPointerType = e.pointerType
+    movedPastSlop = false
+  }
+
+  function endDrag() {
+    resizingDuration = false
+    draggingKf = null
+    scrubbing = false
+    activePointerId = null
+  }
+
+  function onPointerDown(e: PointerEvent) {
+    if (activePointerId !== null) return // a gesture already owns the canvas
+    beginDrag(e)
+    // Capture the pointer so moves/ups keep streaming to the canvas even when
+    // the cursor (or finger) leaves the timeline area mid-gesture.
+    try {
+      canvas!.setPointerCapture(e.pointerId)
+    } catch {
+      // Pointer no longer active (e.g. synthetic event) — in-canvas drags still work.
+    }
+    const x = downX
+    const y = downY
     if (y < HEADER_HEIGHT) {
       if (isOverHandle(x)) {
         resizingDuration = true
@@ -219,32 +260,63 @@ export default function Timeline() {
     const hit = hitTestKeyframe(x, y)
     if (hit) {
       draggingKf = hit
+      // Selecting a keyframe also selects its layer so the Inspector,
+      // which gates on the layer selection, shows the owning tracks.
       setSelectedKeyframeId(hit.kfId)
+      setSelectedLayerId(hit.layerId)
+      canvas!.style.cursor = 'grabbing'
     } else {
       setPlaying(false)
       setPlayhead(xToTime(x, canvas!.offsetWidth))
     }
   }
 
-  function onMouseMove(e: MouseEvent) {
+  function onPointerMove(e: PointerEvent) {
+    if (activePointerId !== null && e.pointerId !== activePointerId) return
     const x = cssX(e)
+    const y = cssY(e)
+    if (!movedPastSlop && (Math.abs(x - downX) > TOUCH_SLOP || Math.abs(y - downY) > TOUCH_SLOP))
+      movedPastSlop = true
     if (resizingDuration) {
       applyDurationFromX(x)
       return
     }
     if (scrubbing) setPlayhead(xToTime(x, canvas!.offsetWidth))
-    if (draggingKf) {
+    // Touch keeps its small-movement slop so sloppy taps don't nudge keyframes.
+    if (draggingKf && (downPointerType !== 'touch' || movedPastSlop)) {
       updateKeyframe(draggingKf.layerId, draggingKf.trackId, draggingKf.kfId, {
         time: Math.round(xToTime(x, canvas!.offsetWidth)),
       })
     }
-    canvas!.style.cursor = isOverHandle(x) && cssY(e) < HEADER_HEIGHT ? 'ew-resize' : ''
+    canvas!.style.cursor = isOverHandle(x) && y < HEADER_HEIGHT ? 'ew-resize' : ''
   }
 
-  function onMouseUp() {
-    resizingDuration = false
-    draggingKf = null
-    scrubbing = false
+  function onPointerUp(e: PointerEvent) {
+    if (activePointerId === null || e.pointerId !== activePointerId) return
+    const wasTap = !movedPastSlop
+    const startX = downX
+    const startY = downY
+    const pointerType = downPointerType
+    endDrag()
+    // Preserve the old touch affordance: tapping the duration handle prompts.
+    if (pointerType === 'touch' && wasTap && startY < HEADER_HEIGHT && isOverHandle(startX)) {
+      promptDuration()
+    }
+  }
+
+  /** Safety net: if capture is lost mid-gesture (e.g. pointercancel), end cleanly. */
+  function onLostPointerCapture(e: PointerEvent) {
+    if (e.pointerId !== activePointerId) return
+    endDrag()
+  }
+
+  function onWheel(e: WheelEvent) {
+    // Only hijack horizontal trackpad swipes; vertical deltas scroll the page.
+    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return
+    e.preventDefault()
+    setPlaying(false)
+    const msPerPx = doc.duration / (canvas!.offsetWidth - LABEL_WIDTH)
+    setPlayhead((prev) => Math.max(0, Math.min(doc.duration, prev + e.deltaX * msPerPx)))
   }
 
   function onDblClick(e: MouseEvent) {
@@ -255,79 +327,10 @@ export default function Timeline() {
     }
   }
 
-  function onTouchStart(e: TouchEvent) {
-    const t = e.touches[0]
-    touchStartX = cssX(t)
-    touchStartY = cssY(t)
-    touchMoved = false
-    if (touchStartY < HEADER_HEIGHT) {
-      if (isOverHandle(touchStartX)) {
-        resizingDuration = true
-        setPlaying(false)
-        return
-      }
-      scrubbing = true
-      setPlaying(false)
-      setPlayhead(xToTime(touchStartX, canvas!.offsetWidth))
-    }
-  }
-
-  function onTouchMove(e: TouchEvent) {
-    e.preventDefault()
-    const t = e.touches[0]
-    const x = cssX(t)
-    const y = cssY(t)
-    if (Math.abs(x - touchStartX) > TOUCH_SLOP || Math.abs(y - touchStartY) > TOUCH_SLOP)
-      touchMoved = true
-    if (resizingDuration) {
-      applyDurationFromX(x)
-      return
-    }
-    if (scrubbing) {
-      setPlayhead(xToTime(x, canvas!.offsetWidth))
-      return
-    }
-    if (draggingKf) {
-      updateKeyframe(draggingKf.layerId, draggingKf.trackId, draggingKf.kfId, {
-        time: Math.round(xToTime(x, canvas!.offsetWidth)),
-      })
-      return
-    }
-    if (touchMoved) {
-      const hit = hitTestKeyframe(touchStartX, touchStartY)
-      if (hit) {
-        draggingKf = hit
-        setSelectedKeyframeId(hit.kfId)
-      }
-    }
-  }
-
-  function onTouchEnd(e: TouchEvent) {
-    if (!touchMoved) {
-      if (touchStartY < HEADER_HEIGHT && isOverHandle(touchStartX)) {
-        promptDuration()
-      } else {
-        const hit = hitTestKeyframe(touchStartX, touchStartY)
-        if (hit) {
-          setSelectedKeyframeId(hit.kfId)
-        } else if (touchStartY >= HEADER_HEIGHT) {
-          setPlaying(false)
-          setPlayhead(xToTime(touchStartX, canvas!.offsetWidth))
-        }
-      }
-    }
-    draggingKf = null
-    scrubbing = false
-    resizingDuration = false
-    touchMoved = false
-    e.preventDefault()
-  }
-
+  // Pointer events cover mouse, touch and pen alike (the canvas sets
+  // `touch-action: none` in CSS), so the old separate touch handlers are gone.
   function setCanvasRef(el: HTMLCanvasElement) {
     canvas = el
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: false })
-    el.addEventListener('touchend', onTouchEnd, { passive: false })
   }
 
   onMount(() => {
@@ -347,16 +350,23 @@ export default function Timeline() {
     raf = requestAnimationFrame(draw)
   })
 
+  // Track-count changes alter the content height — re-measure the canvas.
+  createEffect(() => {
+    void doc.layers.map((l) => l.tracks.length)
+    resize()
+  })
+
   onCleanup(() => cancelAnimationFrame(raf))
 
   return (
     <div class="timeline">
       <canvas
         ref={setCanvasRef}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onLostPointerCapture={onLostPointerCapture}
+        onWheel={onWheel}
         onDblClick={onDblClick}
       />
     </div>

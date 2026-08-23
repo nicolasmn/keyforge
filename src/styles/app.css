@@ -265,7 +265,11 @@
   /* ── Timeline ────────────────────────────────────────────── */
   .timeline {
     flex: 1;
-    overflow: hidden;
+    min-height: 0;
+    /* Rows overflow vertically when the canvas content is taller than the
+       panel (canvas height = max(panel, header + rows × TRACK_HEIGHT)). */
+    overflow-x: hidden;
+    overflow-y: auto;
   }
   .timeline canvas {
     display: block;
