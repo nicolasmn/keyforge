@@ -68,6 +68,9 @@ export default function EasingEditor(props: Props) {
     setSpringPreview(generateSpringLinear(cfg))
     setSpringDemoMs(Math.round(Math.min(settleTime(cfg) * 1.05, 10) * 1000))
     if (!interacting) return
+    // Live spring shaping takes over the canvas; drop any bezier handles so
+    // stale drag targets don't linger while the spring curve is shown.
+    setHandles(null)
     setSpringLive(true)
     setSpringAnimAlt((v) => !v)
   }
@@ -143,8 +146,13 @@ export default function EasingEditor(props: Props) {
       return [pad + x * inner, pad + (1 - y) * inner]
     }
 
+    // Spring preview wins while active (user shaping a spring or an applied
+    // linear() easing) — otherwise fall back to bezier handles / straight.
+    const sp = springPoints()
     const h = handles()
-    if (h) {
+    if (sp) {
+      drawSpringCurve(ctx, sp, { pad, inner, W, dpr, colorPrimary, colorMuted })
+    } else if (h) {
       const [x1, y1, x2, y2] = h
       const [hx1, hy1] = toCanvas(x1, y1)
       const [hx2, hy2] = toCanvas(x2, y2)
@@ -193,18 +201,14 @@ export default function EasingEditor(props: Props) {
         }
       })
     } else {
-      const sp = springPoints()
-      if (sp) drawSpringCurve(ctx, sp, { pad, inner, W, dpr, colorPrimary, colorMuted })
-      else {
-        ctx.strokeStyle = colorPrimary
-        ctx.lineWidth = 2 * dpr
-        const [p0x, p0y] = toCanvas(0, 0)
-        const [p1x, p1y] = toCanvas(1, 1)
-        ctx.beginPath()
-        ctx.moveTo(p0x, p0y)
-        ctx.lineTo(p1x, p1y)
-        ctx.stroke()
-      }
+      ctx.strokeStyle = colorPrimary
+      ctx.lineWidth = 2 * dpr
+      const [p0x, p0y] = toCanvas(0, 0)
+      const [p1x, p1y] = toCanvas(1, 1)
+      ctx.beginPath()
+      ctx.moveTo(p0x, p0y)
+      ctx.lineTo(p1x, p1y)
+      ctx.stroke()
     }
   }
 
@@ -437,10 +441,10 @@ export default function EasingEditor(props: Props) {
 
   // ── Render ─────────────────────────────────────────────────────────────
   function canvasAriaLabel(): string {
-    if (handles())
-      return `Easing curve editor. Arrow keys move handle ${activeHandle()} (press 1 or 2 to switch, Shift for bigger steps).`
     if (springPoints())
       return 'Easing curve editor. Spring (linear()) curve preview — shape it with the spring controls below.'
+    if (handles())
+      return `Easing curve editor. Arrow keys move handle ${activeHandle()} (press 1 or 2 to switch, Shift for bigger steps).`
     return 'Easing curve editor. Linear curve — paste a cubic-bezier value to edit handles.'
   }
 
