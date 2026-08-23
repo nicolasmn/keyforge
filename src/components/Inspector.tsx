@@ -65,8 +65,19 @@ function validate(type: ValueToken['type'], value: string): boolean {
   return value.length > 0
 }
 
-/** Enter/Space activation for chip-like spans that act as buttons (a11y). */
+/** Enter/Space activation for chip-like spans that act as buttons (a11y).
+ *  Ignores events from form fields — the inline edit input lives inside the
+ *  chip span, and its keystrokes must not trigger activation or lose
+ *  characters to preventDefault (e.g. spaces in cubic-bezier values). */
 function chipKeyDown(e: KeyboardEvent, action: () => void) {
+  const target = e.target
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+  ) {
+    return
+  }
   if (e.key === 'Enter' || e.key === ' ') {
     e.preventDefault()
     action()
