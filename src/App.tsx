@@ -30,7 +30,7 @@ export default function App() {
   const isMobile = createMediaQuery('(max-width: 768px)')
 
   return (
-    <>
+    <div class="app">
       {/* Document bar — name + import/export; hidden on mobile (space) */}
       <Show when={!isMobile()}>
         <header class="app__doc-header">
@@ -77,6 +77,6 @@ export default function App() {
         </div>
         <MobileTabs />
       </Show>
-    </>
+    </div>
   )
 }
