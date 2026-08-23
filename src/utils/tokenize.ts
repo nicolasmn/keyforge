@@ -37,7 +37,8 @@ function detectType(value: string, field: 'value' | 'easing'): TokenType {
   // named-color heuristic; browsers always define CSS.
   if (/^[a-z]+$/.test(v) && typeof CSS !== 'undefined' && CSS.supports('color', v)) return 'color'
   if (NUMBER_UNIT_RE.test(v)) return 'number'
-  if (EASING_NAMES.has(v) || v.startsWith('cubic-bezier(')) return 'easing'
+  if (EASING_NAMES.has(v) || v.startsWith('cubic-bezier(') || v.startsWith('linear('))
+    return 'easing'
   return 'string'
 }
 

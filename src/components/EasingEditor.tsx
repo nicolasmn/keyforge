@@ -1,6 +1,12 @@
 import { createSignal, createEffect, onMount, For, Show } from 'solid-js'
 import { BUILTIN_PRESETS, parseCubicBezier, evalCubicBezier } from '@/utils/easing-presets'
 import { customEasings, addEasing, removeEasing } from '@/store/easingLibrary'
+import {
+  SPRING_PRESETS,
+  perceptualToConfig,
+  generateSpringLinear,
+  type PerceptualSpring,
+} from '@/utils/spring'
 
 interface Props {
   value: string
@@ -21,7 +27,24 @@ export default function EasingEditor(props: Props) {
   const [saveName, setSaveName] = createSignal('')
   const [saveError, setSaveError] = createSignal('')
   const [activeHandle, setActiveHandle] = createSignal<0 | 1 | 2>(1)
+  const [springDuration, setSpringDuration] = createSignal(450)
+  const [springBounce, setSpringBounce] = createSignal(0.2)
+  const [springPreview, setSpringPreview] = createSignal<string | null>(null)
   let dragging: 0 | 1 | 2 = 0
+
+  function applySpring(p: PerceptualSpring) {
+    setSpringDuration(p.visualDurationMs)
+    setSpringBounce(p.bounce)
+    regenerateSpring()
+  }
+
+  function regenerateSpring() {
+    const cfg = perceptualToConfig({
+      visualDurationMs: springDuration(),
+      bounce: springBounce(),
+    })
+    setSpringPreview(generateSpringLinear(cfg))
+  }
 
   // ── Canvas draw ────────────────────────────────────────────────────────
   function draw() {
@@ -269,6 +292,7 @@ export default function EasingEditor(props: Props) {
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
   onMount(() => {
+    regenerateSpring()
     if (!canvas) return
     const dpr = window.devicePixelRatio || 1
     canvas.width = CANVAS_CSS * dpr
@@ -370,6 +394,75 @@ export default function EasingEditor(props: Props) {
           </For>
         </div>
       </Show>
+
+      {/* Spring (linear()) generator */}
+      <div class="easing-editor__section-label">Spring</div>
+      <div class="easing-editor__spring">
+        <div class="easing-editor__presets">
+          <For each={Object.entries(SPRING_PRESETS)}>
+            {([, preset]) => (
+              <button
+                class="easing-editor__preset"
+                onClick={() => applySpring(preset.perceptual)}
+                title={`Spring: ${preset.label}`}
+              >
+                {preset.label}
+              </button>
+            )}
+          </For>
+        </div>
+        <div class="easing-editor__spring-params">
+          <label class="easing-editor__spring-param">
+            <span>Duration</span>
+            <input
+              type="range"
+              min="150"
+              max="1200"
+              step="10"
+              value={springDuration()}
+              onInput={(e) => {
+                setSpringDuration(Number((e.currentTarget as HTMLInputElement).value))
+                regenerateSpring()
+              }}
+            />
+            <em>{springDuration()}ms</em>
+          </label>
+          <label class="easing-editor__spring-param">
+            <span>Bounce</span>
+            <input
+              type="range"
+              min="0"
+              max="0.9"
+              step="0.05"
+              value={springBounce()}
+              onInput={(e) => {
+                setSpringBounce(Number((e.currentTarget as HTMLInputElement).value))
+                regenerateSpring()
+              }}
+            />
+            <em>{Math.round(springBounce() * 100)}%</em>
+          </label>
+        </div>
+        <Show when={springPreview()}>
+          <code class="easing-editor__spring-out" title={springPreview() ?? undefined}>
+            {springPreview()?.slice(0, 72)}…
+          </code>
+        </Show>
+        <button
+          class="btn btn--ghost easing-editor__spring-apply"
+          onClick={() => {
+            const curve = springPreview()
+            if (curve) {
+              setRawInput(curve)
+              setHandles(null)
+              props.onChange(curve)
+            }
+          }}
+          disabled={!springPreview()}
+        >
+          Use spring curve
+        </button>
+      </div>
 
       {/* Save form */}
       <div class="easing-editor__save-row">

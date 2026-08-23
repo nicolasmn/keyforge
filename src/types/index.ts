@@ -5,6 +5,8 @@ export type EasingName =
   | 'ease-out'
   | 'ease-in-out'
   | 'cubic-bezier(0.34,1.56,0.64,1)'
+  // Generated spring curves (see utils/spring.ts) — any linear() easing
+  | (string & {})
 
 export type AnimatableProperty =
   | 'opacity'

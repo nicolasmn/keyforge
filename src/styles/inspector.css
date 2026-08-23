@@ -724,3 +724,47 @@
   color: var(--color-danger);
   padding-inline: var(--space-1, 4px);
 }
+
+/* ── Spring (linear()) generator section ─────────────────── */
+.easing-editor__spring {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+.easing-editor__spring-params {
+  display: flex;
+  gap: var(--space-3, 12px);
+}
+.easing-editor__spring-param {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  flex: 1;
+  font-size: var(--chip-fs);
+  color: var(--color-text-muted);
+}
+.easing-editor__spring-param input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--color-accent);
+}
+.easing-editor__spring-param em {
+  font-style: normal;
+  font-family: var(--mono);
+  min-width: 4.5ch;
+  text-align: right;
+}
+.easing-editor__spring-out {
+  font-family: var(--mono);
+  font-size: var(--label-fs, 11px);
+  color: var(--color-text-faint, var(--color-text-muted));
+  background: var(--color-surface-2);
+  border-radius: var(--radius-sm, 4px);
+  padding: 3px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.easing-editor__spring-apply {
+  align-self: flex-start;
+}
