@@ -15,10 +15,7 @@
  * e.relatedTarget to see if focus stayed inside the component. Only commit
  * when focus truly left.
  */
-import {
-  createSignal, createMemo, For, Show, onCleanup,
-  type Component,
-} from 'solid-js'
+import { createSignal, createMemo, For, Show, onCleanup, type Component } from 'solid-js'
 import { render } from 'solid-js/web'
 import {
   selectedLayerId,
@@ -33,16 +30,19 @@ import {
 import type { AnimatableProperty, EasingName, ValueToken, SubToken } from '@/types'
 import EasingEditor from './EasingEditor'
 import { tokenizeLayer, NUMBER_UNIT_RE } from '@/utils/tokenize'
-import {
-  completionsFor,
-  UNIT_GROUPS,
-  isAngleUnit,
-  toDeg,
-} from '@/utils/cssCompletions'
+import { completionsFor, UNIT_GROUPS, isAngleUnit, toDeg } from '@/utils/cssCompletions'
 
 const PROPERTIES: AnimatableProperty[] = [
-  'opacity', 'transform', 'background-color', 'color',
-  'border-radius', 'width', 'height', 'scale', 'translate', 'rotate',
+  'opacity',
+  'transform',
+  'background-color',
+  'color',
+  'border-radius',
+  'width',
+  'height',
+  'scale',
+  'translate',
+  'rotate',
 ]
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -58,9 +58,10 @@ function commit(path: ValueToken['path'], value: string) {
 }
 
 function validate(type: ValueToken['type'], value: string): boolean {
-  if (type === 'color')  return CSS.supports('color', value)
+  if (type === 'color') return CSS.supports('color', value)
   if (type === 'number') return NUMBER_UNIT_RE.test(value) || value === '' || !isNaN(Number(value))
-  if (type === 'easing') return value === 'linear' || /^cubic-bezier\(/.test(value) || /^steps\(/.test(value)
+  if (type === 'easing')
+    return value === 'linear' || /^cubic-bezier\(/.test(value) || /^steps\(/.test(value)
   return value.length > 0
 }
 
@@ -68,26 +69,49 @@ function mountDatalist(id: string, options: string[]): () => void {
   const host = document.createElement('div')
   host.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none'
   document.body.appendChild(host)
-  const dispose = render(() => (
-    <datalist id={id}>
-      <For each={options}>{(o) => <option value={o} />}</For>
-    </datalist>
-  ), host)
-  return () => { dispose(); document.body.removeChild(host) }
+  const dispose = render(
+    () => (
+      <datalist id={id}>
+        <For each={options}>{(o) => <option value={o} />}</For>
+      </datalist>
+    ),
+    host,
+  )
+  return () => {
+    dispose()
+    document.body.removeChild(host)
+  }
 }
 
 // ── RotationDial ───────────────────────────────────────────────────────────────
 
 function RotationDial(props: { deg: number }) {
   const R = 7
-  const cx = 9, cy = 9
+  const cx = 9,
+    cy = 9
   const rad = () => ((props.deg - 90) * Math.PI) / 180
-  const nx  = () => +(cx + R * Math.cos(rad())).toFixed(2)
-  const ny  = () => +(cy + R * Math.sin(rad())).toFixed(2)
+  const nx = () => +(cx + R * Math.cos(rad())).toFixed(2)
+  const ny = () => +(cy + R * Math.sin(rad())).toFixed(2)
   return (
     <svg class="kf-rot-dial" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-      <circle cx={cx} cy={cy} r={R} fill="none" stroke="currentColor" stroke-opacity="0.25" stroke-width="1.5" />
-      <line x1={cx} y1={cy} x2={nx()} y2={ny()} stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={R}
+        fill="none"
+        stroke="currentColor"
+        stroke-opacity="0.25"
+        stroke-width="1.5"
+      />
+      <line
+        x1={cx}
+        y1={cy}
+        x2={nx()}
+        y2={ny()}
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+      />
       <circle cx={cx} cy={cy} r="1.5" fill="currentColor" />
     </svg>
   )
@@ -101,17 +125,21 @@ function RotationDial(props: { deg: number }) {
 // Only commit when focus leaves the entire component.
 
 interface NumberUnitFieldProps {
-  numStr:   string
-  unit:     string
+  numStr: string
+  unit: string
   onCommit: (num: string, unit: string) => void
   onCancel: () => void
 }
 
 function NumberUnitField(props: NumberUnitFieldProps) {
   let wrapperEl: HTMLSpanElement | undefined
-  let inputEl:   HTMLInputElement | undefined
+  let inputEl: HTMLInputElement | undefined
+  // Intentional seed-once: the inline editor snapshots the value at mount;
+  // live-tracking props while open would clobber in-progress user input.
+  // eslint-disable-next-line solid/reactivity
   const [localUnit, setLocalUnit] = createSignal(props.unit)
-  const [localNum,  setLocalNum]  = createSignal(props.numStr)
+  // eslint-disable-next-line solid/reactivity
+  const [localNum, setLocalNum] = createSignal(props.numStr)
 
   const deg = () =>
     isAngleUnit(localUnit()) ? toDeg(parseFloat(localNum()) || 0, localUnit()) : null
@@ -128,23 +156,36 @@ function NumberUnitField(props: NumberUnitFieldProps) {
 
   return (
     <span
-      ref={(el) => { wrapperEl = el }}
+      ref={(el) => {
+        wrapperEl = el
+      }}
       class="kf-num-field"
       onFocusOut={onWrapperFocusOut}
     >
       <input
         ref={(el) => {
           inputEl = el
-          setTimeout(() => { el?.focus(); el?.select() }, 0)
+          setTimeout(() => {
+            el?.focus()
+            el?.select()
+          }, 0)
         }}
         class="kf-num-field__num"
         type="number"
         value={props.numStr}
         onInput={(e) => setLocalNum((e.currentTarget as HTMLInputElement).value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') { e.preventDefault(); doCommit() }
-          if (e.key === 'Escape') { e.preventDefault(); props.onCancel() }
-          if (e.key === 'Tab') { /* let tab move to unit select naturally */ }
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            doCommit()
+          }
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            props.onCancel()
+          }
+          if (e.key === 'Tab') {
+            /* let tab move to unit select naturally */
+          }
         }}
         autocomplete="off"
         autocorrect="off"
@@ -166,11 +207,7 @@ function NumberUnitField(props: NumberUnitFieldProps) {
         <For each={UNIT_GROUPS}>
           {(group) => (
             <optgroup label={group.label}>
-              <For each={group.units}>
-                {(u) => (
-                  <option value={u}>{u === '' ? '—' : u}</option>
-                )}
-              </For>
+              <For each={group.units}>{(u) => <option value={u}>{u === '' ? '—' : u}</option>}</For>
             </optgroup>
           )}
         </For>
@@ -203,7 +240,7 @@ function ColorSwatch(props: { token: ValueToken }) {
           const h = (n: number) => n.toString(16).padStart(2, '0')
           inp.value = `#${h(+m[1])}${h(+m[2])}${h(+m[3])}`
         }
-        inp.oninput  = () => commit(props.token.path, inp.value)
+        inp.oninput = () => commit(props.token.path, inp.value)
         inp.onchange = () => commit(props.token.path, inp.value)
         inp.click()
       }}
@@ -220,9 +257,7 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
     const n = parseFloat(num)
     if (!isNaN(n)) {
       const updated = props.parent.subTokens!.map((st) =>
-        st.argIndex === props.sub.argIndex
-          ? { ...st, value: String(n), unit }
-          : st
+        st.argIndex === props.sub.argIndex ? { ...st, value: String(n), unit } : st,
       ) as SubToken[]
       commit(props.parent.path, props.sub.assembler(updated))
     }
@@ -238,7 +273,8 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
           onClick={() => setEditing(true)}
           title="Tap to edit"
         >
-          {props.sub.value}{props.sub.unit}
+          {props.sub.value}
+          {props.sub.unit}
         </span>
       }
     >
@@ -256,10 +292,12 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
 
 function ValueChip(props: { token: ValueToken }) {
   const [editing, setEditing] = createSignal(false)
-  const [invalid,  setInvalid]  = createSignal(false)
+  const [invalid, setInvalid] = createSignal(false)
   let inputEl: HTMLInputElement | undefined
   let cleanupDl: (() => void) | null = null
-  onCleanup(() => { cleanupDl?.() })
+  onCleanup(() => {
+    cleanupDl?.()
+  })
 
   const dlId = `kf-dl-${Math.random().toString(36).slice(2)}`
 
@@ -310,9 +348,17 @@ function ValueChip(props: { token: ValueToken }) {
   }
 
   function onKeyDown(e: KeyboardEvent) {
-    if (e.key === 'Enter') { e.preventDefault(); close() }
-    if (e.key === 'Escape') { e.preventDefault(); close(true) }
-    if (e.key === 'Tab')   { close() }
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      close()
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      close(true)
+    }
+    if (e.key === 'Tab') {
+      close()
+    }
   }
 
   function onInputChange(e: Event) {
@@ -330,7 +376,7 @@ function ValueChip(props: { token: ValueToken }) {
             {(sub, i) => (
               <>
                 <SubScrub sub={sub} parent={props.token} />
-                <Show when={i() < (props.token.subTokens!.length - 1)}>
+                <Show when={i() < props.token.subTokens!.length - 1}>
                   <span class="kf-chip__sep">, </span>
                 </Show>
               </>
@@ -374,10 +420,12 @@ function ValueChip(props: { token: ValueToken }) {
           classList={{
             [`kf-chip--${props.token.type}`]: true,
             'kf-chip--editing': editing(),
-            'kf-chip--error':   editing() && invalid(),
+            'kf-chip--error': editing() && invalid(),
           }}
           title="Tap to edit"
-          onClick={() => { if (!editing()) open() }}
+          onClick={() => {
+            if (!editing()) open()
+          }}
         >
           <Show when={props.token.type === 'color'}>
             <ColorSwatch token={props.token} />
@@ -387,7 +435,10 @@ function ValueChip(props: { token: ValueToken }) {
             <input
               ref={(el) => {
                 inputEl = el
-                setTimeout(() => { el?.focus(); el?.select() }, 0)
+                setTimeout(() => {
+                  el?.focus()
+                  el?.select()
+                }, 0)
               }}
               class="kf-chip__input"
               list={dlId}
@@ -424,13 +475,12 @@ function KeyframeRow(props: {
   easingToken: ValueToken
 }) {
   const [easingOpen, setEasingOpen] = createSignal(false)
-  const [editTime,   setEditTime]   = createSignal(false)
+  const [editTime, setEditTime] = createSignal(false)
   let timeInputEl: HTMLInputElement | undefined
 
   function commitTime() {
     const n = Number(timeInputEl?.value)
-    if (!isNaN(n) && n >= 0)
-      updateKeyframe(props.layerId, props.trackId, props.kfId, { time: n })
+    if (!isNaN(n) && n >= 0) updateKeyframe(props.layerId, props.trackId, props.kfId, { time: n })
     setEditTime(false)
   }
 
@@ -439,14 +489,18 @@ function KeyframeRow(props: {
       <div class="kf-row__main">
         <Show when={!editTime()}>
           <span class="kf-time" onClick={() => setEditTime(true)} title="Click to edit time">
-            {props.time}<span class="kf-time__unit">ms</span>
+            {props.time}
+            <span class="kf-time__unit">ms</span>
           </span>
         </Show>
         <Show when={editTime()}>
           <input
             ref={(el) => {
               timeInputEl = el
-              setTimeout(() => { el?.focus(); el?.select() }, 0)
+              setTimeout(() => {
+                el?.focus()
+                el?.select()
+              }, 0)
             }}
             class="kf-time kf-time--input"
             type="number"
@@ -531,9 +585,10 @@ function TrackSection(props: {
 
       <Show when={!collapsed()}>
         <div class="track__keyframes">
-          <For each={props.kfTokenPairs} fallback={
-            <span class="track__empty">No keyframes — tap +&nbsp;KF to add</span>
-          }>
+          <For
+            each={props.kfTokenPairs}
+            fallback={<span class="track__empty">No keyframes — tap +&nbsp;KF to add</span>}
+          >
             {(pair) => (
               <KeyframeRow
                 layerId={props.layerId}
@@ -591,7 +646,9 @@ export default function Inspector() {
       setCodeViewReady(true)
     })
   }
-  onCleanup(() => { CodeViewComponent = undefined })
+  onCleanup(() => {
+    CodeViewComponent = undefined
+  })
 
   return (
     <aside class="panel inspector">
@@ -606,7 +663,10 @@ export default function Inspector() {
         <button
           class="inspector__tab"
           classList={{ 'inspector__tab--active': activeTab() === 'css' }}
-          onClick={() => { setActiveTab('css'); loadCodeView() }}
+          onClick={() => {
+            setActiveTab('css')
+            loadCodeView()
+          }}
         >
           CSS
         </button>
@@ -616,19 +676,21 @@ export default function Inspector() {
         <Show when={layer()} fallback={<p class="inspector__empty">Select a layer to inspect</p>}>
           {(l) => (
             <div class="inspector__body">
-              <For each={l().tracks} fallback={
-                <p class="inspector__empty">No tracks — add a property below</p>
-              }>
+              <For
+                each={l().tracks}
+                fallback={<p class="inspector__empty">No tracks — add a property below</p>}
+              >
                 {(track) => {
-                  const pairs = () => track.keyframes
-                    .slice()
-                    .sort((a, b) => a.time - b.time)
-                    .flatMap((kf) => {
-                      const vt = getToken(track.id, kf.id, 'value')
-                      const et = getToken(track.id, kf.id, 'easing')
-                      if (!vt || !et) return []
-                      return [{ time: kf.time, kfId: kf.id, value: vt, easing: et }]
-                    })
+                  const pairs = () =>
+                    track.keyframes
+                      .slice()
+                      .sort((a, b) => a.time - b.time)
+                      .flatMap((kf) => {
+                        const vt = getToken(track.id, kf.id, 'value')
+                        const et = getToken(track.id, kf.id, 'easing')
+                        if (!vt || !et) return []
+                        return [{ time: kf.time, kfId: kf.id, value: vt, easing: et }]
+                      })
 
                   return (
                     <TrackSection
@@ -661,7 +723,8 @@ export default function Inspector() {
       </Show>
 
       <Show when={activeTab() === 'css'}>
-        <Show when={codeViewReady() && CodeViewComponent}
+        <Show
+          when={codeViewReady() && CodeViewComponent}
           fallback={<p class="inspector__empty">Loading…</p>}
         >
           {/* @ts-expect-error: dynamic import resolved at runtime */}

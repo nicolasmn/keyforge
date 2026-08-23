@@ -14,14 +14,15 @@ import type { EasingPreset } from '@/utils/easing-presets'
 
 const _backingStore: Record<string, string> = {}
 
-// Array destructuring required for solid/reactivity lint rule
-const [customEasings, setCustomEasings] = makePersisted(
-  createSignal<EasingPreset[]>([]),
-  {
-    name: 'keyforge-easing-library',
-    storage: makeObjectStorage(_backingStore),
-  },
-)
+// Array destructuring is intentional: makePersisted's union return type
+// (array | object form) prevents solid/reactivity from proving the array
+// form, so the rule flags a legitimate destructure.
+/* eslint-disable solid/reactivity */
+const [customEasings, setCustomEasings] = makePersisted(createSignal<EasingPreset[]>([]), {
+  name: 'keyforge-easing-library',
+  storage: makeObjectStorage(_backingStore),
+})
+/* eslint-enable solid/reactivity */
 
 export { customEasings }
 
@@ -30,7 +31,7 @@ export function addEasing(name: string, value: string): void {
   if (!trimmed) return
   setCustomEasings((prev) => {
     const exists = prev.some((e) => e.name === trimmed)
-    if (exists) return prev.map((e) => e.name === trimmed ? { name: trimmed, value } : e)
+    if (exists) return prev.map((e) => (e.name === trimmed ? { name: trimmed, value } : e))
     return [...prev, { name: trimmed, value }]
   })
 }
