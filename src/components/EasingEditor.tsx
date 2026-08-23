@@ -20,9 +20,17 @@ export default function EasingEditor(props: Props) {
   let canvas: HTMLCanvasElement | undefined
   // Wrap props.value in a getter so we read it reactively inside createEffect
   const initialValue = () => props.value
+  /** Resolve named presets ('ease-out', …) to their canonical bezier so the
+   *  canvas opens with real handles instead of an inert straight line. */
+  function resolveBezier(value: string): [number, number, number, number] | null {
+    const direct = parseCubicBezier(value)
+    if (direct) return direct
+    const named = BUILTIN_PRESETS.find((p) => p.name === value)
+    return named ? parseCubicBezier(named.value) : null
+  }
   const [rawInput, setRawInput] = createSignal(initialValue())
   const [handles, setHandles] = createSignal<[number, number, number, number] | null>(
-    parseCubicBezier(initialValue()),
+    resolveBezier(initialValue()),
   )
   const [saveName, setSaveName] = createSignal('')
   const [saveError, setSaveError] = createSignal('')
@@ -258,7 +266,7 @@ export default function EasingEditor(props: Props) {
   // ── Preset / library ──────────────────────────────────────────────────
   function applyPreset(value: string) {
     setRawInput(value)
-    setHandles(parseCubicBezier(value))
+    setHandles(resolveBezier(value))
     props.onChange(value)
     draw()
   }
