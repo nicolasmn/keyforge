@@ -33,6 +33,7 @@ import EasingEditor from './EasingEditor'
 import { tokenizeKeyframe, NUMBER_UNIT_RE } from '@/utils/tokenize'
 import { completionsFor, UNIT_GROUPS, isAngleUnit, toDeg } from '@/utils/cssCompletions'
 import { PROPERTY_REGISTRY } from '@/utils/propertyRegistry'
+import { scrubbedValue, clampToProperty } from '@/utils/scrub'
 import {
   addTransformFn,
   removeTransformFn,
@@ -362,6 +363,79 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
     cleanupDl?.()
   })
 
+  // ── Safe scrubbing (mouse only; tap threshold preserves click-to-edit) ──
+  let scrub: {
+    startX: number
+    startValue: number
+    unit: string
+    active: boolean
+    raf: number
+    pendingDx: number
+    lastEvent: PointerEvent | null
+  } | null = null
+  let suppressClick = false
+
+  function startScrub(e: PointerEvent) {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return // touch/pen keep tap-to-edit
+    const { num, unit } = parsed()
+    const startNum = Number.parseFloat(num)
+    if (Number.isNaN(startNum)) return // non-numeric chips don't scrub
+    scrub = {
+      startX: e.clientX,
+      startValue: startNum,
+      unit,
+      active: false,
+      raf: 0,
+      pendingDx: 0,
+      lastEvent: e,
+    }
+    window.addEventListener('pointermove', onScrubMove)
+    window.addEventListener('pointerup', onScrubEnd)
+  }
+
+  function onScrubMove(e: PointerEvent) {
+    if (!scrub) return
+    const dx = e.clientX - scrub.startX
+    if (!scrub.active) {
+      if (Math.abs(dx) < 4) return // below threshold → still a tap
+      scrub.active = true
+      document.body.style.cursor = 'ew-resize'
+    }
+    scrub.pendingDx = e.clientX - scrub.startX
+    scrub.lastEvent = e
+    if (!scrub.raf) {
+      scrub.raf = requestAnimationFrame(() => {
+        if (!scrub) return
+        const next = clampToProperty(
+          props.property,
+          scrubbedValue(
+            { startX: scrub.startX, startValue: scrub.startValue, unit: scrub.unit },
+            scrub.pendingDx,
+            { shift: scrub.lastEvent?.shiftKey, alt: scrub.lastEvent?.altKey },
+          ),
+        )
+        commit(props.token.path, `${next}${scrub.unit}`)
+        if (scrub) scrub.raf = 0
+      })
+    }
+  }
+
+  function onScrubEnd() {
+    window.removeEventListener('pointermove', onScrubMove)
+    window.removeEventListener('pointerup', onScrubEnd)
+    if (scrub?.raf) cancelAnimationFrame(scrub.raf)
+    // Latch: click fires AFTER pointerup, so a plain boolean reset too
+    // early and the post-drag click opened the editor. Clear on next tick.
+    if (scrub?.active) {
+      suppressClick = true
+      setTimeout(() => {
+        suppressClick = false
+      }, 0)
+    }
+    scrub = null
+    document.body.style.cursor = ''
+  }
+
   const dlId = `kf-dl-${Math.random().toString(36).slice(2)}`
 
   const parsed = () => {
@@ -555,8 +629,11 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
             <span
               class="kf-chip kf-chip--number"
               classList={{ 'kf-chip--error': invalid() }}
-              onClick={() => open()}
-              title="Tap to edit"
+              onClick={() => {
+                if (!suppressClick) open()
+              }}
+              onPointerDown={startScrub}
+              title="Drag to scrub · tap to edit"
             >
               <span class="kf-chip__label">{props.token.value}</span>
               <Show when={angleDeg() !== null}>
