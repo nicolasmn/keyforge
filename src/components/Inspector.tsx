@@ -65,6 +65,14 @@ function validate(type: ValueToken['type'], value: string): boolean {
   return value.length > 0
 }
 
+/** Enter/Space activation for chip-like spans that act as buttons (a11y). */
+function chipKeyDown(e: KeyboardEvent, action: () => void) {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    action()
+  }
+}
+
 function mountDatalist(id: string, options: string[]): () => void {
   const host = document.createElement('div')
   host.style.cssText = 'position:absolute;width:0;height:0;overflow:hidden;pointer-events:none'
@@ -270,7 +278,11 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
       fallback={
         <span
           class="kf-chip kf-chip--number kf-chip--sub"
+          tabindex={0}
+          role="button"
+          aria-label={`Edit value ${props.sub.value}${props.sub.unit}`}
           onClick={() => setEditing(true)}
+          onKeyDown={(e: KeyboardEvent) => chipKeyDown(e, () => setEditing(true))}
           title="Tap to edit"
         >
           {props.sub.value}
@@ -337,6 +349,10 @@ function ValueChip(props: { token: ValueToken }) {
     }
     setInvalid(false)
     setEditing(true)
+  }
+
+  function openIfIdle() {
+    if (!editing()) open()
   }
 
   function close(revert = false) {
@@ -448,10 +464,14 @@ function ValueChip(props: { token: ValueToken }) {
             'kf-chip--editing': editing(),
             'kf-chip--error': editing() && invalid(),
           }}
+          tabindex={0}
+          role="button"
+          aria-label={`Edit ${props.token.type} value ${props.token.value}`}
           title="Tap to edit"
           onClick={() => {
             if (!editing()) open()
           }}
+          onKeyDown={(e: KeyboardEvent) => chipKeyDown(e, openIfIdle)}
         >
           <Show when={props.token.type === 'color'}>
             <ColorSwatch token={props.token} />
@@ -514,7 +534,15 @@ function KeyframeRow(props: {
     <div class="kf-row">
       <div class="kf-row__main">
         <Show when={!editTime()}>
-          <span class="kf-time" onClick={() => setEditTime(true)} title="Click to edit time">
+          <span
+            class="kf-time"
+            tabindex={0}
+            role="button"
+            aria-label={`Edit keyframe time ${props.time} milliseconds`}
+            onClick={() => setEditTime(true)}
+            onKeyDown={(e: KeyboardEvent) => chipKeyDown(e, () => setEditTime(true))}
+            title="Click to edit time"
+          >
             {props.time}
             <span class="kf-time__unit">ms</span>
           </span>
@@ -549,7 +577,12 @@ function KeyframeRow(props: {
         <span
           class="kf-chip kf-chip--easing"
           classList={{ 'kf-chip--easing-open': easingOpen() }}
+          tabindex={0}
+          role="button"
+          aria-label={`Edit easing curve ${props.easingToken.value}`}
+          aria-expanded={easingOpen()}
           onClick={() => setEasingOpen((v) => !v)}
+          onKeyDown={(e: KeyboardEvent) => chipKeyDown(e, () => setEasingOpen((v) => !v))}
           title="Edit easing curve"
         >
           {props.easingToken.value}
