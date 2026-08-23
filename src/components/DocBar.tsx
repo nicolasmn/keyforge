@@ -1,6 +1,7 @@
 import { createSignal, Show } from 'solid-js'
 import { doc, setDoc, replaceDoc, setSelectedLayerId } from '@/store'
 import { serializeDoc, deserializeDoc, validatePersisted } from '@/utils/persistence'
+import { parseCssToDoc } from '@/utils/cssImport'
 
 /**
  * DocBar — document identity + save state + import/export.
@@ -9,7 +10,24 @@ import { serializeDoc, deserializeDoc, validatePersisted } from '@/utils/persist
 export default function DocBar() {
   const [renaming, setRenaming] = createSignal(false)
   const [importError, setImportError] = createSignal('')
+  const [cssModalOpen, setCssModalOpen] = createSignal(false)
+  const [cssText, setCssText] = createSignal('')
+  const [cssWarning, setCssWarning] = createSignal('')
   let fileInput: HTMLInputElement | undefined
+
+  function importFromCss() {
+    setImportError('')
+    const result = parseCssToDoc(cssText())
+    if (!result.doc) {
+      setCssWarning(result.warnings[0] ?? 'Could not parse this CSS.')
+      return
+    }
+    replaceDoc(result.doc)
+    setSelectedLayerId(result.doc.layers[0]?.id ?? null)
+    setCssModalOpen(false)
+    setCssText('')
+    setCssWarning('')
+  }
 
   function commitName() {
     setRenaming(false)
@@ -108,6 +126,16 @@ export default function DocBar() {
       >
         Import
       </button>
+      <button
+        class="btn btn--ghost"
+        onClick={() => {
+          setCssWarning('')
+          setCssModalOpen(true)
+        }}
+        title="Paste @keyframes CSS and edit it here"
+      >
+        From CSS…
+      </button>
       <input
         ref={(el) => {
           fileInput = el
@@ -121,6 +149,52 @@ export default function DocBar() {
         <span class="doc-bar__error" role="alert">
           {importError()}
         </span>
+      </Show>
+
+      {/* CSS paste-import modal */}
+      <Show when={cssModalOpen()}>
+        <div
+          class="css-import__backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setCssModalOpen(false)
+          }}
+        >
+          <div class="css-import" role="dialog" aria-label="Import CSS keyframes">
+            <div class="css-import__head">
+              <strong>Paste @keyframes CSS</strong>
+              <button
+                class="btn btn--ghost css-import__close"
+                aria-label="Close import dialog"
+                onClick={() => setCssModalOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <textarea
+              class="input css-import__textarea"
+              placeholder={
+                '@keyframes pulse {\n  0%   { opacity: 0; }\n  100% { opacity: 1; }\n}\n\nanimation-duration: 2s;'
+              }
+              value={cssText()}
+              onInput={(e) => setCssText((e.currentTarget as HTMLTextAreaElement).value)}
+              spellcheck={false}
+              rows={12}
+            />
+            <Show when={cssWarning()}>
+              <p class="css-import__warning" role="alert">
+                {cssWarning()}
+              </p>
+            </Show>
+            <div class="css-import__actions">
+              <button class="btn btn--ghost" onClick={() => setCssModalOpen(false)}>
+                Cancel
+              </button>
+              <button class="btn btn--primary" onClick={importFromCss} disabled={!cssText().trim()}>
+                Import animation
+              </button>
+            </div>
+          </div>
+        </div>
       </Show>
     </div>
   )
