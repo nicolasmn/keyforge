@@ -99,10 +99,31 @@ function SortableLayer(props: {
       ) : (
         <span
           class="layer-tree__name"
+          tabindex={0}
+          role="button"
+          aria-label={`Layer ${props.layer.name}. Press Enter or double-click to rename.`}
           onDblClick={(e) => props.onStartEdit(e, props.layer.id)}
+          onKeyDown={(e: KeyboardEvent) => {
+            if (e.key === 'Enter') {
+              e.stopPropagation()
+              props.onStartEdit(e as unknown as MouseEvent, props.layer.id)
+            }
+          }}
           title="Double-click to rename"
         >
           {props.layer.name}
+          <svg
+            class="layer-tree__rename-hint"
+            width="11"
+            height="11"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+          >
+            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+          </svg>
         </span>
       )}
 
