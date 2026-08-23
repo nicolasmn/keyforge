@@ -1,7 +1,8 @@
-import { createStore, produce } from 'solid-js/store'
+import { createStore, produce, reconcile } from 'solid-js/store'
 import { createSignal } from 'solid-js'
 import type { AnimationDocument, Layer, Track, Keyframe, AnimatableProperty } from '@/types'
 import { nanoid } from '@/utils/nanoid'
+import { serializeDoc, saveToStorage, loadFromStorage } from '@/utils/persistence'
 
 // ── Default document ──────────────────────────────────────────────────
 const defaultDoc: AnimationDocument = {
@@ -46,7 +47,65 @@ const defaultDoc: AnimationDocument = {
 }
 
 // ── Store ─────────────────────────────────────────────────────────────
-export const [doc, setDoc] = createStore<AnimationDocument>(defaultDoc)
+// Restore a previously worked-on document if one was autosaved; otherwise
+// start from the default demo document.
+const restoredDoc = loadFromStorage()
+const [doc, setDocRaw] = createStore<AnimationDocument>(restoredDoc ?? defaultDoc)
+export { doc }
+
+// ── Autosave ───────────────────────────────────────────────────────────
+// Every mutation in this module goes through setDoc, so the save hook
+// lives there (deep store subscriptions would need a reactive root; this
+// is complete because setDoc is the only write path).
+let saveTimer: ReturnType<typeof setTimeout> | undefined
+let savePending = false
+const AUTOSAVE_DEBOUNCE_MS = 300
+
+function flushSave() {
+  serializeAndSave(doc)
+  savePending = false
+}
+
+function scheduleSave() {
+  savePending = true
+  clearTimeout(saveTimer)
+  saveTimer = setTimeout(flushSave, AUTOSAVE_DEBOUNCE_MS)
+}
+
+/** Replace the whole document (import / sample load / reset) and persist now. */
+export function replaceDoc(next: AnimationDocument) {
+  setDocRaw(reconcile(next))
+  flushSave()
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    if (savePending) flushSave()
+  })
+}
+
+function serializeAndSave(d: AnimationDocument) {
+  saveToStorage(serializeDoc(d))
+}
+
+/**
+ * The single write path for document mutations. Wraps the raw store setter
+ * so autosave scheduling can't be bypassed by any mutation.
+ */
+/**
+ * The single write path for document mutations. Wraps the raw store setter
+ * so autosave scheduling can't be bypassed by any mutation.
+ */
+function setDocWrapped(
+  updater: AnimationDocument | ((prev: AnimationDocument) => AnimationDocument),
+): void
+function setDocWrapped<K extends keyof AnimationDocument>(key: K, value: AnimationDocument[K]): void
+function setDocWrapped(...args: unknown[]): void {
+  ;(setDocRaw as unknown as (...a: unknown[]) => void)(...args)
+  scheduleSave()
+}
+const setDoc = setDocWrapped
+export { setDoc }
 
 // ── Selection ──────────────────────────────────────────────────────────
 export const [selectedLayerId, setSelectedLayerId] = createSignal<string | null>(
@@ -59,7 +118,24 @@ export const [playhead, setPlayhead] = createSignal(0) // ms
 export const [playing, setPlaying] = createSignal(false)
 export const [loop, setLoop] = createSignal(true)
 
-// ── Mutations ───────────────────────────────────────────────────────────
+// ── Mutations ──────────────────────────────────────────────────────────
+
+/**
+ * Sensible starting values per property, so the FIRST keyframe on a fresh
+ * track is something a user would actually want to animate from.
+ */
+export const DEFAULT_FIRST_VALUE: Record<AnimatableProperty, string> = {
+  opacity: '0',
+  transform: 'translateY(40px)',
+  'background-color': 'hsl(264 80% 68%)',
+  color: 'hsl(220 10% 88%)',
+  'border-radius': '0px',
+  width: '80px',
+  height: '80px',
+  scale: '1',
+  translate: 'translate(0px, 0px)',
+  rotate: 'rotate(0deg)',
+}
 export function addLayer() {
   const id = nanoid()
   setDoc(
@@ -133,6 +209,18 @@ export function addKeyframe(layerId: string, trackId: string, kf: Omit<Keyframe,
     produce((d) => {
       const track = d.layers.find((l) => l.id === layerId)?.tracks.find((t) => t.id === trackId)
       if (!track) return
+      // Smart defaults: an empty value means "pick something useful".
+      // First KF on a track gets a per-property starting value; later KFs
+      // inherit the previous keyframe's value so a fresh two-KF track
+      // animates out of the box instead of holding still.
+      if (kf.value === '') {
+        if (track.keyframes.length === 0) {
+          kf.value = DEFAULT_FIRST_VALUE[track.property] ?? '0'
+        } else {
+          const prev = [...track.keyframes].sort((a, b) => a.time - b.time).pop()
+          kf.value = prev?.value ?? '0'
+        }
+      }
       track.keyframes.push({ ...kf, id: nanoid() })
       track.keyframes.sort((a, b) => a.time - b.time)
     }),
