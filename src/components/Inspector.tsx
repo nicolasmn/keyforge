@@ -32,6 +32,7 @@ import type { AnimatableProperty, EasingName, Keyframe, Track, ValueToken, SubTo
 import EasingEditor from './EasingEditor'
 import { tokenizeKeyframe, NUMBER_UNIT_RE } from '@/utils/tokenize'
 import { completionsFor, UNIT_GROUPS, isAngleUnit, toDeg } from '@/utils/cssCompletions'
+import { PROPERTY_REGISTRY } from '@/utils/propertyRegistry'
 
 const PROPERTIES: AnimatableProperty[] = [
   'opacity',
@@ -152,6 +153,9 @@ function RotationDial(props: { deg: number }) {
 interface NumberUnitFieldProps {
   numStr: string
   unit: string
+  /** Property context for unit filtering/validation (optional — transform
+   *  sub-tokens pass their owning track's property). */
+  property?: AnimatableProperty
   onCommit: (num: string, unit: string) => void
   onCancel: () => void
 }
@@ -166,10 +170,27 @@ function NumberUnitField(props: NumberUnitFieldProps) {
   // eslint-disable-next-line solid/reactivity
   const [localNum, setLocalNum] = createSignal(props.numStr)
 
+  // Registry-driven unit filtering: when the property is known, the unit
+  // dropdown only offers units that make sense for it (no `opacity: 0vw`).
+  const allowedUnits = () =>
+    props.property ? (PROPERTY_REGISTRY[props.property]?.units ?? null) : null
+
+  function commitIsValid(): boolean {
+    const num = parseFloat(localNum())
+    if (Number.isNaN(num)) return false
+    const allowed = allowedUnits()
+    if (!allowed) return true // no property context → legacy behavior
+    return allowed.includes(localUnit())
+  }
+
   const deg = () =>
     isAngleUnit(localUnit()) ? toDeg(parseFloat(localNum()) || 0, localUnit()) : null
 
   function doCommit() {
+    if (!commitIsValid()) {
+      props.onCancel() // revert — invalid number/unit for this property
+      return
+    }
     props.onCommit(inputEl?.value ?? localNum(), localUnit())
   }
 
@@ -230,11 +251,16 @@ function NumberUnitField(props: NumberUnitFieldProps) {
         }}
       >
         <For each={UNIT_GROUPS}>
-          {(group) => (
-            <optgroup label={group.label}>
-              <For each={group.units}>{(u) => <option value={u}>{u === '' ? '—' : u}</option>}</For>
-            </optgroup>
-          )}
+          {(group) => {
+            const allowed = allowedUnits()
+            const units = allowed ? group.units.filter((u) => allowed.includes(u)) : group.units
+            if (units.length === 0) return null
+            return (
+              <optgroup label={group.label}>
+                <For each={units}>{(u) => <option value={u}>{u === '' ? '—' : u}</option>}</For>
+              </optgroup>
+            )
+          }}
         </For>
       </select>
       <Show when={deg() !== null}>
@@ -275,7 +301,7 @@ function ColorSwatch(props: { token: ValueToken }) {
 
 // ── SubScrub: editable sub-token chip (transform arg) ─────────────────────────
 
-function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
+function SubScrub(props: { sub: SubToken; parent: ValueToken; property?: AnimatableProperty }) {
   const [editing, setEditing] = createSignal(false)
 
   function commitSub(num: string, unit: string) {
@@ -310,6 +336,7 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
       <NumberUnitField
         numStr={props.sub.value}
         unit={props.sub.unit || 'px'}
+        property={props.property}
         onCommit={commitSub}
         onCancel={() => setEditing(false)}
       />
@@ -319,7 +346,7 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken }) {
 
 // ── ValueChip ─────────────────────────────────────────────────────────────────
 
-function ValueChip(props: { token: ValueToken }) {
+function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) {
   const [editing, setEditing] = createSignal(false)
   const [invalid, setInvalid] = createSignal(false)
   let inputEl: HTMLInputElement | undefined
@@ -444,7 +471,7 @@ function ValueChip(props: { token: ValueToken }) {
                 <For each={g.subs}>
                   {(sub, i) => (
                     <>
-                      <SubScrub sub={sub} parent={props.token} />
+                      <SubScrub sub={sub} parent={props.token} property={props.property} />
                       <Show when={i() < g.subs.length - 1}>
                         <span class="kf-chip__sep">, </span>
                       </Show>
@@ -479,6 +506,7 @@ function ValueChip(props: { token: ValueToken }) {
           <NumberUnitField
             numStr={parsed().num}
             unit={parsed().unit}
+            property={props.property}
             onCommit={closeWithNum}
             onCancel={() => setEditing(false)}
           />
@@ -605,7 +633,7 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
           />
         </Show>
 
-        <ValueChip token={valueToken()} />
+        <ValueChip token={valueToken()} property={props.track.property} />
 
         <span
           class="kf-chip kf-chip--easing"
