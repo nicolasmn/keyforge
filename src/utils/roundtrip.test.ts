@@ -85,6 +85,13 @@ describe('CSS round-trip: export → import → export', () => {
   it('re-importing keyforge export preserves times, values, easings', () => {
     const doc1 = makeDoc()
     const css1 = generateCss(doc1)
+
+    // Always-split reality: one @keyframes rule PER TRACK, named kf-<slug>-<i>.
+    expect(css1).toContain('@keyframes kf-box-0')
+    expect(css1).toContain('@keyframes kf-box-1')
+    expect(css1).toContain('@keyframes kf-dot-0')
+    expect(css1).toContain('animation-name: kf-box-0, kf-box-1')
+
     const result = parseCssToDoc(css1)
     expect(result.doc).not.toBeNull()
     const doc2 = result.doc!
@@ -122,6 +129,109 @@ describe('CSS round-trip: export → import → export', () => {
     const doc1 = makeDoc()
     const doc2 = parseCssToDoc(generateCss(doc1)).doc!
     expect(doc2.duration).toBe(2400)
+  })
+})
+
+/**
+ * Regression: with one SHARED @keyframes rule per layer, stops sat at the
+ * union of ALL tracks' keyframe times — sibling tracks got false "hold"
+ * stops where they had no keyframe. Symptom: opacity keys at 0ms/5000ms +
+ * transform keys at 0ms/3000ms (duration 5000) made the shared rule carry a
+ * 60% stop, so opacity only visibly animated 3s→5s instead of 0→5s.
+ * Per-track rules keep every timeline pure.
+ */
+describe("regression: sibling tracks must not pollute each other's timeline", () => {
+  function bugDoc(): AnimationDocument {
+    return {
+      id: nanoid(),
+      name: 'Bug',
+      duration: 5000,
+      layers: [
+        {
+          id: nanoid(),
+          name: 'Box',
+          visible: true,
+          element: { tag: 'div', text: '', initialCss: '' },
+          tracks: [
+            {
+              id: nanoid(),
+              property: 'opacity',
+              keyframes: [
+                { id: nanoid(), time: 0, value: '0', easing: 'linear' },
+                { id: nanoid(), time: 5000, value: '1', easing: 'linear' },
+              ],
+            },
+            {
+              id: nanoid(),
+              property: 'transform',
+              keyframes: [
+                { id: nanoid(), time: 0, value: 'translateY(40px)', easing: 'linear' },
+                { id: nanoid(), time: 3000, value: 'translateY(0px)', easing: 'linear' },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+  }
+
+  function keyframesRule(css: string, name: string): string {
+    const start = css.indexOf(`@keyframes ${name} {`)
+    if (start === -1) return ''
+    const open = css.indexOf('{', start)
+    let depth = 1
+    let i = open + 1
+    while (i < css.length && depth > 0) {
+      if (css[i] === '{') depth++
+      else if (css[i] === '}') depth--
+      i++
+    }
+    return css.slice(open + 1, i - 1)
+  }
+
+  function stopsOf(ruleBody: string): number[] {
+    return [...ruleBody.matchAll(/([\d.]+)%\s*\{/g)].map((m) => Number.parseFloat(m[1]))
+  }
+
+  it('opacity rule has only its own 0%/100% stops; transform keeps its 60% stop', () => {
+    const css = generateCss(bugDoc())
+    const opacityRule = keyframesRule(css, 'kf-box-0')
+    const transformRule = keyframesRule(css, 'kf-box-1')
+
+    // Opacity timeline is pure: no 60% hold polluting its 0→100% ramp.
+    expect(stopsOf(opacityRule)).toEqual([0, 100])
+
+    // Transform still animates over its real range, ending in a boundary
+    // hold at 100% (its last key is at 60% of a 5000ms document).
+    expect(stopsOf(transformRule)).toEqual([0, 60, 100])
+    expect(transformRule).toContain('translateY(40px)')
+    expect(transformRule).toContain('translateY(0px)')
+  })
+
+  it('importing the export restores full-range interpolation for opacity', () => {
+    const css1 = generateCss(bugDoc())
+    const doc2 = parseCssToDoc(css1).doc!
+
+    // Split rules merged back into ONE layer named after the base.
+    expect(doc2.layers).toHaveLength(1)
+    expect(doc2.layers[0].name.toLowerCase()).toBe('box')
+
+    // Opacity interpolates across its WHOLE range: exactly 2 keyframes.
+    const opacity = doc2.layers[0].tracks.find((t) => t.property === 'opacity')!
+    expect(opacity.keyframes.map((k) => [k.time, k.value])).toEqual([
+      [0, '0'],
+      [5000, '1'],
+    ])
+
+    // Transform boundary hold dropped; real keys remain.
+    const transform = doc2.layers[0].tracks.find((t) => t.property === 'transform')!
+    expect(transform.keyframes.map((k) => [k.time, k.value])).toEqual([
+      [0, 'translateY(40px)'],
+      [3000, 'translateY(0px)'],
+    ])
+
+    // Round-trip stays CSS-identical.
+    expect(normalize(generateCss(doc2))).toBe(normalize(css1))
   })
 })
 

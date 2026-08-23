@@ -110,4 +110,78 @@ describe('parseCssToDoc', () => {
     expect(a.id).not.toBe(b.id)
     expect(a.layers[0].id).not.toBe(b.layers[0].id)
   })
+
+  describe('split-export merging (per-track kf-<slug>-<i> rules)', () => {
+    // Shape produced by Keyforge's always-split exporter: one @keyframes per
+    // track, named `<base>-<index>`, all referenced from one animation-name.
+    const splitExport = `@keyframes kf-box-0 {
+  0.00% { opacity:0; }
+  100.00% { opacity:1; }
+}
+@keyframes kf-box-1 {
+  0.00% { transform:translateY(40px); }
+  60.00% { transform:translateY(0px); }
+  100.00% { transform:translateY(0px); }
+}
+
+[data-layer-id="box"] {
+  animation-name: kf-box-0, kf-box-1;
+  animation-duration: 5000ms;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-play-state: paused;
+}`
+
+    it('merges per-track rules back into one layer named <base>', () => {
+      const { doc, warnings } = parseCssToDoc(splitExport)
+      expect(warnings).toEqual([])
+      expect(doc!.layers).toHaveLength(1)
+      const layer = doc!.layers[0]
+      expect(layer.name).toBe('box')
+      // Tracks concatenated in index order: rule -0 first, then rule -1.
+      expect(layer.tracks.map((t) => t.property)).toEqual(['opacity', 'transform'])
+    })
+
+    it('converts merged stops to ms and drops boundary-hold fills', () => {
+      const { doc } = parseCssToDoc(splitExport)
+      const layer = doc!.layers[0]
+      const opacity = layer.tracks.find((t) => t.property === 'opacity')!
+      expect(opacity.keyframes.map((k) => [k.time, k.value])).toEqual([
+        [0, '0'],
+        [5000, '1'],
+      ])
+      const transform = layer.tracks.find((t) => t.property === 'transform')!
+      // The 100% stop merely repeats the 60% value with default timing —
+      // a zero-effect fill synthesized by the exporter — so it is dropped.
+      expect(transform.keyframes.map((k) => [k.time, k.value])).toEqual([
+        [0, 'translateY(40px)'],
+        [3000, 'translateY(0px)'],
+      ])
+    })
+
+    it('merges a lone suffixed rule to its base (single-track layer round-trips)', () => {
+      const css = `@keyframes kf-solo-0 {\n  0% { rotate:0deg; }\n  100% { rotate:360deg; }\n}`
+      const { doc } = parseCssToDoc(css)
+      expect(doc!.layers).toHaveLength(1)
+      expect(doc!.layers[0].name).toBe('solo')
+      expect(doc!.layers[0].tracks[0].property).toBe('rotate')
+    })
+
+    it('does not merge when any rule name lacks the -<index> suffix', () => {
+      const css = `${simple}\n@keyframes kf-box-0 { from { opacity:0; } to { opacity:1; } }`
+      const { doc } = parseCssToDoc(css)
+      expect(doc!.layers.map((l) => l.name)).toEqual(['pulse', 'box-0'])
+    })
+
+    it('groups multiple bases in first-appearance order', () => {
+      const css =
+        `@keyframes kf-a-0 {\n  0% { opacity:0; }\n  100% { opacity:1; }\n}\n` +
+        `@keyframes kf-b-0 {\n  0% { rotate:0deg; }\n  100% { rotate:90deg; }\n}\n` +
+        `@keyframes kf-a-1 {\n  0% { scale:1; }\n  100% { scale:2; }\n}`
+      const { doc } = parseCssToDoc(css)
+      expect(doc!.layers.map((l) => l.name)).toEqual(['a', 'b'])
+      const a = doc!.layers[0]
+      expect(a.tracks.map((t) => t.property)).toEqual(['opacity', 'scale'])
+    })
+  })
 })

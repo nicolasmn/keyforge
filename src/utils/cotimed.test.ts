@@ -66,12 +66,13 @@ describe('co-timed easing conflicts', () => {
     expect(block1).toContain('ease-in-out')
   })
 
-  it('non-conflicted layers keep the single-rule output', () => {
+  it('splits into per-track rules even without an easing conflict (always-split)', () => {
     const doc = conflictDoc()
     doc.layers[0].tracks[1].keyframes[0].easing = 'linear'
     const css = generateCss(doc)
-    expect(css).not.toContain('kf-box-0')
-    expect(css).toContain('@keyframes kf-box {')
+    expect(css).toContain('@keyframes kf-box-0')
+    expect(css).toContain('@keyframes kf-box-1')
+    expect(css).toContain('animation-name: kf-box-0, kf-box-1')
   })
 
   it('split blocks builder produces valid css per track', () => {
