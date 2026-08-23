@@ -38,6 +38,9 @@ function lerpNumeric(a: Keyframe, b: Keyframe, time: number): string | null {
 
 export function applyEasing(t: number, easing: string): number {
   if (easing === 'linear') return t
+  // linear() curves (springs) would need their own sampler; approximating
+  // as linear keeps pose-capture usable until a dedicated evaluator lands.
+  if (easing.startsWith('linear(')) return t
   // Named presets ('ease-in', 'ease-out-back', …) resolve to their
   // canonical cubic-bezier before evaluation.
   const named = BUILTIN_PRESETS.find((p) => p.name === easing)

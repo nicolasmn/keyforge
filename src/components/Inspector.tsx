@@ -61,7 +61,12 @@ function validate(type: ValueToken['type'], value: string): boolean {
   if (type === 'color') return CSS.supports('color', value)
   if (type === 'number') return NUMBER_UNIT_RE.test(value) || value === '' || !isNaN(Number(value))
   if (type === 'easing')
-    return value === 'linear' || /^cubic-bezier\(/.test(value) || /^steps\(/.test(value)
+    return (
+      value === 'linear' ||
+      /^cubic-bezier\(/.test(value) ||
+      /^steps\(/.test(value) ||
+      /^linear\(/.test(value)
+    )
   return value.length > 0
 }
 
