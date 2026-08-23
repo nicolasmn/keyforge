@@ -277,6 +277,15 @@
 .kf-row__main:hover {
   background: color-mix(in oklch, var(--color-accent) 6%, var(--color-surface));
 }
+/* Selected keyframe (clicked in the timeline canvas): accent left edge + tint.
+   Inset box-shadow instead of a border so the row never shifts horizontally. */
+.kf-row--selected > .kf-row__main {
+  background: color-mix(in oklch, var(--color-accent) 10%, var(--color-surface));
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+.kf-row--selected > .kf-row__main:hover {
+  background: color-mix(in oklch, var(--color-accent) 14%, var(--color-surface));
+}
 .kf-row__delete {
   font-size: 11px;
   width: 20px;

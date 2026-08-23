@@ -31,11 +31,11 @@ export default function App() {
 
   return (
     <div class="app">
-      {/* Document bar — name + import/export; hidden on mobile (space) */}
+      {/* Document bar — name + import/export; hidden on mobile (space).
+          Playback lives in the timeline area, directly above the ruler it drives. */}
       <Show when={!isMobile()}>
         <header class="app__doc-header">
           <DocBar />
-          <Playback />
         </header>
       </Show>
       {/* Desktop — resizable panels via Split.js */}
@@ -46,6 +46,7 @@ export default function App() {
           inspector={<Inspector />}
           timelineArea={
             <div class="app__timeline-area">
+              <Playback />
               <Timeline />
             </div>
           }

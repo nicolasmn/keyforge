@@ -19,6 +19,7 @@ import { createSignal, createMemo, For, Show, onCleanup, type Component } from '
 import { render } from 'solid-js/web'
 import {
   selectedLayerId,
+  selectedKeyframeId,
   getSelectedLayer,
   addTrack,
   addKeyframe,
@@ -797,7 +798,7 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
   }
 
   return (
-    <div class="kf-row">
+    <div class="kf-row" classList={{ 'kf-row--selected': selectedKeyframeId() === props.kf.id }}>
       <div class="kf-row__main">
         <Show when={!editTime()}>
           <span

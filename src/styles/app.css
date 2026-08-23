@@ -331,7 +331,7 @@
   }
 }
 
-/* ── Document bar (name + import/export + playback) ─────── */
+/* ── Document bar (name + import/export) ─────────────────── */
 .app__doc-header {
   display: flex;
   align-items: center;
@@ -339,9 +339,6 @@
   padding: var(--space-1) var(--space-4);
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
-}
-.app__doc-header .playback {
-  margin-left: auto;
 }
 .doc-bar {
   display: flex;

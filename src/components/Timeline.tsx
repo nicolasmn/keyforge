@@ -8,6 +8,7 @@ import {
   selectedLayerId,
   selectedKeyframeId,
   setSelectedKeyframeId,
+  setSelectedLayerId,
   updateKeyframe,
 } from '@/store'
 
@@ -209,17 +210,23 @@ export default function Timeline() {
       if (isOverHandle(x)) {
         resizingDuration = true
         setPlaying(false)
+        canvas!.style.cursor = 'grabbing'
         return
       }
       scrubbing = true
       setPlaying(false)
       setPlayhead(xToTime(x, canvas!.offsetWidth))
+      canvas!.style.cursor = 'grabbing'
       return
     }
     const hit = hitTestKeyframe(x, y)
     if (hit) {
       draggingKf = hit
+      // Selecting a keyframe also selects its layer so the Inspector —
+      // which gates on the layer selection — shows this keyframe's tracks.
       setSelectedKeyframeId(hit.kfId)
+      setSelectedLayerId(hit.layerId)
+      canvas!.style.cursor = 'grabbing'
     } else {
       setPlaying(false)
       setPlayhead(xToTime(x, canvas!.offsetWidth))
@@ -228,6 +235,17 @@ export default function Timeline() {
 
   function onMouseMove(e: MouseEvent) {
     const x = cssX(e)
+    const y = cssY(e)
+    // An active gesture (scrub / duration resize / keyframe drag) reads as
+    // "grabbing" until it ends.
+    if (resizingDuration || scrubbing || draggingKf) {
+      canvas!.style.cursor = 'grabbing'
+    } else if (y < HEADER_HEIGHT) {
+      // Hovering the playhead ruler or the duration handle: open-hand affordance.
+      canvas!.style.cursor = 'grab'
+    } else {
+      canvas!.style.cursor = ''
+    }
     if (resizingDuration) {
       applyDurationFromX(x)
       return
@@ -238,13 +256,14 @@ export default function Timeline() {
         time: Math.round(xToTime(x, canvas!.offsetWidth)),
       })
     }
-    canvas!.style.cursor = isOverHandle(x) && cssY(e) < HEADER_HEIGHT ? 'ew-resize' : ''
   }
 
-  function onMouseUp() {
+  function onMouseUp(e?: MouseEvent) {
     resizingDuration = false
     draggingKf = null
     scrubbing = false
+    // Gesture over → fall back to the hover affordance under the pointer.
+    if (canvas && e) canvas.style.cursor = cssY(e) < HEADER_HEIGHT ? 'grab' : ''
   }
 
   function onDblClick(e: MouseEvent) {
@@ -297,7 +316,9 @@ export default function Timeline() {
       const hit = hitTestKeyframe(touchStartX, touchStartY)
       if (hit) {
         draggingKf = hit
+        // Same dual selection as the mouse path: keyframe + its layer.
         setSelectedKeyframeId(hit.kfId)
+        setSelectedLayerId(hit.layerId)
       }
     }
   }
@@ -309,7 +330,9 @@ export default function Timeline() {
       } else {
         const hit = hitTestKeyframe(touchStartX, touchStartY)
         if (hit) {
+          // Same dual selection as the mouse path: keyframe + its layer.
           setSelectedKeyframeId(hit.kfId)
+          setSelectedLayerId(hit.layerId)
         } else if (touchStartY >= HEADER_HEIGHT) {
           setPlaying(false)
           setPlayhead(xToTime(touchStartX, canvas!.offsetWidth))
