@@ -25,6 +25,7 @@ import {
   updateKeyframe,
   removeKeyframe,
   playhead,
+  doc,
 } from '@/store'
 import type { AnimatableProperty, EasingName, Keyframe, Track, ValueToken, SubToken } from '@/types'
 import EasingEditor from './EasingEditor'
@@ -372,7 +373,15 @@ function ValueChip(props: { token: ValueToken }) {
 
   function close(revert = false) {
     if (!revert) {
-      const raw = inputEl?.value ?? props.token.value
+      const raw = (inputEl?.value ?? props.token.value).trim()
+      // Never commit empty/garbage: an empty declaration corrupts the
+      // keyframe (exports literal `opacity:;`). Reverting to the previous
+      // value matches DevTools semantics — invalid input cancels the edit.
+      if (raw === '') {
+        setInvalid(false)
+        setEditing(false)
+        return
+      }
       if (validate(props.token.type, raw)) {
         commit(props.token.path, raw)
         setInvalid(false)
@@ -385,6 +394,11 @@ function ValueChip(props: { token: ValueToken }) {
   }
 
   function closeWithNum(num: string, unit: string) {
+    if (num.trim() === '') {
+      // empty number = cancelled edit, keep previous value
+      setEditing(false)
+      return
+    }
     const value = `${num}${unit}`
     if (validate('number', value)) {
       commit(props.token.path, value)
@@ -538,7 +552,13 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
 
   function commitTime() {
     const n = Number(timeInputEl?.value)
-    if (!isNaN(n) && n >= 0) updateKeyframe(props.layerId, props.track.id, props.kf.id, { time: n })
+    // Clamp to the document duration: stops beyond 100% are silently
+    // dropped by browsers, so storing them only corrupts exports.
+    if (!isNaN(n) && n >= 0) {
+      updateKeyframe(props.layerId, props.track.id, props.kf.id, {
+        time: Math.min(n, doc.duration),
+      })
+    }
     setEditTime(false)
   }
 
