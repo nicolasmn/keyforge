@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PROPERTY_REGISTRY, isValidNumberForProperty } from './propertyRegistry'
+import { PROPERTY_REGISTRY, isValidNumberForProperty, toCssPropertyValue } from './propertyRegistry'
 import type { AnimatableProperty } from '@/types'
 
 const ALL: AnimatableProperty[] = [
@@ -49,5 +49,42 @@ describe('property registry', () => {
 
   it('color properties take no numeric units', () => {
     expect(isValidNumberForProperty('background-color', '10', 'px')).toBe(false)
+  })
+})
+
+describe('toCssPropertyValue', () => {
+  it('converts transform-function syntax to bare-angle individual syntax for rotate', () => {
+    expect(toCssPropertyValue('rotate', 'rotate(0deg)')).toBe('0deg')
+    expect(toCssPropertyValue('rotate', 'rotate(360deg)')).toBe('360deg')
+    expect(toCssPropertyValue('rotate', '-45deg')).toBe('-45deg') // already valid
+    expect(toCssPropertyValue('rotate', '1turn')).toBe('1turn') // already valid
+  })
+
+  it('maps axis rotations and passes through unrecognized shapes untouched', () => {
+    expect(toCssPropertyValue('rotate', 'rotateX(30deg)')).toBe('x 30deg')
+    expect(toCssPropertyValue('rotate', 'rotateY(30deg)')).toBe('y 30deg')
+    expect(toCssPropertyValue('rotate', 'calc(45deg * 2)')).toBe('calc(45deg * 2)')
+  })
+
+  it('converts function syntax for translate tracks', () => {
+    expect(toCssPropertyValue('translate', 'translate(10px, 20px)')).toBe('10px 20px')
+    expect(toCssPropertyValue('translate', 'translateY(40px)')).toBe('0px 40px')
+    expect(toCssPropertyValue('translate', 'translateZ(5px)')).toBe('0px 0px 5px')
+    expect(toCssPropertyValue('translate', '10px 20px')).toBe('10px 20px') // already valid
+  })
+
+  it('converts function syntax for scale tracks', () => {
+    expect(toCssPropertyValue('scale', 'scale(2)')).toBe('2')
+    expect(toCssPropertyValue('scale', 'scaleY(1.5)')).toBe('1 1.5')
+    expect(toCssPropertyValue('scale', 'scale3d(1, 2, 3)')).toBe('1 2 3')
+    expect(toCssPropertyValue('scale', '2.5')).toBe('2.5') // already valid
+  })
+
+  it('leaves non-individual properties alone', () => {
+    expect(toCssPropertyValue('transform', 'translateY(40px) rotate(45deg)')).toBe(
+      'translateY(40px) rotate(45deg)',
+    )
+    expect(toCssPropertyValue('opacity', '0.5')).toBe('0.5')
+    expect(toCssPropertyValue('width', '80px')).toBe('80px')
   })
 })

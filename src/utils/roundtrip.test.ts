@@ -50,8 +50,10 @@ function makeDoc(): AnimationDocument {
             id: nanoid(),
             property: 'rotate',
             keyframes: [
-              { id: nanoid(), time: 0, value: 'rotate(0deg)', easing: 'linear' },
-              { id: nanoid(), time: 2400, value: 'rotate(360deg)', easing: 'linear' },
+              // Individual-property syntax (bare angle) — `rotate(0deg)`
+              // function form is invalid CSS on a rotate track.
+              { id: nanoid(), time: 0, value: '0deg', easing: 'linear' },
+              { id: nanoid(), time: 2400, value: '360deg', easing: 'linear' },
             ],
           },
         ],

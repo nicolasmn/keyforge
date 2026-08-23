@@ -135,7 +135,10 @@ export const DEFAULT_FIRST_VALUE: Record<AnimatableProperty, string> = {
   height: '80px',
   scale: '1',
   translate: 'translate(0px, 0px)',
-  rotate: 'rotate(0deg)',
+  // Bare angle — the individual `rotate` property's own syntax. Function
+  // form (`rotate(0deg)`) is transform-track syntax and emits invalid CSS
+  // on a rotate track (browsers drop the declaration → animation no-ops).
+  rotate: '0deg',
 }
 export function addLayer() {
   const id = nanoid()

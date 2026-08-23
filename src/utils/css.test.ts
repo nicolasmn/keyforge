@@ -136,3 +136,81 @@ describe('generateCss', () => {
     expect(css).toContain('transform:translateY(40px)')
   })
 })
+
+describe('generateCss — regression: rotate + transform tracks compose', () => {
+  // User report: a layer with a rotate track ([0,1000,2500]ms → 0/0/360)
+  // and a transform track ([0,1250]ms → translateY(40px)→translateY(0)),
+  // duration 3000ms, showed "rotate not visible in the animation at all".
+  // Root cause: rotate values stored in function syntax emitted invalid
+  // `rotate:rotate(360deg)` declarations; Chrome drops them at parse time,
+  // leaving computed `rotate` at none. The transform track was irrelevant.
+  const makeLayer = (tracks: AnimationDocument['layers'][number]['tracks']) => ({
+    id: 'layer-1',
+    name: 'Box',
+    visible: true,
+    element: { tag: 'div', text: '', initialCss: '' },
+    tracks,
+  })
+
+  it('emits valid individual-property syntax so both animations apply', () => {
+    const doc = makeDoc({
+      duration: 3000,
+      layers: [
+        makeLayer([
+          {
+            id: 'track-rot',
+            property: 'rotate',
+            keyframes: [
+              { id: 'k1', time: 0, value: 'rotate(0deg)', easing: 'linear' },
+              { id: 'k2', time: 1000, value: 'rotate(0deg)', easing: 'linear' },
+              { id: 'k3', time: 2500, value: 'rotate(360deg)', easing: 'linear' },
+            ],
+          },
+          {
+            id: 'track-tr',
+            property: 'transform',
+            keyframes: [
+              { id: 'k4', time: 0, value: 'translateY(40px)', easing: 'linear' },
+              { id: 'k5', time: 1250, value: 'translateY(0px)', easing: 'linear' },
+            ],
+          },
+        ]),
+      ],
+    })
+    const css = generateCss(doc)
+
+    // Both per-track rules referenced on the element.
+    expect(css).toContain('@keyframes kf-box-0')
+    expect(css).toContain('@keyframes kf-box-1')
+    expect(css).toContain('animation-name: kf-box-0, kf-box-1')
+
+    // Rotate stops are bare angles — the only syntax valid for `rotate:`.
+    expect(css).toContain('rotate:0deg;')
+    expect(css).toContain('rotate:360deg;')
+    expect(css).not.toContain('rotate:rotate(')
+
+    // Transform track keeps its function values.
+    expect(css).toContain('transform:translateY(40px);')
+    expect(css).toContain('transform:translateY(0px);')
+  })
+
+  it('already-valid rotate values pass through unchanged (idempotent emission)', () => {
+    const doc = makeDoc({
+      layers: [
+        makeLayer([
+          {
+            id: 'track-rot',
+            property: 'rotate',
+            keyframes: [
+              { id: 'k1', time: 0, value: '0deg', easing: 'linear' },
+              { id: 'k2', time: 1000, value: '360deg', easing: 'linear' },
+            ],
+          },
+        ]),
+      ],
+    })
+    const css = generateCss(doc)
+    expect(css).toContain('rotate:0deg;')
+    expect(css).toContain('rotate:360deg;')
+  })
+})

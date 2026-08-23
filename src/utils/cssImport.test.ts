@@ -185,3 +185,21 @@ describe('parseCssToDoc', () => {
     })
   })
 })
+
+describe('cssImport — individual-property value normalization', () => {
+  it('normalizes legacy function-syntax rotate values to bare angles', () => {
+    // Legacy exports emitted invalid `rotate:rotate(...)` declarations;
+    // importing one should still produce a doc that re-exports valid CSS.
+    const css = `@keyframes spin { from { rotate: rotate(0deg); } to { rotate: rotate(360deg); } }`
+    const { doc } = parseCssToDoc(css)
+    const track = doc!.layers[0].tracks.find((t) => t.property === 'rotate')!
+    expect(track.keyframes.map((k) => k.value)).toEqual(['0deg', '360deg'])
+  })
+
+  it('keeps already-valid bare-angle values untouched', () => {
+    const css = `@keyframes spin { from { rotate: 0deg; } to { rotate: 360deg; } }`
+    const { doc } = parseCssToDoc(css)
+    const track = doc!.layers[0].tracks.find((t) => t.property === 'rotate')!
+    expect(track.keyframes.map((k) => k.value)).toEqual(['0deg', '360deg'])
+  })
+})
