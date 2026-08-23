@@ -33,6 +33,12 @@ import EasingEditor from './EasingEditor'
 import { tokenizeKeyframe, NUMBER_UNIT_RE } from '@/utils/tokenize'
 import { completionsFor, UNIT_GROUPS, isAngleUnit, toDeg } from '@/utils/cssCompletions'
 import { PROPERTY_REGISTRY } from '@/utils/propertyRegistry'
+import {
+  addTransformFn,
+  removeTransformFn,
+  moveTransformFn,
+  ADDABLE_TRANSFORM_FNS,
+} from '@/utils/transformStack'
 
 const PROPERTIES: AnimatableProperty[] = [
   'opacity',
@@ -349,6 +355,7 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken; property?: Animata
 function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) {
   const [editing, setEditing] = createSignal(false)
   const [invalid, setInvalid] = createSignal(false)
+  const [stackPickerOpen, setStackPickerOpen] = createSignal(false)
   let inputEl: HTMLInputElement | undefined
   let cleanupDl: (() => void) | null = null
   onCleanup(() => {
@@ -458,7 +465,7 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
 
   return (
     <>
-      {/* transform: sub-token chips, grouped per function */}
+      {/* transform: sub-token chips, grouped per function, stack controls */}
       <Show when={props.token.type === 'transform' && (props.token.subTokens?.length ?? 0) > 0}>
         <span class="kf-chip kf-chip--transform">
           <For each={transformGroups()}>
@@ -479,10 +486,65 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
                   )}
                 </For>
                 <span class="kf-chip__fn">)</span>
+                <button
+                  class="kf-stack-btn"
+                  title={`Remove ${g.fn}`}
+                  aria-label={`Remove ${g.fn} from transform`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const next = removeTransformFn(props.token.value, g.fi)
+                    if (next !== props.token.value) commit(props.token.path, next)
+                  }}
+                >
+                  ✕
+                </button>
+                <button
+                  class="kf-stack-btn"
+                  title={`Move ${g.fn} earlier`}
+                  aria-label={`Move ${g.fn} earlier in the transform stack`}
+                  disabled={gi() === 0}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    const next = moveTransformFn(props.token.value, g.fi, -1)
+                    if (next !== props.token.value) commit(props.token.path, next)
+                  }}
+                >
+                  ◀
+                </button>
               </>
             )}
           </For>
+          <button
+            class="kf-stack-btn kf-stack-btn--add"
+            title="Add a transform function"
+            aria-label="Add a transform function"
+            onClick={(e) => {
+              e.stopPropagation()
+              setStackPickerOpen((v) => !v)
+            }}
+          >
+            +
+          </button>
         </span>
+        <Show when={stackPickerOpen()}>
+          <div class="kf-stack-picker" role="menu">
+            <For each={ADDABLE_TRANSFORM_FNS}>
+              {(name) => (
+                <button
+                  class="kf-stack-picker__item"
+                  role="menuitem"
+                  onClick={() => {
+                    const next = addTransformFn(props.token.value, name)
+                    commit(props.token.path, next)
+                    setStackPickerOpen(false)
+                  }}
+                >
+                  {name}()
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
       </Show>
 
       {/* number: NumberUnitField when editing, labeled chip at rest */}

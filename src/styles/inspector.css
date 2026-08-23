@@ -788,3 +788,56 @@
 .track__remove:focus-visible {
   outline: 1px solid var(--color-danger);
 }
+
+/* ── Transform stack controls ────────────────────────────── */
+.kf-stack-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: calc(var(--chip-fs) - 1px);
+  line-height: 1;
+  padding: 1px 2px;
+  border-radius: 2px;
+  opacity: 0.55;
+}
+.kf-stack-btn:hover:not(:disabled) {
+  color: var(--color-danger);
+  opacity: 1;
+}
+.kf-stack-btn:focus-visible {
+  outline: 1px solid var(--color-accent);
+}
+.kf-stack-btn--add {
+  color: var(--color-accent);
+  font-weight: 700;
+  padding-inline: 4px;
+}
+.kf-stack-btn--add:hover {
+  color: var(--color-accent);
+  background: var(--color-surface-2);
+}
+.kf-stack-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1, 4px);
+  padding: var(--space-2, 8px);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 4px);
+  margin-block-start: var(--space-1, 4px);
+}
+.kf-stack-picker__item {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 3px);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: var(--chip-fs);
+  padding: 2px var(--space-2, 8px);
+}
+.kf-stack-picker__item:hover {
+  color: var(--color-text);
+  border-color: var(--color-accent);
+}
