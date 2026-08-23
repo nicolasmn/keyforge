@@ -9,6 +9,13 @@ import { nanoid } from './nanoid'
  * `animation-timing-function` maps to the keyframe's easing. The companion
  * selector block (`animation-duration`) sets the document duration when the
  * keyforge export shape is recognized.
+ *
+ * Split-export merging: Keyforge emits ONE @keyframes rule PER TRACK, named
+ * `<base>-<index>`. When EVERY parsed rule name ends in `-<number>`, rules
+ * sharing a base are merged back into one layer named `<base>` (tracks
+ * concatenated in index order) — so importing a Keyforge export round-trips
+ * to the original layer count. A lone rule without the suffix stays its own
+ * layer.
  */
 
 export interface CssImportResult {
@@ -147,6 +154,50 @@ function sniffDurationMs(css: string): number {
   return m[2] === 's' ? Math.round(n * 1000) : Math.round(n)
 }
 
+/** `<base>-<index>` — e.g. "box-0" → base "box", index 0. Greedy base so
+ *  nested suffixes like "slide-in-2" resolve to base "slide-in". */
+const SPLIT_NAME_RE = /^(.+)-(\d+)$/
+
+interface SplitPart {
+  layer: Layer
+  index: number
+}
+
+/**
+ * Merge per-track split rules (`<base>-0`, `<base>-1`, …) back into single
+ * layers named `<base>`. Applied only when EVERY parsed rule name carries the
+ * numeric suffix — the signature of a Keyforge always-split export — so
+ * hand-written CSS with plain rule names is untouched. Grouping is then
+ * unambiguous (no bare-name collision is possible since every name is
+ * suffixed), and each base group merges with tracks concatenated in index
+ * order.
+ */
+export function mergeSplitLayers(layers: Layer[]): Layer[] {
+  if (layers.length === 0) return layers
+  if (!layers.every((l) => SPLIT_NAME_RE.test(l.name))) return layers
+
+  const groups = new Map<string, { parts: SplitPart[]; order: number }>()
+  layers.forEach((layer, i) => {
+    const m = SPLIT_NAME_RE.exec(layer.name)!
+    const g = groups.get(m[1]) ?? { parts: [], order: i }
+    g.parts.push({ layer, index: Number.parseInt(m[2], 10) })
+    groups.set(m[1], g)
+  })
+
+  // Stable output order: first appearance of each base.
+  return [...groups.entries()]
+    .sort(([, a], [, b]) => a.order - b.order)
+    .map(([base, { parts }]) => {
+      // Index order = track order in the original document.
+      parts.sort((a, b) => a.index - b.index)
+      return {
+        ...parts[0].layer,
+        name: base,
+        tracks: parts.flatMap((p) => p.layer.tracks),
+      }
+    })
+}
+
 export function parseCssToDoc(css: string): CssImportResult {
   const warnings: string[] = []
   if (!css || !css.includes('@keyframes')) {
@@ -220,10 +271,14 @@ export function parseCssToDoc(css: string): CssImportResult {
     return { doc: null, warnings: [...warnings, 'Nothing importable was found.'] }
   }
 
+  // Keyforge's own export splits each layer into per-track rules
+  // (`kf-<slug>-<i>`); re-join them so one import yields one layer.
+  const mergedLayers = mergeSplitLayers(layers)
+
   // Percent stops are relative to the animation duration; Keyforge stores
   // keyframe times in milliseconds. Convert after the duration is known.
   const duration = sniffDurationMs(css)
-  for (const layer of layers) {
+  for (const layer of mergedLayers) {
     for (const track of layer.tracks) {
       for (const kf of track.keyframes) {
         kf.time = Math.round((kf.time / 100) * duration)
@@ -247,7 +302,7 @@ export function parseCssToDoc(css: string): CssImportResult {
     id: nanoid(),
     name: 'Imported animation',
     duration,
-    layers,
+    layers: mergedLayers,
   }
   return { doc, warnings }
 }

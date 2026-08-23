@@ -6,12 +6,12 @@ import type { Layer, AnimationDocument, Track } from '@/types'
  * For each unique time offset across all tracks, resolves the value for every
  * track using the last keyframe at-or-before that time (stepped/hold interpolation).
  *
- * Per-property easing correctness: CSS applies ONE animation-timing-function
- * per stop to ALL properties in it (last declaration wins). When co-timed
- * keyframes carry different easings, a single shared rule would silently
- * corrupt one property's curve — so conflicting properties are emitted as
- * separate @keyframes rules (one per easing group), referenced by multiple
- * animation names on the element.
+ * Per-track timelines: within one @keyframes rule ALL properties share one
+ * percentage timeline. A shared rule therefore injects false "hold" stops
+ * into sibling tracks at times where they have no keyframe, breaking smooth
+ * interpolation — so preview/export CSS emits one @keyframes rule per track
+ * (buildSplitKeyframeBlocks), each referenced on the element's
+ * animation-name list.
  */
 
 export interface KeyframeBlocks {
@@ -98,9 +98,19 @@ export function hasCoTimedEasingConflict(layer: Layer): boolean {
 }
 
 /**
- * Build one @keyframes block PER TRACK (fully split mode). Used when
- * co-timed stops have conflicting easings — the only spec-safe way to
- * preserve every property's curve.
+ * Build one @keyframes block PER TRACK (always-split mode).
+ *
+ * Within a single @keyframes rule every property shares one percentage
+ * timeline, so a shared rule would force false "hold" stops onto sibling
+ * tracks at times where they have no keyframe of their own (breaking
+ * interpolation between their real keys). Emitting one rule per track keeps
+ * each property's timeline pure: stops appear ONLY at that track's own
+ * keyframe times, plus boundary holds at 0%/100% (duplicating the nearest
+ * value) when the track doesn't start/end at the document edges — CSS
+ * requires both endpoints.
+ *
+ * Each rule is named `<baseName>-<trackIndex>` and referenced together on
+ * the element's animation-name list.
  */
 export function buildSplitKeyframeBlocks(
   layer: Layer,
@@ -110,22 +120,33 @@ export function buildSplitKeyframeBlocks(
   const rawTimes = layer.tracks.flatMap((t) => t.keyframes.map((k) => k.time))
   const times = [...new Set([0, ...rawTimes, duration])].sort((a, b) => a - b)
 
-  const blocks = layer.tracks.map((track, i) => {
-    const body = times
-      .map((time) => {
-        const pct = ((time / duration) * 100).toFixed(2)
-        const r = trackValueAt(track, time)
-        if (!r) return ''
-        const timing =
-          r.exact && r.easing && r.easing !== 'linear'
-            ? ` animation-timing-function:${r.easing};`
-            : ''
-        return `  ${pct}% { ${track.property}:${r.value};${timing} }`
-      })
-      .filter(Boolean)
-      .join('\n')
-    return { name: `${baseName}-${i}`, css: `@keyframes ${baseName}-${i} {\n${body}\n}` }
-  })
+  const blocks = layer.tracks
+    .filter((track) => track.keyframes.length > 0)
+    .map((track, i) => {
+      // Only this track's own keyframe times, clamped to the duration.
+      const own = [...new Set(track.keyframes.map((k) => k.time))]
+        .filter((t) => t >= 0 && t <= duration)
+        .sort((a, b) => a - b)
+      const ruleTimes = [...own]
+      // Boundary holds: duplicate the nearest value so CSS sees both ends.
+      if (!ruleTimes.includes(0)) ruleTimes.unshift(0)
+      if (!ruleTimes.includes(duration)) ruleTimes.push(duration)
+
+      const body = ruleTimes
+        .map((time) => {
+          const pct = ((time / duration) * 100).toFixed(2)
+          const r = trackValueAt(track, time)
+          if (!r) return ''
+          const timing =
+            r.exact && r.easing && r.easing !== 'linear'
+              ? ` animation-timing-function:${r.easing};`
+              : ''
+          return `  ${pct}% { ${track.property}:${r.value};${timing} }`
+        })
+        .filter(Boolean)
+        .join('\n')
+      return { name: `${baseName}-${i}`, css: `@keyframes ${baseName}-${i} {\n${body}\n}` }
+    })
 
   return { times, blocks }
 }
