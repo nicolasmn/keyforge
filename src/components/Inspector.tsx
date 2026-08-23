@@ -28,7 +28,15 @@ import {
   playhead,
   doc,
 } from '@/store'
-import type { AnimatableProperty, EasingName, Keyframe, Track, ValueToken, SubToken } from '@/types'
+import type {
+  AnimatableProperty,
+  EasingName,
+  Keyframe,
+  TokenPath,
+  Track,
+  ValueToken,
+  SubToken,
+} from '@/types'
 import EasingEditor from './EasingEditor'
 import { tokenizeKeyframe, NUMBER_UNIT_RE } from '@/utils/tokenize'
 import { completionsFor, UNIT_GROUPS, isAngleUnit, toDeg } from '@/utils/cssCompletions'
@@ -83,7 +91,14 @@ function validate(type: ValueToken['type'], value: string): boolean {
  *  Ignores events from form fields — the inline edit input lives inside the
  *  chip span, and its keystrokes must not trigger activation or lose
  *  characters to preventDefault (e.g. spaces in cubic-bezier values). */
-function chipKeyDown(e: KeyboardEvent, action: () => void) {
+interface NudgeOptions {
+  scrubValue?: string
+  scrubUnit?: string
+  onNudge?: (value: number) => void
+  clampProperty?: AnimatableProperty
+}
+
+function chipKeyDown(e: KeyboardEvent, action: () => void, nudge?: NudgeOptions) {
   const target = e.target
   if (
     target instanceof HTMLInputElement ||
@@ -95,6 +110,37 @@ function chipKeyDown(e: KeyboardEvent, action: () => void) {
   if (e.key === 'Enter' || e.key === ' ') {
     e.preventDefault()
     action()
+    return
+  }
+  // Arrow-key value nudge on focused number chips (registry-clamped).
+  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    e.preventDefault()
+    const direction = e.key === 'ArrowUp' ? 1 : -1
+    const magnitude = e.shiftKey ? 10 : 1
+    // Sub-token chips carry an explicit nudge callback with their own value.
+    if (nudge?.onNudge && nudge.scrubValue !== undefined) {
+      const cur = Number.parseFloat(nudge.scrubValue)
+      if (Number.isNaN(cur)) return
+      const unit = nudge.scrubUnit ?? ''
+      const step = direction * magnitude * (unit === '' ? 0.05 : 1)
+      const next = clampToProperty(nudge.clampProperty, cur + step)
+      nudge.onNudge(next)
+      return
+    }
+    // Generic chips: read value from text, commit via data-path.
+    const chip = e.currentTarget as HTMLElement
+    const property = chip.dataset.property as AnimatableProperty | undefined
+    const token = chip.textContent?.trim() ?? ''
+    const m = NUMBER_UNIT_RE.exec(token)
+    if (!m) return
+    const step = direction * magnitude * (property === 'opacity' || property === 'scale' ? 0.05 : 1)
+    const next = clampToProperty(property, Number.parseFloat(m[1]) + step)
+    try {
+      const path = JSON.parse(chip.dataset.path ?? '') as TokenPath
+      if (path?.keyframeId) commit(path, `${next}${m[2] ?? ''}`)
+    } catch {
+      // malformed path — ignore
+    }
   }
 }
 
@@ -330,10 +376,22 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken; property?: Animata
           class="kf-chip kf-chip--number kf-chip--sub"
           tabindex={0}
           role="button"
+          data-property={props.property}
+          data-scrub-value={props.sub.value}
+          data-scrub-unit={props.sub.unit}
           aria-label={`Edit value ${props.sub.value}${props.sub.unit}`}
           onClick={() => setEditing(true)}
-          onKeyDown={(e: KeyboardEvent) => chipKeyDown(e, () => setEditing(true))}
-          title="Tap to edit"
+          onKeyDown={(e: KeyboardEvent) =>
+            chipKeyDown(e, () => setEditing(true), {
+              scrubValue: props.sub.value,
+              scrubUnit: props.sub.unit,
+              onNudge: (v: number) => {
+                commitSub(String(v), props.sub.unit || 'px')
+              },
+              clampProperty: props.property,
+            })
+          }
+          title="Tap to edit · ↑↓ nudge"
         >
           {props.sub.value}
           {props.sub.unit}
@@ -629,11 +687,17 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
             <span
               class="kf-chip kf-chip--number"
               classList={{ 'kf-chip--error': invalid() }}
+              tabindex={0}
+              role="button"
+              data-property={props.property}
+              data-path={JSON.stringify(props.token.path)}
+              aria-label={`Number value ${props.token.value}. Arrow keys nudge, Shift for ×10.`}
               onClick={() => {
                 if (!suppressClick) open()
               }}
               onPointerDown={startScrub}
-              title="Drag to scrub · tap to edit"
+              onKeyDown={(e: KeyboardEvent) => chipKeyDown(e, openIfIdle)}
+              title="Drag to scrub · ↑↓ nudge · tap to edit"
             >
               <span class="kf-chip__label">{props.token.value}</span>
               <Show when={angleDeg() !== null}>
@@ -663,8 +727,10 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
           }}
           tabindex={0}
           role="button"
+          data-property={props.token.type === 'number' ? props.property : undefined}
+          data-path={JSON.stringify(props.token.path)}
           aria-label={`Edit ${props.token.type} value ${props.token.value}`}
-          title="Tap to edit"
+          title="Tap to edit · ↑↓ nudge"
           onClick={() => {
             if (!editing()) open()
           }}
