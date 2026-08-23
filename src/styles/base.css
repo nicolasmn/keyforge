@@ -64,6 +64,7 @@
     --color-border: hsl(220 10% 22%);
     --color-text: hsl(220 10% 88%);
     --color-text-muted: hsl(220 8% 52%);
+    --color-text-faint: hsl(220 8% 40%);
     --color-accent: hsl(264 80% 68%);
     --color-accent-dim: hsl(264 50% 30%);
     --color-success: hsl(145 60% 48%);
