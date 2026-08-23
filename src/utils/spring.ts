@@ -54,6 +54,15 @@ function samplePosition(t: number, c: SpringConfig): number {
   return 1 - (-s2 * w(-s1) + s1 * w(-s2))
 }
 
+/**
+ * Public sampling helper — position (0..1, may overshoot) of a unit spring
+ * step response at time `tSec`. Exposes the same physics that
+ * `generateSpringLinear` plots, so UIs can render the curve directly.
+ */
+export function sampleSpring(config: SpringConfig, tSec: number): number {
+  return samplePosition(tSec, config)
+}
+
 export interface SpringSampleOptions {
   /** Total simulated seconds (default: until settled within epsilon). */
   durationSec?: number
@@ -80,8 +89,9 @@ export function settleTime(c: SpringConfig, maxSec = 10): number {
 
 /**
  * Generate a `linear(...)` CSS easing string from spring parameters.
- * Output positions are clamped to [0,1] progress with values allowed to
- * overshoot outside [0,1] (that's the point of springs).
+ * The simulated settle window is mapped onto the full 0%..100% stop range
+ * (so the easing spans whatever animation duration it is applied to).
+ * Output positions may overshoot outside [0,1] (that's the point of springs).
  */
 export function generateSpringLinear(
   config: SpringConfig,
@@ -93,11 +103,64 @@ export function generateSpringLinear(
   for (let i = 0; i <= n; i++) {
     const t = (i / n) * total
     const v = samplePosition(t, config)
-    points.push(`${v.toFixed(4)} ${t.toFixed(3).replace(/\.?0+$/, '') || '0'}%`)
+    const pct = ((i / n) * 100).toFixed(3).replace(/\.?0+$/, '') || '0'
+    points.push(`${v.toFixed(4)} ${pct}%`)
   }
-  // linear() requires first stop value-only; trailing percent optional but
-  // explicit percents keep output stable across engines.
+  // Explicit percents on every stop keep output stable across engines.
   return `linear(${points.join(', ')})`
+}
+
+export interface LinearStop {
+  /** Eased value at the stop (may overshoot outside [0,1] for springs). */
+  position: number
+  /** Time progress of the stop, normalized to [0,1]. */
+  progress: number
+}
+
+/**
+ * Parse the stop list of a `linear(...)` easing into `{ position, progress }`
+ * pairs (progress normalized to 0..1). Accepts the usual CSS forms:
+ * `linear(0, 0.25 50%, 1)` — stops without an explicit `%` progress are
+ * spaced evenly between their nearest specified neighbors. Returns null when
+ * no valid stops are found.
+ */
+export function parseLinearEasing(body: string): LinearStop[] | null {
+  const parts = body
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (parts.length === 0) return null
+  const stops: LinearStop[] = []
+  for (const part of parts) {
+    const tokens = part.split(/\s+/)
+    const position = Number.parseFloat(tokens[0])
+    if (!Number.isFinite(position)) return null
+    let progress = NaN
+    if (tokens.length >= 2 && tokens[1].endsWith('%')) {
+      progress = Number.parseFloat(tokens[1]) / 100
+      if (!Number.isFinite(progress)) return null
+    }
+    stops.push({ position, progress })
+  }
+  if (!Number.isFinite(stops[0].progress)) stops[0].progress = 0
+  if (!Number.isFinite(stops[stops.length - 1].progress)) {
+    stops[stops.length - 1].progress = 1
+  }
+  // Fill remaining unspecified progresses: evenly spaced between the nearest
+  // specified neighbors on either side.
+  let lastKnown = 0
+  while (lastKnown < stops.length) {
+    let nextKnown = lastKnown + 1
+    while (nextKnown < stops.length && !Number.isFinite(stops[nextKnown].progress)) nextKnown++
+    const startP = stops[lastKnown].progress
+    const endP = nextKnown < stops.length ? stops[nextKnown].progress : 1
+    const steps = nextKnown - lastKnown
+    for (let i = lastKnown + 1; i < nextKnown; i++) {
+      stops[i].progress = startP + ((endP - startP) * (i - lastKnown)) / steps
+    }
+    lastKnown = nextKnown
+  }
+  return stops
 }
 
 export const SPRING_PRESETS: Record<string, { label: string; perceptual: PerceptualSpring }> = {

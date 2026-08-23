@@ -5,6 +5,9 @@ import {
   SPRING_PRESETS,
   perceptualToConfig,
   generateSpringLinear,
+  parseLinearEasing,
+  sampleSpring,
+  settleTime,
   type PerceptualSpring,
 } from '@/utils/spring'
 
@@ -38,6 +41,14 @@ export default function EasingEditor(props: Props) {
   const [springDuration, setSpringDuration] = createSignal(450)
   const [springBounce, setSpringBounce] = createSignal(0.2)
   const [springPreview, setSpringPreview] = createSignal<string | null>(null)
+  /** True while the user is shaping the spring via presets/sliders — shows
+   *  the live spring curve on the canvas even before it is applied. */
+  const [springLive, setSpringLive] = createSignal(false)
+  /** Wall-clock ms matching the simulated settle window of the preview. */
+  const [springDemoMs, setSpringDemoMs] = createSignal(600)
+  /** Flipped on every spring change to restart the ball demo animation
+   *  (alternating between two identical keyframes). */
+  const [springAnimAlt, setSpringAnimAlt] = createSignal(false)
   let dragging: 0 | 1 | 2 = 0
 
   function applySpring(p: PerceptualSpring) {
@@ -46,12 +57,52 @@ export default function EasingEditor(props: Props) {
     regenerateSpring()
   }
 
-  function regenerateSpring() {
+  /** Recompute the generated linear() preview from the current sliders.
+   *  Called with interacting=false on mount to seed the preview text and
+   *  ball demo without flipping the canvas into live-spring mode. */
+  function regenerateSpring(interacting = true) {
     const cfg = perceptualToConfig({
       visualDurationMs: springDuration(),
       bounce: springBounce(),
     })
     setSpringPreview(generateSpringLinear(cfg))
+    setSpringDemoMs(Math.round(Math.min(settleTime(cfg) * 1.05, 10) * 1000))
+    if (!interacting) return
+    setSpringLive(true)
+    setSpringAnimAlt((v) => !v)
+  }
+
+  // ── Spring curve sampling ─────────────────────────────────────────────
+  type CurvePoint = [progress: number, value: number]
+  /** Live curve for the spring currently being shaped in the controls. */
+  function liveSpringPoints(): CurvePoint[] {
+    const cfg = perceptualToConfig({
+      visualDurationMs: springDuration(),
+      bounce: springBounce(),
+    })
+    const total = Math.min(settleTime(cfg) * 1.05, 10)
+    const pts: CurvePoint[] = []
+    for (let i = 0; i <= 60; i++) {
+      const u = i / 60
+      pts.push([u, sampleSpring(cfg, u * total)])
+    }
+    return pts
+  }
+  /**
+   * Points to plot when a spring is on screen, or null. Priority:
+   *  1. user is interacting with the Spring controls → live config;
+   *  2. raw input is an applied linear(...) → parse its stops.
+   */
+  function springPoints(): CurvePoint[] | null {
+    if (springLive()) return liveSpringPoints()
+    const m = rawInput().match(/linear\(([^)]*)\)/)
+    if (!m) return null
+    const stops = parseLinearEasing(m[1])
+    if (!stops || stops.length < 2) return null
+    // Normalize progress against the last stop so legacy strings whose
+    // percents don't reach 100% still plot across the full width.
+    const span = stops[stops.length - 1].progress || 1
+    return stops.map((s) => [s.progress / span, s.position])
   }
 
   // ── Canvas draw ────────────────────────────────────────────────────────
@@ -142,15 +193,73 @@ export default function EasingEditor(props: Props) {
         }
       })
     } else {
-      ctx.strokeStyle = colorPrimary
-      ctx.lineWidth = 2 * dpr
-      const [p0x, p0y] = toCanvas(0, 0)
-      const [p1x, p1y] = toCanvas(1, 1)
+      const sp = springPoints()
+      if (sp) drawSpringCurve(ctx, sp, { pad, inner, W, dpr, colorPrimary, colorMuted })
+      else {
+        ctx.strokeStyle = colorPrimary
+        ctx.lineWidth = 2 * dpr
+        const [p0x, p0y] = toCanvas(0, 0)
+        const [p1x, p1y] = toCanvas(1, 1)
+        ctx.beginPath()
+        ctx.moveTo(p0x, p0y)
+        ctx.lineTo(p1x, p1y)
+        ctx.stroke()
+      }
+    }
+  }
+
+  /** Plot a sampled spring (progress→value) with bezier line styling.
+   *  The y scale adapts so overshoot beyond [0,1] stays visible; dashed
+   *  guides mark the 0 and 1 reference levels. Values are clamped to the
+   *  canvas bounds. */
+  function drawSpringCurve(
+    ctx: CanvasRenderingContext2D,
+    pts: [number, number][],
+    g: {
+      pad: number
+      inner: number
+      W: number
+      dpr: number
+      colorPrimary: string
+      colorMuted: string
+    },
+  ) {
+    const { pad, inner, W, dpr, colorPrimary, colorMuted } = g
+    let lo = 0
+    let hi = 1
+    for (const [, v] of pts) {
+      if (v < lo) lo = v
+      if (v > hi) hi = v
+    }
+    // Small margin so the extremes don't kiss the canvas edge.
+    const margin = Math.max(hi - lo, 0.001) * 0.08
+    lo -= margin
+    hi += margin
+    const yOf = (v: number) => pad + (1 - (v - lo) / (hi - lo)) * inner
+
+    // Reference lines at value 0 and 1.
+    ctx.strokeStyle = colorMuted
+    ctx.lineWidth = 1 * dpr
+    ctx.setLineDash([3 * dpr, 3 * dpr])
+    for (const level of [0, 1]) {
+      const y = Math.max(0, Math.min(W, yOf(level)))
       ctx.beginPath()
-      ctx.moveTo(p0x, p0y)
-      ctx.lineTo(p1x, p1y)
+      ctx.moveTo(pad, y)
+      ctx.lineTo(W - pad, y)
       ctx.stroke()
     }
+    ctx.setLineDash([])
+
+    ctx.strokeStyle = colorPrimary
+    ctx.lineWidth = 2 * dpr
+    ctx.beginPath()
+    pts.forEach(([x, v], i) => {
+      const cx = pad + x * inner
+      const cy = Math.max(0, Math.min(W, yOf(v)))
+      if (i === 0) ctx.moveTo(cx, cy)
+      else ctx.lineTo(cx, cy)
+    })
+    ctx.stroke()
   }
 
   // ── Hit-testing (CSS pixels) ────────────────────────────────────────────
@@ -192,6 +301,7 @@ export default function EasingEditor(props: Props) {
 
   function applyHandles(next: [number, number, number, number]) {
     setHandles(next)
+    setSpringLive(false)
     const val = `cubic-bezier(${next.map((v) => +v.toFixed(3)).join(', ')})`
     setRawInput(val)
     props.onChange(val)
@@ -255,9 +365,11 @@ export default function EasingEditor(props: Props) {
     const parsed = parseCubicBezier(v)
     if (parsed) {
       setHandles(parsed)
+      setSpringLive(false)
       props.onChange(v)
     } else if (v === 'linear') {
       setHandles(null)
+      setSpringLive(false)
       props.onChange(v)
     }
     draw()
@@ -267,6 +379,7 @@ export default function EasingEditor(props: Props) {
   function applyPreset(value: string) {
     setRawInput(value)
     setHandles(resolveBezier(value))
+    setSpringLive(false)
     props.onChange(value)
     draw()
   }
@@ -300,7 +413,10 @@ export default function EasingEditor(props: Props) {
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
   onMount(() => {
-    regenerateSpring()
+    regenerateSpring(false)
+    // Kick off the ambient ball demo once (subsequent param changes retrigger
+    // it by flipping the animation-name).
+    setSpringAnimAlt((v) => !v)
     if (!canvas) return
     const dpr = window.devicePixelRatio || 1
     canvas.width = CANVAS_CSS * dpr
@@ -312,10 +428,22 @@ export default function EasingEditor(props: Props) {
 
   createEffect(() => {
     handles()
+    rawInput()
+    springLive()
+    springDuration()
+    springBounce()
     draw()
   })
 
   // ── Render ─────────────────────────────────────────────────────────────
+  function canvasAriaLabel(): string {
+    if (handles())
+      return `Easing curve editor. Arrow keys move handle ${activeHandle()} (press 1 or 2 to switch, Shift for bigger steps).`
+    if (springPoints())
+      return 'Easing curve editor. Spring (linear()) curve preview — shape it with the spring controls below.'
+    return 'Easing curve editor. Linear curve — paste a cubic-bezier value to edit handles.'
+  }
+
   return (
     <div class="easing-editor">
       {/* Canvas + raw input row */}
@@ -327,11 +455,7 @@ export default function EasingEditor(props: Props) {
           class="easing-editor__canvas"
           tabIndex={0}
           role="application"
-          aria-label={
-            handles()
-              ? `Easing curve editor. Arrow keys move handle ${activeHandle()} (press 1 or 2 to switch, Shift for bigger steps).`
-              : 'Easing curve editor. Linear curve — paste a cubic-bezier value to edit handles.'
-          }
+          aria-label={canvasAriaLabel()}
           onPointerDown={onCanvasPointerDown}
           onPointerMove={onCanvasPointerMove}
           onPointerUp={onCanvasPointerUp}
@@ -452,9 +576,26 @@ export default function EasingEditor(props: Props) {
           </label>
         </div>
         <Show when={springPreview()}>
-          <code class="easing-editor__spring-out" title={springPreview() ?? undefined}>
-            {springPreview()?.slice(0, 72)}…
-          </code>
+          <div class="easing-editor__spring-demo-row">
+            {/* Ball demo: dot slides left→right using the generated
+                linear() easing; animation-name alternates between two
+                identical keyframes to retrigger on every param change. */}
+            <div class="easing-editor__spring-demo" aria-hidden="true">
+              <span
+                class="easing-editor__spring-dot"
+                style={{
+                  'animation-name': springAnimAlt() ? 'kf-easing-spring-a' : 'kf-easing-spring-b',
+                  'animation-duration': `${springDemoMs()}ms`,
+                  'animation-timing-function': springPreview() ?? undefined,
+                  'animation-iteration-count': 'infinite',
+                  'animation-fill-mode': 'both',
+                }}
+              />
+            </div>
+            <code class="easing-editor__spring-out" title={springPreview() ?? undefined}>
+              {springPreview()?.slice(0, 72)}…
+            </code>
+          </div>
         </Show>
         <button
           class="btn btn--ghost easing-editor__spring-apply"
