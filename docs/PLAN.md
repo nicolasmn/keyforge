@@ -146,13 +146,14 @@ Self-contained improvements with no architectural risk. Priority order:
 
 See `docs/DEVTOOLS-TOKEN-UI.md`.
 
-**Implemented:**
+**Implemented** _(list corrected 2026-08-23 to match the tree — several items previously claimed features that lived only in the removed TokenView prototype or were dropped during the drag-scrub removal)_:
+
 - [x] Token AST generation (`src/utils/tokenize.ts`) — `tokenizeLayer(layer, doc) → ValueToken[]`
 - [x] Type detection: `color` / `number` / `easing` / `transform` / `string`
 - [x] `ValueToken`, `SubToken`, `TokenPath`, `TokenType` types in `src/types/index.ts`
-- [x] `TokenView` component — click-to-edit inline input, Tab/Shift+Tab, Enter/Escape, blur-revert
-- [x] Error state on invalid token (red underline + border, no commit)
-- [x] Numeric tokens: pointer-capture scrub, `Shift×10` / `Alt÷10`, `ew-resize` cursor
+- [x] Token chips in the **Inspector** tab — click (or Enter/Space when focused) to edit, Enter commits, Escape cancels, blur commits
+- [x] Error state on invalid token (red border, no commit)
+- [x] Numeric tokens: tap-to-edit inline number+unit field with unit selector and rotation-dial preview _(drag-scrub removed by design — 3302ef4/3526b55)_
 - [x] Color tokens: 10px swatch + native `<input type="color">` picker; path uses `token.path`
 - [x] Easing tokens: inline `EasingEditor` toggle (one open at a time)
 - [x] `EasingEditor`: canvas curve visualiser, draggable handles (DPR-correct hit-test), preset strip
@@ -161,11 +162,14 @@ See `docs/DEVTOOLS-TOKEN-UI.md`.
 - [x] **Easing library**: `@solid-primitives/storage` `makePersisted` + `makeObjectStorage` — reactive, in-memory, IndexedDB-ready
 - [x] **Save to library**: name input + Save button (Enter); upsert by name
 - [x] **Delete from library**: ✕ on hover of each custom preset chip
-- [x] Transform sub-tokens: `SubTokenScrub` component, each arg scrubable, assembler rebuilds string
-- [x] Third **Tokens** tab in Inspector (`src/components/Inspector.tsx`)
-- [x] `token-view.css` imported in `App.tsx`
+- [x] Transform sub-tokens: per-function chip groups (`fnA(a, b) fnB(c)`), each arg editable via `SubScrub` + assembler rebuild (multi-function display fixed 2026-08-23)
+- [x] Keyboard/a11y baseline: chips focusable with Enter/Space activation + `:focus-visible` outlines; easing canvas pointer events (touch/pen) + arrow-key handle nudging (1/2 switches handle, Shift = coarse)
+- [x] Unit tests: tokenizer (NUMBER_UNIT_RE, detectType), transform assembler round-trips, easing math (`parseCubicBezier`/`evalCubicBezier`), easing library upsert
+- [x] Easing-editor styles live in `src/styles/inspector.css` (token-view.css removed with the dead TokenView prototype)
 
 **Open tasks:**
+
+- [ ] Tab/Shift+Tab token chaining (advance token-to-token in document order) — existed only in the removed TokenView prototype
 - [ ] `]` / `[` keyboard shortcut — jump to same token in next/prev keyframe stop
 - [ ] Property-aware error `title` text (e.g. `"opacity expects 0–1"`) — currently generic red state only
 - [ ] Custom oklch color picker (v2 — after native hex-only picker validated)

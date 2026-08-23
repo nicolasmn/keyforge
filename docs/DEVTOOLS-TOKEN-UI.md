@@ -2,7 +2,7 @@
 
 > Status: Implemented (Phase 1.5 §4)
 > Added: 2026-05-03
-> Updated: 2026-05-03
+> Updated: 2026-08-23 — layout decision revised to Option B (unified Inspector); interaction model updated (tap-to-edit, no drag-scrub); keyboard/a11y baseline added
 
 ## Problem
 
@@ -37,10 +37,11 @@ Replace (or augment) the property inspector with a structured code view where:
 ### In scope
 
 - Render the generated CSS for the selected layer as a styled code block
-- Value tokens are interactive: click → editable input, Enter → commit to store, Escape → cancel
-- Tab / Shift+Tab advances between tokens in document order
+- Value tokens are interactive: click (or Enter/Space when focused) → editable input, Enter → commit to store, Escape → cancel
+- ~~Tab / Shift+Tab advances between tokens in document order~~ _(not implemented — see Tab order note below)_
 - Value changes update preview in real time (no submit button)
-- Token type detection: color values show a color swatch, numeric values support scroll-to-scrub
+- Token type detection: color values show a color swatch; numeric values are tap-to-edit via an inline number+unit field _(drag-scrub was removed — 3302ef4/3526b55)_
+- Transform values render as per-function chip groups (`fnA(a, b) fnB(c)`), each argument individually editable
 - Easing values open the inline easing editor (see Easing Library below)
 - Keyboard shortcut to jump between keyframe stops (`]` / `[` to next/prev keyframe)
 
@@ -168,16 +169,18 @@ Easing is a first-class concept in Keyforge. Rather than a simple dropdown or te
 
 ### Tab order
 
-- Tab advances through tokens **in the order they appear in the rendered CSS output**
-- Shift+Tab reverses
-- Wraps at end of keyframe block to first token
-- `]` / `[` jumps to same token in next/previous keyframe stop *(open task — see PLAN.md)*
+> **Status note (2026-08-23):** Tab/Shift+Tab token traversal described below is **not implemented** in the current tree — it existed only in the removed TokenView prototype. Chips are individually focusable (Tab reaches them) and activate with Enter/Space, but there is no token-to-token Tab chaining or wrap-around. Tracked as an open task in PLAN.md.
+
+- ~~Tab advances through tokens **in the order they appear in the rendered CSS output**~~ _(not implemented)_
+- ~~Shift+Tab reverses~~ _(not implemented)_
+- ~~Wraps at end of keyframe block to first token~~ _(not implemented)_
+- `]` / `[` jumps to same token in next/previous keyframe stop _(open task — see PLAN.md)_
 
 ---
 
 ## Layout Options
 
-Decision: **Option A** — Inspector tab (additive). Token UI lives in a third **Tokens** tab alongside **Properties** and **CSS**.
+Decision: **Option B — unified Inspector** _(revised 2026-08-23; originally Option A)_. The token chips were merged directly into the existing **Inspector** tab (replacing the old form-style Properties content), so the panel has two tabs: **Inspector** and **CSS**. There is no separate third Tokens tab. See commit a5a849f ("refactor: merge Properties+Tokens into unified devtools inspector").
 
 ---
 
@@ -216,12 +219,12 @@ type ValueToken = {
 
 ## Resolved Decisions
 
-| Question             | Decision                                                                                                   |
-| -------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Transform sub-tokens | Split per function argument — each arg is its own editable sub-token                                       |
-| Color picker         | Browser-native `<input type="color">` — hex only in v1                                                     |
-| Validation           | Error state on token (red underline + `title` description); invalid values not committed                   |
-| Easing picker        | Inline expandable panel in inspector; canvas visualiser + preset library + save/delete + raw input         |
-| Easing persistence   | `@solid-primitives/storage` `makePersisted` + `makeObjectStorage`; IndexedDB swap in Phase 4               |
-| AI features          | None planned                                                                                               |
-| Inspector placement  | Option A — third Tokens tab alongside Properties and CSS                                                   |
+| Question             | Decision                                                                                           |
+| -------------------- | -------------------------------------------------------------------------------------------------- |
+| Transform sub-tokens | Split per function argument — each arg is its own editable sub-token                               |
+| Color picker         | Browser-native `<input type="color">` — hex only in v1                                             |
+| Validation           | Error state on token (red underline + `title` description); invalid values not committed           |
+| Easing picker        | Inline expandable panel in inspector; canvas visualiser + preset library + save/delete + raw input |
+| Easing persistence   | `@solid-primitives/storage` `makePersisted` + `makeObjectStorage`; IndexedDB swap in Phase 4       |
+| AI features          | None planned                                                                                       |
+| Inspector placement  | Option B — token chips unified into the Inspector tab (two tabs: Inspector, CSS). No third tab.    |
