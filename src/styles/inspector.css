@@ -841,3 +841,11 @@
   color: var(--color-text);
   border-color: var(--color-accent);
 }
+
+/* ── Scrubbing cursor affordance ─────────────────────────── */
+.kf-chip--number {
+  cursor: ew-resize;
+}
+.kf-num-field {
+  cursor: text;
+}
