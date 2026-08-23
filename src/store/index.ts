@@ -247,6 +247,11 @@ export function updateKeyframe(
       if (!track) return
       const kf = track.keyframes.find((k) => k.id === keyframeId)
       if (!kf) return
+      // Store-level guardrails: empty values corrupt exports (literal
+      // `opacity:;`), times beyond the duration produce >100% stops that
+      // browsers silently drop.
+      if (patch.value !== undefined && patch.value.trim() === '') return
+      if (patch.time !== undefined && patch.time < 0) return
       Object.assign(kf, patch)
       track.keyframes.sort((a, b) => a.time - b.time)
     }),
