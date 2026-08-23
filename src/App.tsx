@@ -7,11 +7,23 @@ import Timeline from '@/components/Timeline'
 import Playback from '@/components/Playback'
 import MobileTabs, { activeTab } from '@/components/MobileTabs'
 import SplitLayout from '@/components/SplitLayout'
+import EmptyState from '@/components/EmptyState'
 import '@/styles/components.css'
 import '@/styles/utils.css'
 import '@/styles/app.css'
 import '@/styles/mobile.css'
 import '@/styles/inspector.css'
+import '@/styles/empty-state.css'
+
+/** Preview canvas plus the empty-state overlay shown when the doc has no layers. */
+function PreviewArea() {
+  return (
+    <div class="app__preview-stack">
+      <Preview />
+      <EmptyState />
+    </div>
+  )
+}
 
 export default function App() {
   const isMobile = createMediaQuery('(max-width: 768px)')
@@ -22,7 +34,7 @@ export default function App() {
       <Show when={!isMobile()}>
         <SplitLayout
           layerTree={<LayerTree />}
-          preview={<Preview />}
+          preview={<PreviewArea />}
           inspector={<Inspector />}
           timelineArea={
             <div class="app__timeline-area">
@@ -43,7 +55,7 @@ export default function App() {
           </Show>
           <Show when={activeTab() === 'preview'}>
             <div class="app__mobile-panel">
-              <Preview />
+              <PreviewArea />
               <div class="app__mobile-timeline">
                 <Playback />
                 <Timeline />
