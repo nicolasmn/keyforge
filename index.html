@@ -8,6 +8,18 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Keyforge</title>
+    <!-- Pre-paint theme: runs synchronously before the stylesheet below is
+         applied, so first paint already carries data-theme — no flash of the
+         wrong theme on hard reload. Reads the same key as loadPrefs() so the
+         store signal and this attribute can't disagree. -->
+    <script>
+      try {
+        var prefs = JSON.parse(localStorage.getItem('keyforge:prefs:v1') || 'null')
+        document.documentElement.dataset.theme = prefs && prefs.theme === 'light' ? 'light' : 'dark'
+      } catch (e) {
+        /* corrupt/unavailable storage — default dark */
+      }
+    </script>
     <link rel="stylesheet" href="/src/styles/base.css" />
   </head>
   <body>

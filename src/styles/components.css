@@ -17,11 +17,12 @@
 
   .btn--primary {
     background: var(--color-accent);
-    /* Near-black ink ≈7:1 on accent — white was 3.56:1, large-text-only (audit F4). */
-    color: hsl(262 30% 12%);
+    /* Ink token flips with theme (≈7:1 both ways): near-black on the light
+       dark-theme accent, white on the darker light-mode accent (audit F4). */
+    color: var(--color-accent-ink);
   }
   .btn--primary:hover {
-    background: hsl(264 80% 74%);
+    background: var(--color-accent-hover);
   }
 
   .btn--ghost {
@@ -68,23 +69,6 @@
   .input:focus {
     border-color: var(--color-accent);
     outline: none;
-  }
-
-  /* Keyframe diamond (used on timeline canvas SVG overlay) */
-  .keyframe-dot {
-    width: 10px;
-    height: 10px;
-    background: var(--color-accent);
-    border-radius: 2px;
-    transform: rotate(45deg);
-    transition:
-      background var(--duration-fast),
-      scale var(--duration-fast);
-  }
-  .keyframe-dot:hover,
-  .keyframe-dot[aria-selected='true'] {
-    background: hsl(0 0% 100%);
-    scale: 1.3;
   }
 
   /* Code block */

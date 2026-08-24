@@ -269,20 +269,20 @@ describe('prefs (keyforge:prefs:v1)', () => {
   it("coerces unknown snapIncrement values to 'off'", () => {
     const raw = JSON.stringify({ version: 1, snapIncrement: 42 })
     const prefs = deserializePrefs(raw)
-    expect(prefs).toEqual({ version: 1, snapIncrement: 'off' })
+    expect(prefs).toEqual({ version: 1, snapIncrement: 'off', theme: 'dark' })
   })
 
   it("accepts every valid snap value including 'off'", () => {
     for (const v of ['off', 1, 10, 100, 500, 1000] as const) {
       const raw = JSON.stringify({ version: 1, snapIncrement: v })
-      expect(deserializePrefs(raw)).toEqual({ version: 1, snapIncrement: v })
+      expect(deserializePrefs(raw)).toEqual({ version: 1, snapIncrement: v, theme: 'dark' })
     }
   })
 
   it('round-trips serialize → deserialize preserving value', () => {
     for (const v of ['off', 1, 10, 100, 500, 1000] as const) {
-      const payload = serializePrefs({ version: 1, snapIncrement: v })
-      expect(deserializePrefs(payload)).toEqual({ version: 1, snapIncrement: v })
+      const payload = serializePrefs({ version: 1, snapIncrement: v, theme: 'dark' })
+      expect(deserializePrefs(payload)).toEqual({ version: 1, snapIncrement: v, theme: 'dark' })
     }
   })
 
@@ -295,8 +295,8 @@ describe('prefs (keyforge:prefs:v1)', () => {
   it('loadPrefs/savePrefs round-trip through localStorage', () => {
     stubStorage()
     expect(loadPrefs()).toBeNull() // nothing stored yet
-    savePrefs({ version: 1, snapIncrement: 500 })
-    expect(loadPrefs()).toEqual({ version: 1, snapIncrement: 500 })
+    savePrefs({ version: 1, snapIncrement: 500, theme: 'light' })
+    expect(loadPrefs()).toEqual({ version: 1, snapIncrement: 500, theme: 'light' })
     expect(backing!.get(PREFS_KEY)).toBeTypeOf('string')
   })
 
