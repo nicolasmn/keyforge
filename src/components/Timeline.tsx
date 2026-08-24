@@ -17,7 +17,6 @@ import { snapTime } from '@/utils/snap'
 import { chooseLabelStep, formatTick, minorStepFor } from '@/utils/rulerScale'
 import {
   HEADER_HEIGHT,
-  LABEL_WIDTH,
   buildRowModel,
   rowContentHeight,
   rowIndexAt,
@@ -93,19 +92,16 @@ export default function Timeline() {
   )
 
   function timeToX(time: number, width: number) {
-    return LABEL_WIDTH + (time / doc.duration) * (width - LABEL_WIDTH)
+    return (time / doc.duration) * width
   }
 
   function xToTime(x: number, width: number) {
-    return Math.max(
-      0,
-      Math.min(doc.duration, ((x - LABEL_WIDTH) / (width - LABEL_WIDTH)) * doc.duration),
-    )
+    return Math.max(0, Math.min(doc.duration, (x / width) * doc.duration))
   }
 
   function applyDurationFromX(x: number) {
-    const msPerPx = doc.duration / (canvas!.offsetWidth - LABEL_WIDTH)
-    const newDur = Math.max(100, Math.round(((x - LABEL_WIDTH) * msPerPx) / 50) * 50)
+    const msPerPx = doc.duration / canvas!.offsetWidth
+    const newDur = Math.max(100, Math.round((x * msPerPx) / 50) * 50)
     setPlayhead((prev) => Math.min(prev, newDur))
     setDuration(newDur)
   }
@@ -154,7 +150,7 @@ export default function Timeline() {
     // what's actually drawn (plan §4).
     const cssWidth = width / dpr
     const laneRight = cssWidth - HANDLE_HIT
-    const laneWidthCss = cssWidth - LABEL_WIDTH - HANDLE_HIT
+    const laneWidthCss = cssWidth
     const pxPerMs = doc.duration / laneWidthCss
     const measureLabel = (label: string) => ctx.measureText(label).width / dpr
     const labelStep = chooseLabelStep(
@@ -178,7 +174,6 @@ export default function Timeline() {
       const label = formatTick(t, labelStep)
       const labelW = ctx.measureText(label).width / dpr
       let lx = x + 4
-      if (lx < LABEL_WIDTH + 2) lx = LABEL_WIDTH + 2
       if (lx + labelW > laneRight - 2) lx = laneRight - 2 - labelW
       ctx.fillStyle = colorText
       ctx.fillText(label, lx * dpr, (HEADER_HEIGHT / 2) * dpr)
@@ -264,7 +259,14 @@ export default function Timeline() {
       ctx.restore()
       ctx.fillStyle = colorBorder
       ctx.fillRect(0, y + row.height * dpr - 1, width, 1)
-      ctx.fillRect(LABEL_WIDTH * dpr, y + (row.height / 2) * dpr, width - LABEL_WIDTH * dpr, 1)
+      ctx.fillRect(0, y + (row.height / 2) * dpr, width, 1)
+      // Track property label painted just past the label zone boundary —
+      // small, muted, non-interactive (plan §3.2: track bands keep their
+      // property label as plain text).
+      ctx.fillStyle = colorText
+      ctx.font = `${10 * dpr}px monospace`
+      ctx.textBaseline = 'middle'
+      ctx.fillText(track.property, 8 * dpr, y + (row.height / 2) * dpr)
       track.keyframes.forEach((kf) => {
         const x = timeToX(kf.time, width / dpr) * dpr
         const cy2 = y + (row.height / 2) * dpr
@@ -331,8 +333,8 @@ export default function Timeline() {
         if (bandH > 0) {
           const stripH = bandCount * bandH
           let bandYCss = row.y + (row.height - stripH) / 2
-          const laneLeftDev = LABEL_WIDTH * dpr
-          const laneWDev = Math.max(0, width - LABEL_WIDTH * dpr - HANDLE_HIT * dpr)
+          const laneLeftDev = 0
+          const laneWDev = Math.max(0, width)
           for (let b = 0; b < bandCount; b++) {
             const from = b
             const to = b === MAX_STRIP_BANDS - 1 ? tracksOfLayer.length : b + 1
@@ -497,7 +499,7 @@ export default function Timeline() {
     const w = ctx.measureText(text).width + padX * 2
     const h = 16 * dpr
     let x = xCss * dpr - w / 2
-    const minX = LABEL_WIDTH * dpr
+    const minX = 0
     const maxX = cssWidth * dpr - HANDLE_HIT * dpr - w
     x = Math.max(minX, Math.min(x, maxX))
     const y = yCss * dpr
@@ -751,7 +753,7 @@ export default function Timeline() {
     if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return
     e.preventDefault()
     setPlaying(false)
-    const msPerPx = doc.duration / (canvas!.offsetWidth - LABEL_WIDTH)
+    const msPerPx = doc.duration / canvas!.offsetWidth
     setPlayhead((prev) => {
       const next = Math.max(0, Math.min(doc.duration, prev + e.deltaX * msPerPx))
       return snapTime(next, snapIncrement(), doc.duration)
@@ -807,17 +809,21 @@ export default function Timeline() {
           automatically since it observes whatever wraps the canvas at mount. */}
       <Playback variant="compact" />
       <div class="timeline__scroll">
-        <RowHeaders rows={rows()} />
-        <canvas
-          ref={setCanvasRef}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerLeave={onPointerLeave}
-          onLostPointerCapture={onLostPointerCapture}
-          onWheel={onWheel}
-          onDblClick={onDblClick}
-        />
+        <div class="timeline__body">
+          <div class="timeline__headers">
+            <RowHeaders rows={rows()} />
+          </div>
+          <canvas
+            ref={setCanvasRef}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerLeave={onPointerLeave}
+            onLostPointerCapture={onLostPointerCapture}
+            onWheel={onWheel}
+            onDblClick={onDblClick}
+          />
+        </div>
       </div>
     </div>
   )

@@ -264,17 +264,16 @@ describe('headerEntries / layerHeaderIds', () => {
   ]
   const rows = buildRowModel(layers)
 
-  it('emits one entry per canvas row with top = y − HEADER_HEIGHT', () => {
+  it('emits LAYER-ONLY entries (Phase A: track labels stay on canvas)', () => {
     const entries = headerEntries(rows)
-    expect(entries).toHaveLength(rows.length)
-    entries.forEach((entry, i) => {
-      expect(entry.top).toBe(rows[i].y - HEADER_HEIGHT)
-      expect(entry.height).toBe(rows[i].height)
-      expect(entry.layerId).toBe(rows[i].layerId)
+    // Two layers → two layer-only entries; tracks are canvas-painted.
+    expect(entries).toHaveLength(2)
+    expect(entries.every((e) => e.type === 'layer')).toBe(true)
+    entries.forEach((entry) => {
+      const srcRow = rows.find((r) => r.layerId === entry.layerId)!
+      expect(entry.top).toBe(srcRow.y - HEADER_HEIGHT)
+      expect(entry.height).toBe(srcRow.height)
     })
-    expect(entries.map((e) => e.type)).toEqual(['layer', 'track', 'track', 'layer'])
-    const tb = entries[2]
-    if (tb.type === 'track') expect(tb.trackId).toBe('Tb')
   })
 
   it('exactly one layer-header per layer, in doc order, regardless of collapse', () => {

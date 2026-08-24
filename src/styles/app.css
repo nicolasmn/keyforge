@@ -891,3 +891,19 @@
     transition: none;
   }
 }
+
+/* Timeline split layout: HTML headers left, canvas right */
+.timeline__body {
+  display: flex;
+  min-height: 0;
+}
+.timeline__headers {
+  flex-shrink: 0;
+  width: var(--header-column-width, 146px);
+  position: relative;
+  border-right: 1px solid var(--color-border);
+}
+.timeline__headers .row-headers {
+  position: absolute;
+  inset: 0;
+}
