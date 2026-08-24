@@ -814,6 +814,26 @@ export default function Timeline() {
           <div class="timeline__headers">
             <RowHeaders rows={rows()} />
           </div>
+          <div
+            class="timeline__header-gutter"
+            onPointerDown={(e) => {
+              e.preventDefault()
+              const startX = e.clientX
+              const el = document.documentElement
+              const startW =
+                parseFloat(getComputedStyle(el).getPropertyValue('--header-col-w')) || 146
+              const onMove = (ev: PointerEvent) => {
+                const w = Math.max(100, Math.min(300, startW + ev.clientX - startX))
+                el.style.setProperty('--header-col-w', `${w}px`)
+              }
+              const onUp = () => {
+                window.removeEventListener('pointermove', onMove)
+                window.removeEventListener('pointerup', onUp)
+              }
+              window.addEventListener('pointermove', onMove)
+              window.addEventListener('pointerup', onUp)
+            }}
+          />
           <canvas
             ref={setCanvasRef}
             onPointerDown={onPointerDown}
