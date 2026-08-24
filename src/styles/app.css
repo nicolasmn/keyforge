@@ -815,3 +815,116 @@
   clip-path: inset(50%);
   white-space: nowrap;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Unified timeline row headers (branch steward/unify-phase-a)
+   Real-DOM column over the canvas label strip — Phase A of the
+   unify plan. Shares .timeline__scroll's native scroller with
+   the canvas so vertical scroll sync is designed out.
+   ═══════════════════════════════════════════════════════════ */
+.row-headers {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--header-col-w, 146px);
+  padding-top: 28px; /* HEADER_HEIGHT — aligns entries below the ruler */
+  pointer-events: none;
+  z-index: 5;
+}
+.row-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px 0 8px;
+  pointer-events: auto;
+  cursor: default;
+}
+.row-header--selected {
+  background: color-mix(in oklch, var(--color-accent) 10%, transparent);
+}
+.row-header__chevron,
+.row-header__eye {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0;
+}
+.row-header__chevron:hover,
+.row-header__eye:hover {
+  color: var(--color-accent);
+}
+.row-header__chevron svg {
+  transition: transform var(--duration-fast) var(--ease-out-expo);
+}
+.row-header__chevron--open svg {
+  transform: rotate(90deg);
+}
+.row-header__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  color: var(--color-text);
+  background: none;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+}
+.row-header__name-input {
+  width: 100%;
+  font-size: inherit;
+  font-family: inherit;
+  border: 1px solid var(--color-accent);
+  background: var(--color-surface);
+  color: var(--color-text);
+  padding: 0 2px;
+  outline: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-header__chevron svg {
+    transition: none;
+  }
+}
+
+/* Timeline split layout: HTML headers left, canvas right */
+.timeline__body {
+  display: flex;
+  min-height: 0;
+}
+.timeline__headers {
+  flex-shrink: 0;
+  width: var(--header-col-w, 146px);
+  border-right: 1px solid var(--color-border);
+}
+
+/* Track rows: smaller, non-interactive text entries */
+.row-header--track {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  padding-left: 28px;
+  cursor: default;
+}
+.row-header--track:hover {
+  background: transparent;
+}
+
+.timeline__header-gutter {
+  width: 4px;
+  cursor: col-resize;
+  flex-shrink: 0;
+  background: transparent;
+}
+.timeline__header-gutter:hover {
+  background: var(--color-accent);
+}
