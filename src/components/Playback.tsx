@@ -14,6 +14,11 @@ import {
 import { savePrefs } from '@/utils/persistence'
 import type { SnapIncrement } from '@/utils/snap'
 
+interface PlaybackProps {
+  /** 'compact' trims padding/gap for the strip above the timeline ruler. */
+  variant?: 'default' | 'compact'
+}
+
 const SNAP_OPTIONS: readonly { value: SnapIncrement; label: string }[] = [
   { value: 'off', label: 'Off' },
   { value: 1, label: '1ms' },
@@ -23,7 +28,7 @@ const SNAP_OPTIONS: readonly { value: SnapIncrement; label: string }[] = [
   { value: 1000, label: '1s' },
 ]
 
-export default function Playback() {
+export default function Playback(props: PlaybackProps = {}) {
   const [editingDuration, setEditingDuration] = createSignal(false)
   const [durationInvalid, setDurationInvalid] = createSignal(false)
 
@@ -56,7 +61,14 @@ export default function Playback() {
   }
 
   return (
-    <div class="playback">
+    // role="group" (not "toolbar"): the toolbar role implies roving-tabindex
+    // arrow-key conventions we don't implement — a labelled group is honest.
+    <div
+      class="playback"
+      classList={{ 'playback--compact': props.variant === 'compact' }}
+      role="group"
+      aria-label="Playback controls"
+    >
       <button class="btn btn--ghost" onClick={stop} title="Stop">
         ⏹
       </button>

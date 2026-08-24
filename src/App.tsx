@@ -5,7 +5,6 @@ import LayerTree from '@/components/LayerTree'
 import Preview from '@/components/Preview'
 import Inspector from '@/components/Inspector'
 import Timeline from '@/components/Timeline'
-import Playback from '@/components/Playback'
 import DocBar from '@/components/DocBar'
 import MobileTabs, { activeTab } from '@/components/MobileTabs'
 import SplitLayout from '@/components/SplitLayout'
@@ -39,11 +38,11 @@ export default function App() {
 
   return (
     <div class="app">
-      {/* Document bar — name + import/export; hidden on mobile (space) */}
+      {/* Document bar — name + import/export; playback controls live in the
+          timeline now. Hidden on mobile (space). */}
       <Show when={!isMobile()}>
         <header class="app__doc-header">
           <DocBar />
-          <Playback />
         </header>
       </Show>
       {/* Desktop — resizable panels via Split.js */}
@@ -71,8 +70,8 @@ export default function App() {
           <Show when={activeTab() === 'preview'}>
             <div class="app__mobile-panel">
               <PreviewArea />
+              {/* Timeline embeds the transport strip itself (plan: playback-in-timeline). */}
               <div class="app__mobile-timeline">
-                <Playback />
                 <Timeline />
               </div>
             </div>
