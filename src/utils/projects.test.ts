@@ -119,6 +119,10 @@ describe('per-project docs', () => {
     // savedAt is stamped at write time, so raw bytes may differ by ms).
     const stored = JSON.parse(backing!.get(projectKey('p1'))!)
     const expected = JSON.parse(serializeDoc(validDoc))
+    // savedAt is stamped at write time — exclude it or this test flakes when
+    // the two serialize calls straddle a millisecond boundary.
+    delete (stored as { savedAt?: number }).savedAt
+    delete (expected as { savedAt?: number }).savedAt
     expect(stored).toEqual(expected)
   })
 
