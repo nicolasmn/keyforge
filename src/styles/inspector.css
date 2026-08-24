@@ -899,3 +899,40 @@
 .kf-num-field {
   cursor: text;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Scoped additions — carried findings (steward/inspector-carried)
+   ═══════════════════════════════════════════════════════════ */
+
+/* Color swatch: pointer + tooltip affordance (old-F11 split-brain fix) */
+.kf-chip__swatch {
+  cursor: pointer;
+}
+
+/* Screen eyedropper button beside the color text input (old-F11) */
+.kf-chip__eyedropper {
+  border: none;
+  background: transparent;
+  color: var(--chip-color);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+.kf-chip__eyedropper:hover {
+  color: var(--chip-num);
+}
+
+/* Interactive rotation dial on transform angle args (old-F8) */
+.kf-rot-dial--live {
+  cursor: grab;
+  border-radius: 50%;
+}
+.kf-rot-dial--live:active {
+  cursor: grabbing;
+}
+.kf-rot-dial--live:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}

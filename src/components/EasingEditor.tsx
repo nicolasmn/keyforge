@@ -1,4 +1,4 @@
-import { createSignal, createEffect, onMount, For, Show } from 'solid-js'
+import { createSignal, createEffect, onMount, onCleanup, For, Show } from 'solid-js'
 import { BUILTIN_PRESETS, parseCubicBezier, evalCubicBezier } from '@/utils/easing-presets'
 import { customEasings, addEasing, removeEasing } from '@/store/easingLibrary'
 import {
@@ -417,6 +417,20 @@ export default function EasingEditor(props: Props) {
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
   onMount(() => {
+    // Uniform Escape contract (#48), completed per the 2026-08-24 audit:
+    // Escape closes the editor from ANY focus — canvas (existing local
+    // handler), chips, or body focus. Typing surfaces are skipped so their
+    // own Escape semantics (cancel edit / clear save state) still win.
+    const onWindowKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      const t = e.target as HTMLElement | null
+      if (t && (t.isContentEditable || t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return
+      e.preventDefault()
+      props.onClose()
+    }
+    window.addEventListener('keydown', onWindowKeyDown)
+    onCleanup(() => window.removeEventListener('keydown', onWindowKeyDown))
+
     regenerateSpring(false)
     // Kick off the ambient ball demo once (subsequent param changes retrigger
     // it by flipping the animation-name).
