@@ -438,3 +438,22 @@
   justify-content: flex-end;
   gap: var(--space-2);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Scoped additions — audit F14/F16 (branch steward/panel-preview)
+
+   F16 · preview stage scale-to-fit:
+   The stage is authored at a fixed 600×400 and used to clip inside narrow
+   split panels (overflow:hidden cropped content instead of scaling).
+   `--preview-scale` is published by Preview.tsx's ResizeObserver as
+   min(1, panelW/620, panelH/420) and updated live during gutter drags.
+   Scoped to .split-shell so the mobile full-bleed preview (mobile.css sets
+   width/height:100%) is unaffected.
+
+   F14 · panel re-clamp on viewport resize is pure JS (Split.js setSizes in
+   SplitLayout.tsx) and needs no CSS.
+   ═══════════════════════════════════════════════════════════════ */
+.split-shell .preview__canvas {
+  transform: scale(var(--preview-scale, 1));
+  transform-origin: center;
+}
