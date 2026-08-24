@@ -1,4 +1,4 @@
-import { createSignal, Show } from 'solid-js'
+import { createMemo, createSignal, Show } from 'solid-js'
 import { doc, setDoc, replaceDoc, setSelectedLayerId } from '@/store'
 import { serializeDoc, deserializeDoc, validatePersisted } from '@/utils/persistence'
 import { parseCssToDoc } from '@/utils/cssImport'
@@ -14,21 +14,69 @@ export default function DocBar() {
   const [importError, setImportError] = createSignal('')
   const [cssModalOpen, setCssModalOpen] = createSignal(false)
   const [cssText, setCssText] = createSignal('')
-  const [cssWarning, setCssWarning] = createSignal('')
   let fileInput: HTMLInputElement | undefined
+  let cssImportTrigger: HTMLButtonElement | undefined
+  let cssDialog: HTMLDivElement | undefined
+
+  /** Live parse of the pasted CSS — drives Import enablement and the inline warning. */
+  const cssParse = createMemo(() => {
+    const text = cssText().trim()
+    return text ? parseCssToDoc(text) : null
+  })
+  /** Import stays disabled until the textarea parses into at least one layer (audit F13). */
+  const canImportCss = () => !!cssParse()?.doc
+  /** First failure reason for the current text; '' when empty or parseable. */
+  const cssParseWarning = () => {
+    const result = cssParse()
+    if (!result || result.doc) return ''
+    return result.warnings[0] ?? 'Could not parse this CSS.'
+  }
+
+  /**
+   * Uniform close path for the paste-CSS modal: dismisses it and hands focus
+   * back to the "From CSS…" trigger (Escape contract from #48).
+   */
+  function closeCssModal() {
+    setCssModalOpen(false)
+    cssImportTrigger?.focus()
+  }
+
+  /**
+   * Modal keyboard contract: Escape closes (restoring focus via closeCssModal),
+   * Tab/Shift+Tab cycle inside the dialog so keyboard users can't reach the page.
+   */
+  function onCssModalKeyDown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      closeCssModal()
+      return
+    }
+    if (e.key !== 'Tab' || !cssDialog) return
+    const focusable = cssDialog.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    )
+    if (focusable.length === 0) return
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    const active = document.activeElement
+    if (e.shiftKey && (active === first || !cssDialog.contains(active))) {
+      e.preventDefault()
+      last.focus()
+    } else if (!e.shiftKey && active === last) {
+      e.preventDefault()
+      first.focus()
+    }
+  }
 
   function importFromCss() {
     setImportError('')
-    const result = parseCssToDoc(cssText())
-    if (!result.doc) {
-      setCssWarning(result.warnings[0] ?? 'Could not parse this CSS.')
-      return
-    }
+    const result = cssParse()
+    // Defensive only — the button is disabled unless the parse yields a doc.
+    if (!result?.doc) return
+    setCssText('')
     replaceDoc(result.doc)
     setSelectedLayerId(result.doc.layers[0]?.id ?? null)
-    setCssModalOpen(false)
-    setCssText('')
-    setCssWarning('')
+    closeCssModal()
   }
 
   function commitName() {
@@ -158,8 +206,10 @@ export default function DocBar() {
       </button>
       <button
         class="btn btn--ghost"
+        ref={(el) => {
+          cssImportTrigger = el
+        }}
         onClick={() => {
-          setCssWarning('')
           setCssModalOpen(true)
         }}
         title="Paste @keyframes CSS and edit it here"
@@ -176,7 +226,8 @@ export default function DocBar() {
         onChange={onImportChange}
       />
       <Show when={importError()}>
-        <span class="doc-bar__error" role="alert">
+        {/* title keeps the full message reachable when the bar clips it (audit F13). */}
+        <span class="doc-bar__error" role="alert" title={importError()}>
           {importError()}
         </span>
       </Show>
@@ -185,17 +236,26 @@ export default function DocBar() {
       <Show when={cssModalOpen()}>
         <div
           class="css-import__backdrop"
+          onKeyDown={onCssModalKeyDown}
           onClick={(e) => {
-            if (e.target === e.currentTarget) setCssModalOpen(false)
+            if (e.target === e.currentTarget) closeCssModal()
           }}
         >
-          <div class="css-import" role="dialog" aria-label="Import CSS keyframes">
+          <div
+            class="css-import"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Import CSS keyframes"
+            ref={(el) => {
+              cssDialog = el
+            }}
+          >
             <div class="css-import__head">
               <strong>Paste @keyframes CSS</strong>
               <button
                 class="btn btn--ghost css-import__close"
                 aria-label="Close import dialog"
-                onClick={() => setCssModalOpen(false)}
+                onClick={() => closeCssModal()}
               >
                 ✕
               </button>
@@ -209,17 +269,21 @@ export default function DocBar() {
               onInput={(e) => setCssText((e.currentTarget as HTMLTextAreaElement).value)}
               spellcheck={false}
               rows={12}
+              ref={(el) => {
+                // Autofocus on open — refs re-run on every <Show> mount.
+                queueMicrotask(() => el.focus())
+              }}
             />
-            <Show when={cssWarning()}>
-              <p class="css-import__warning" role="alert">
-                {cssWarning()}
-              </p>
-            </Show>
             <div class="css-import__actions">
-              <button class="btn btn--ghost" onClick={() => setCssModalOpen(false)}>
+              {/* Persistent polite live region next to the action row, so parse
+                  problems are announced and never hidden below the textarea. */}
+              <p class="css-import__warning" aria-live="polite">
+                {cssParseWarning()}
+              </p>
+              <button class="btn btn--ghost" onClick={() => closeCssModal()}>
                 Cancel
               </button>
-              <button class="btn btn--primary" onClick={importFromCss} disabled={!cssText().trim()}>
+              <button class="btn btn--primary" onClick={importFromCss} disabled={!canImportCss()}>
                 Import animation
               </button>
             </div>

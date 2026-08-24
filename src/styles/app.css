@@ -375,6 +375,12 @@
 .doc-bar__error {
   font-size: var(--font-size-xs, 11px);
   color: var(--color-danger);
+  /* Clamp + ellipsis so import errors stay readable inside the bar instead of
+     clipping off its far right edge (audit F13); full text is on title. */
+  max-width: 32ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Duration affordance in playback time display ────────── */
@@ -403,7 +409,9 @@
 .css-import__backdrop {
   position: fixed;
   inset: 0;
-  background: oklch(from var(--color-bg) l c h / 0.7);
+  /* Same scrim math as .empty-state (color-mix over --color-bg) so the app has
+     one overlay recipe instead of a second oklch-from() variant (audit F12). */
+  background: color-mix(in oklch, var(--color-bg) 70%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -432,8 +440,13 @@
   min-height: 220px;
   white-space: pre;
 }
+/* Warning sits inside the action row (flex: 1) so it is never pushed below
+   the fold by the tall textarea; the persistent element doubles as the
+   aria-live=polite region for parse feedback (audit F13). */
 .css-import__warning {
   margin: 0;
+  flex: 1;
+  min-width: 0;
   color: var(--color-danger);
   font-size: var(--font-size-xs, 12px);
 }
