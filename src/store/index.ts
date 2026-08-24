@@ -198,14 +198,33 @@ export function setLayerVisibility(layerId: string, visible: boolean) {
   )
 }
 
-export function addTrack(layerId: string, property: AnimatableProperty) {
+/**
+ * Add a property track to a layer — ONE track per property, ever.
+ *
+ * Two animations animating the same CSS property cannot compose: per
+ * css-animations-1 the animation later in the animation-name list overrides
+ * the other entirely ("last one wins"), so a duplicate transform/opacity/…
+ * track would silently kill the first. Requesting a property that already
+ * has a track is a no-op returning the existing track's id.
+ */
+export function addTrack(layerId: string, property: AnimatableProperty): string | null {
+  const existing = doc.layers
+    .find((l) => l.id === layerId)
+    ?.tracks.find((t) => t.property === property)
+  if (existing) return existing.id
+
+  const id = nanoid()
   setDoc(
     produce((d) => {
       const layer = d.layers.find((l) => l.id === layerId)
       if (!layer) return
-      layer.tracks.push({ id: nanoid(), property, keyframes: [] })
+      // Re-check inside produce in case a concurrent mutation slipped in.
+      const dup = layer.tracks.find((t) => t.property === property)
+      if (dup) return
+      layer.tracks.push({ id, property, keyframes: [] })
     }),
   )
+  return id
 }
 
 /** Remove an entire property track (and all its keyframes) from a layer. */
