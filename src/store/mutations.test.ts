@@ -7,6 +7,8 @@ import {
   renameLayer,
   reorderLayer,
   setLayerVisibility,
+  setLayerCollapsed,
+  toggleLayerCollapsed,
   addTrack,
   addKeyframe,
   updateKeyframe,
@@ -145,6 +147,49 @@ describe('setLayerVisibility', () => {
     const id1 = doc.layers[1].id
     setLayerVisibility(id0, false)
     expect(doc.layers.find((l) => l.id === id1)?.visible).toBe(true)
+  })
+})
+
+describe('setLayerCollapsed / toggleLayerCollapsed', () => {
+  it('setLayerCollapsed collapses and expands a layer', () => {
+    addLayer()
+    addLayer()
+    const id = doc.layers[0].id
+    setLayerCollapsed(id, true)
+    expect(doc.layers.find((l) => l.id === id)?.collapsed).toBe(true)
+    setLayerCollapsed(id, false)
+    expect(doc.layers.find((l) => l.id === id)?.collapsed).toBe(false)
+  })
+
+  it('does not affect other layers', () => {
+    addLayer()
+    addLayer()
+    const id0 = doc.layers[0].id
+    const id1 = doc.layers[1].id
+    setLayerCollapsed(id0, true)
+    expect(doc.layers.find((l) => l.id === id1)?.collapsed).toBe(false)
+  })
+
+  it('toggleLayerCollapsed flips absent → true → false', () => {
+    addLayer()
+    const id = doc.layers[0].id
+    expect(doc.layers[0].collapsed).toBe(false) // seeded expanded
+    toggleLayerCollapsed(id)
+    expect(doc.layers[0].collapsed).toBe(true)
+    toggleLayerCollapsed(id)
+    expect(doc.layers[0].collapsed).toBe(false)
+  })
+
+  it('toggleLayerCollapsed is a no-op for unknown layer ids', () => {
+    addLayer()
+    const before = JSON.stringify(doc.layers.map((l) => l.collapsed))
+    toggleLayerCollapsed('nonexistent-layer-id')
+    expect(JSON.stringify(doc.layers.map((l) => l.collapsed))).toBe(before)
+  })
+
+  it('addLayer seeds collapsed: false for uniform object shapes', () => {
+    addLayer()
+    expect(doc.layers[0].collapsed).toBe(false)
   })
 })
 

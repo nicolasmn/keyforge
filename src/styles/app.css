@@ -146,6 +146,21 @@
   .layer-tree__drag-handle:active {
     cursor: grabbing;
   }
+  .layer-tree__collapse {
+    flex-shrink: 0;
+    padding: 2px;
+  }
+  .layer-tree__collapse svg {
+    transition: transform var(--duration-fast) var(--ease-out-expo);
+  }
+  .layer-tree__collapse--open svg {
+    transform: rotate(90deg);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .layer-tree__collapse svg {
+      transition: none;
+    }
+  }
   .layer-tree__visibility {
     display: flex;
     align-items: center;

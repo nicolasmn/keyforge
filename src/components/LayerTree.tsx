@@ -17,6 +17,7 @@ import {
   renameLayer,
   reorderLayer,
   setLayerVisibility,
+  setLayerCollapsed,
 } from '@/store'
 
 function SortableLayer(props: {
@@ -50,6 +51,37 @@ function SortableLayer(props: {
           <circle cx="8" cy="9" r="1" />
         </svg>
       </span>
+
+      {/* Collapse disclosure — the AT-discoverable control the canvas
+          chevron mirrors (plan: canvas can't host real buttons). */}
+      <button
+        class="btn btn--ghost layer-tree__collapse"
+        onClick={(e) => {
+          e.stopPropagation()
+          setLayerCollapsed(props.layer.id, !props.layer.collapsed)
+        }}
+        title={props.layer.collapsed ? 'Expand layer in timeline' : 'Collapse layer in timeline'}
+        aria-label={
+          props.layer.collapsed
+            ? `Expand layer ${props.layer.name} in timeline`
+            : `Collapse layer ${props.layer.name} in timeline`
+        }
+        aria-expanded={!props.layer.collapsed}
+      >
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          classList={{ 'layer-tree__collapse--open': !props.layer.collapsed }}
+        >
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+      </button>
 
       <button
         class="btn btn--ghost layer-tree__visibility"

@@ -43,6 +43,13 @@ export interface Layer {
   id: string
   name: string
   visible: boolean
+  /**
+   * View state: the timeline shows a single summary row instead of one row
+   * per track. Optional so v1 persisted docs load unchanged (validator
+   * normalizes missing/non-boolean values to `false` = expanded; no version
+   * bump — see persistence.ts).
+   */
+  collapsed?: boolean
   element: LayerElement
   tracks: Track[]
 }
