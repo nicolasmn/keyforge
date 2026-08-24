@@ -4,10 +4,14 @@ import {
   HEADER_HEIGHT,
   LAYER_ROW_HEIGHT,
   CONTENT_PAD_BOTTOM,
+  LABEL_WIDTH,
+  KF_HIT_GUARD_PX,
+  HEADER_COLUMN_WIDTH,
   buildRowModel,
   rowContentHeight,
   rowIndexAt,
-  isDisclosureZone,
+  headerEntries,
+  layerHeaderIds,
   type TimelineRow,
 } from './rowModel'
 import type { Layer } from '@/types'
@@ -51,9 +55,10 @@ describe('buildRowModel — flat parity (all expanded)', () => {
     mkLayer('L1', [['T1a', [100, 200]]]),
   ]
 
-  it('reproduces the legacy math: y = HEADER_HEIGHT + i*TRACK_HEIGHT', () => {
+  it('reproduces the uniform rhythm: y = HEADER_HEIGHT + i*TRACK_HEIGHT (header bands included)', () => {
     const rows = buildRowModel(layers)
-    expect(rows).toHaveLength(3)
+    // One header band per layer + one row per track.
+    expect(rows).toHaveLength(5)
     rows.forEach((row, i) => {
       expect(row.y).toBe(HEADER_HEIGHT + i * TRACK_HEIGHT)
       expect(row.height).toBe(TRACK_HEIGHT)
@@ -62,12 +67,20 @@ describe('buildRowModel — flat parity (all expanded)', () => {
 
   it('references the right (layerId, trackId) per row in layer→track order', () => {
     const rows = buildRowModel(layers)
-    expect(rows.map((r) => (r.type === 'track' ? r.trackId : r.layerId))).toEqual([
+    expect(rows.map((r) => r.type)).toEqual(['layer', 'track', 'track', 'layer', 'track'])
+    expect(rows.map((r) => (r.type === 'track' ? r.trackId : null))).toEqual([
+      null,
       'T0a',
       'T0b',
+      null,
       'T1a',
     ])
-    expect(rows.map((r) => r.layerId)).toEqual(['L0', 'L0', 'L1'])
+    expect(rows.map((r) => r.layerId)).toEqual(['L0', 'L0', 'L0', 'L1', 'L1'])
+    const l0 = rows[0]
+    if (l0.type === 'layer') {
+      expect(l0.trackCount).toBe(2)
+      expect(l0.kfCount).toBe(1)
+    }
   })
 })
 
@@ -89,19 +102,27 @@ describe('buildRowModel — collapse geometry', () => {
     ]),
   ]
 
-  it('middle-collapsed model: [L0 tracks…, LayerRow(L1), L2 tracks…] with contiguous ys', () => {
+  it('middle-collapsed model: header band per layer; collapsed layer emits ONLY its band', () => {
     const rows = buildRowModel(layers)
-    expect(rows.map((r) => r.type)).toEqual(['track', 'layer', 'track', 'track', 'track'])
+    expect(rows.map((r) => r.type)).toEqual([
+      'layer',
+      'track',
+      'layer',
+      'layer',
+      'track',
+      'track',
+      'track',
+    ])
     assertContiguous(rows)
-    const l1 = rows[1]
-    expect(l1.type).toBe('layer')
-    if (l1.type === 'layer') {
-      expect(l1.layerId).toBe('L1')
-      expect(l1.trackCount).toBe(2)
-      expect(l1.kfCount).toBe(2)
+    const l1Band = rows[2]
+    expect(l1Band.type).toBe('layer')
+    if (l1Band.type === 'layer') {
+      expect(l1Band.layerId).toBe('L1')
+      expect(l1Band.trackCount).toBe(2)
+      expect(l1Band.kfCount).toBe(2)
     }
-    // L2's first row starts exactly where the summary row ended.
-    expect(rows[2].y).toBe(l1.y + l1.height)
+    // L2's header band starts exactly where L1's summary band ended.
+    expect(rows[3].y).toBe(l1Band.y + l1Band.height)
   })
 
   it('all collapsed: one LayerRow per layer, doc order preserved, counts correct', () => {
@@ -120,13 +141,19 @@ describe('buildRowModel — collapse geometry', () => {
     // Summary rows are full-height rows.
     expect(rows.every((r) => r.height === LAYER_ROW_HEIGHT)).toBe(true)
   })
+
+  it('collapse toggle changes row count only, never the row rhythm', () => {
+    const expanded = buildRowModel(layers)
+    const collapsed = buildRowModel(layers.map((l) => ({ ...l, collapsed: true })))
+    expect(new Set(expanded.map((r) => r.height))).toEqual(new Set(collapsed.map((r) => r.height)))
+  })
 })
 
 describe('buildRowModel — collapsedSet semantics', () => {
   const flagged = [mkLayer('A', [['Ta', [0]]], false), mkLayer('B', [['Tb', [0]]], true)]
 
   it('flag alone suffices without a set', () => {
-    expect(buildRowModel(flagged).map((r) => r.type)).toEqual(['track', 'layer'])
+    expect(buildRowModel(flagged).map((r) => r.type)).toEqual(['layer', 'track', 'layer'])
   })
 
   it('collapsedSet overrides a false flag', () => {
@@ -139,26 +166,30 @@ describe('buildRowModel — collapsedSet semantics', () => {
       [mkLayer('A', [['Ta', [0]]]), mkLayer('B', [['Tb', [0]]])],
       new Set(['B']),
     )
-    expect(rows.map((r) => r.type)).toEqual(['track', 'layer'])
+    expect(rows.map((r) => r.type)).toEqual(['layer', 'track', 'layer'])
     const both = buildRowModel([mkLayer('A', [['Ta', [0]]], true)], new Set(['A']))
     expect(both.map((r) => r.type)).toEqual(['layer'])
   })
 
   it('an empty set leaves flags in charge', () => {
-    expect(buildRowModel(flagged, new Set()).map((r) => r.type)).toEqual(['track', 'layer'])
+    expect(buildRowModel(flagged, new Set()).map((r) => r.type)).toEqual([
+      'layer',
+      'track',
+      'layer',
+    ])
   })
 })
 
-describe('buildRowModel — zero-track rider fix', () => {
-  it('zero-track expanded layer still emits its LayerRow', () => {
+describe('buildRowModel — zero-track layers', () => {
+  it('zero-track expanded layer emits its header band (and no track rows)', () => {
     const rows = buildRowModel([
       mkLayer('L0', [['T0a', [0]]]),
       mkLayer('empty', []),
       mkLayer('L2', [['T2a', [0]]]),
     ])
-    expect(rows.map((r) => r.type)).toEqual(['track', 'layer', 'track'])
+    expect(rows.map((r) => r.type)).toEqual(['layer', 'track', 'layer', 'layer', 'track'])
     assertContiguous(rows)
-    const empty = rows[1]
+    const empty = rows[2]
     expect(empty.type).toBe('layer')
     if (empty.type === 'layer') {
       expect(empty.layerId).toBe('empty')
@@ -174,21 +205,94 @@ describe('buildRowModel — zero-track rider fix', () => {
   })
 })
 
-describe('rowContentHeight / empty docs', () => {
-  it('empty doc → no rows; content height is just ruler + pad (hint path)', () => {
-    expect(buildRowModel([])).toEqual([])
-    expect(rowContentHeight([])).toBe(HEADER_HEIGHT + CONTENT_PAD_BOTTOM)
+describe('buildRowModel — heights param (coarse-pointer targets)', () => {
+  const layers = [
+    mkLayer('L0', [
+      ['T0a', [0]],
+      ['T0b', []],
+    ]),
+    mkLayer('L1', [['T1a', []]], true),
+  ]
+
+  it('defaults are byte-identical to the constants', () => {
+    const rows = buildRowModel(layers)
+    expect(rows.every((r) => r.height === TRACK_HEIGHT && r.height === LAYER_ROW_HEIGHT)).toBe(true)
+    expect(rowContentHeight(rows)).toBe(HEADER_HEIGHT + 4 * TRACK_HEIGHT + CONTENT_PAD_BOTTOM)
   })
 
-  it('sums every row height on top of the header + pad', () => {
-    const rows = buildRowModel([
-      mkLayer('A', [
-        ['Ta', []],
-        ['Tb', []],
-      ]),
-      mkLayer('B', [], true),
+  it('44px variant stays contiguous and flows into content height', () => {
+    const rows = buildRowModel(layers, undefined, { trackHeight: 44, layerRowHeight: 44 })
+    assertContiguous(rows)
+    expect(rows.every((r) => r.height === 44)).toBe(true)
+    expect(rowContentHeight(rows)).toBe(HEADER_HEIGHT + 4 * 44 + CONTENT_PAD_BOTTOM)
+  })
+
+  it('heights can be overridden independently', () => {
+    const rows = buildRowModel(layers, undefined, { layerRowHeight: 40 })
+    expect(rows.filter((r) => r.type === 'layer').every((r) => r.height === 40)).toBe(true)
+    expect(rows.filter((r) => r.type === 'track').every((r) => r.height === TRACK_HEIGHT)).toBe(
+      true,
+    )
+    assertContiguous(rows)
+  })
+
+  it('rowIndexAt honors overridden heights end-to-end', () => {
+    const rows = buildRowModel(layers, undefined, { trackHeight: 44, layerRowHeight: 44 })
+    expect(rowIndexAt(rows, HEADER_HEIGHT + 43)).toBe(0) // L0 header band
+    expect(rowIndexAt(rows, HEADER_HEIGHT + 44)).toBe(1) // T0a
+    expect(rowIndexAt(rows, HEADER_HEIGHT + 3 * 44 + 5)).toBe(3) // L1 summary
+    expect(rowIndexAt(rows, HEADER_HEIGHT + 4 * 44)).toBeNull()
+  })
+})
+
+describe('guard band + header column width (plan §2.2)', () => {
+  it('HEADER_COLUMN_WIDTH leaves a KF_HIT_GUARD_PX strip of canvas before x=LABEL_WIDTH', () => {
+    expect(LABEL_WIDTH).toBe(160)
+    expect(KF_HIT_GUARD_PX).toBe(14)
+    expect(HEADER_COLUMN_WIDTH).toBe(LABEL_WIDTH - KF_HIT_GUARD_PX)
+    expect(HEADER_COLUMN_WIDTH).toBe(146)
+  })
+})
+
+describe('headerEntries / layerHeaderIds', () => {
+  const layers = [
+    mkLayer('A', [
+      ['Ta', [0]],
+      ['Tb', [10]],
+    ]),
+    mkLayer('B', [['Tc', [20]]], true),
+  ]
+  const rows = buildRowModel(layers)
+
+  it('emits one entry per canvas row with top = y − HEADER_HEIGHT', () => {
+    const entries = headerEntries(rows)
+    expect(entries).toHaveLength(rows.length)
+    entries.forEach((entry, i) => {
+      expect(entry.top).toBe(rows[i].y - HEADER_HEIGHT)
+      expect(entry.height).toBe(rows[i].height)
+      expect(entry.layerId).toBe(rows[i].layerId)
+    })
+    expect(entries.map((e) => e.type)).toEqual(['layer', 'track', 'track', 'layer'])
+    const tb = entries[2]
+    if (tb.type === 'track') expect(tb.trackId).toBe('Tb')
+  })
+
+  it('exactly one layer-header per layer, in doc order, regardless of collapse', () => {
+    expect(layerHeaderIds(rows)).toEqual(['A', 'B'])
+    // Flip collapse states — order/count of layer headers is invariant.
+    const flipped = buildRowModel([
+      mkLayer('A', [['Ta', [0]]], true),
+      mkLayer(
+        'B',
+        [
+          ['Tc', [0]],
+          ['Td', [5]],
+        ],
+        false,
+      ),
     ])
-    expect(rowContentHeight(rows)).toBe(HEADER_HEIGHT + 3 * TRACK_HEIGHT + CONTENT_PAD_BOTTOM)
+    expect(layerHeaderIds(flipped)).toEqual(['A', 'B'])
+    expect(layerHeaderIds(buildRowModel([]))).toEqual([])
   })
 })
 
@@ -207,9 +311,10 @@ describe('rowIndexAt', () => {
   })
 
   it('hits the exact row mid-band', () => {
-    expect(rowIndexAt(rows, HEADER_HEIGHT + 5)).toBe(0)
-    expect(rowIndexAt(rows, HEADER_HEIGHT + TRACK_HEIGHT + 5)).toBe(1)
-    expect(rowIndexAt(rows, HEADER_HEIGHT + 2 * TRACK_HEIGHT + 5)).toBe(2)
+    expect(rowIndexAt(rows, HEADER_HEIGHT + 5)).toBe(0) // A's header band
+    expect(rowIndexAt(rows, HEADER_HEIGHT + TRACK_HEIGHT + 5)).toBe(1) // Ta
+    expect(rowIndexAt(rows, HEADER_HEIGHT + 2 * TRACK_HEIGHT + 5)).toBe(2) // Tb
+    expect(rowIndexAt(rows, HEADER_HEIGHT + 3 * TRACK_HEIGHT + 5)).toBe(3) // B's summary
   })
 
   it('treats band start as inside and band end as past-the-row boundary', () => {
@@ -219,18 +324,8 @@ describe('rowIndexAt', () => {
 
   it('returns null past the last row', () => {
     const bottom = rows[rows.length - 1].y + rows[rows.length - 1].height
-    expect(rowIndexAt(rows, bottom - 0.001)).toBe(2)
+    expect(rowIndexAt(rows, bottom - 0.001)).toBe(3)
     expect(rowIndexAt(rows, bottom)).toBeNull()
     expect(rowIndexAt(rows, bottom + 500)).toBeNull()
-  })
-})
-
-describe('isDisclosureZone', () => {
-  it('boundary values: ≤ DISCLOSURE_ZONE_WIDTH is inside', () => {
-    expect(isDisclosureZone(0)).toBe(true)
-    expect(isDisclosureZone(8)).toBe(true)
-    expect(isDisclosureZone(24)).toBe(true)
-    expect(isDisclosureZone(24.01)).toBe(false)
-    expect(isDisclosureZone(25)).toBe(false)
   })
 })
