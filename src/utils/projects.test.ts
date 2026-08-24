@@ -323,3 +323,33 @@ describe('ordering & helpers', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 })
+
+describe('cloneDocWithFreshIds — origin aliasing', () => {
+  it('deep-copies the nested origin point (no shared reference)', async () => {
+    const { cloneDocWithFreshIds } = await import('./projects')
+    const doc = {
+      id: 'd1',
+      name: 't',
+      duration: 1000,
+      layers: [
+        {
+          id: 'L1',
+          name: 'a',
+          visible: true,
+          collapsed: false,
+          element: { tag: 'div', initialCss: '', origin: { x: '0%', y: '100%' } },
+          tracks: [],
+        },
+      ],
+    } as never
+    const clone = cloneDocWithFreshIds(doc)
+    const srcEl = (doc as { layers: { element: { origin: { x: string } } }[] }).layers[0].element
+    const clEl = clone.layers[0].element as { origin: { x: string } }
+    expect(clEl).not.toBe(srcEl)
+    expect(clEl.origin).not.toBe(srcEl.origin)
+    expect(clEl.origin).toEqual(srcEl.origin)
+    // Mutation through the clone must NOT reach the source.
+    clEl.origin.x = '50%'
+    expect(srcEl.origin.x).toBe('0%')
+  })
+})

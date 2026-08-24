@@ -298,8 +298,13 @@ export function cloneDocWithFreshIds(doc: AnimationDocument): AnimationDocument 
       id: nanoid(),
       // Deep-copy the element object too (transform-origin plan §1b): origin
       // is MUTABLE structured state, so a shallow share would alias a
-      // duplicate's setLayerOrigin back into the source document.
-      element: { ...layer.element },
+      // duplicate's setLayerOrigin back into the source document. The spread
+      // alone copies only the top level — the nested origin point must be
+      // cloned explicitly or both documents share one {x, y} object.
+      element: {
+        ...layer.element,
+        ...(layer.element.origin ? { origin: { ...layer.element.origin } } : {}),
+      },
       tracks: layer.tracks.map((track) => ({
         ...track,
         id: nanoid(),
