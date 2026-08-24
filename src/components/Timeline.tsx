@@ -260,13 +260,6 @@ export default function Timeline() {
       ctx.fillStyle = colorBorder
       ctx.fillRect(0, y + row.height * dpr - 1, width, 1)
       ctx.fillRect(0, y + (row.height / 2) * dpr, width, 1)
-      // Track property label painted just past the label zone boundary —
-      // small, muted, non-interactive (plan §3.2: track bands keep their
-      // property label as plain text).
-      ctx.fillStyle = colorText
-      ctx.font = `${10 * dpr}px monospace`
-      ctx.textBaseline = 'middle'
-      ctx.fillText(track.property, 8 * dpr, y + (row.height / 2) * dpr)
       track.keyframes.forEach((kf) => {
         const x = timeToX(kf.time, width / dpr) * dpr
         const cy2 = y + (row.height / 2) * dpr
@@ -517,9 +510,17 @@ export default function Timeline() {
   function resize() {
     if (!canvas) return
     const dpr = window.devicePixelRatio || 1
-    // The canvas's dedicated parent is .timeline__scroll — the panel box minus
-    // the transport strip above — so "visible rows" math stays correct.
-    const rect = canvas.parentElement!.getBoundingClientRect()
+    // Canvas parent is .timeline__body (flex row: headers + canvas).
+    // We need only the CANVAS portion — subtract the headers column width.
+    const bodyRect = canvas.parentElement!.getBoundingClientRect()
+    const headersEl = canvas.parentElement!.querySelector('.timeline__headers')
+    const headersW = headersEl ? headersEl.getBoundingClientRect().width : 0
+    const rect = {
+      width: bodyRect.width - headersW,
+      height: bodyRect.height,
+      top: bodyRect.top,
+      left: bodyRect.left + headersW,
+    }
     // Grow beyond the visible panel when there are more rows than fit, so the
     // container can scroll vertically instead of clipping tracks. Height comes
     // from the row model — never recomputed locally.

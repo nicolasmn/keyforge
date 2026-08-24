@@ -156,16 +156,24 @@ export type RowHeaderEntry =
  * column and the canvas can never drift apart — they read the same memo.
  */
 export function headerEntries(rows: readonly TimelineRow[]): RowHeaderEntry[] {
-  // Phase A: only LAYER rows get interactive DOM headers. Track rows keep
-  // their property labels as canvas-painted text inside the lanes area.
-  return rows
-    .filter((row) => row.type === 'layer')
-    .map((row) => ({
-      type: 'layer' as const,
-      top: row.y - HEADER_HEIGHT,
-      height: row.height,
-      layerId: row.layerId,
-    }))
+  // ALL rows get DOM headers so the column aligns 1:1 with canvas rows.
+  // Layer entries carry interactive controls; track entries show property text.
+  return rows.map((row) =>
+    row.type === 'layer'
+      ? {
+          type: 'layer' as const,
+          top: row.y - HEADER_HEIGHT,
+          height: row.height,
+          layerId: row.layerId,
+        }
+      : {
+          type: 'track' as const,
+          top: row.y - HEADER_HEIGHT,
+          height: row.height,
+          layerId: row.layerId,
+          trackId: row.trackId,
+        },
+  )
 }
 
 /**
