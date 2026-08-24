@@ -3,9 +3,13 @@
  *
  * Design decisions:
  * - UNCONTROLLED inputs: set value once on open, commit on blur/Enter/Tab/Escape.
- * - No drag-scrub anywhere. Numbers use type="number" + unit <select>.
+ * - Drag-scrub lives in ONE module-scope session shared by number chips and
+ *   transform sub-token chips (see "Shared chip-scrub session" below): mouse
+ *   drags quantize via utils/scrub.ts's unified ladder — 1-unit default,
+ *   Alt = ÷10 fine, Shift = ×10 coarse; a 4px tap threshold preserves click-to-edit.
  * - Transform args editable via tap → inline NumberUnitField per sub-token.
- * - Rotation values (deg/rad/turn/grad) show a small SVG dial preview.
+ * - Rotation values (deg/rad/turn/grad) show a small SVG dial preview;
+ *   interactive dials write live per animation frame (see fields.tsx).
  * - <datalist> rendered in a body portal to escape overflow:hidden clipping.
  * - autocomplete="on" + list= required for datalist on iOS Safari.
  *
@@ -20,6 +24,7 @@ import {
   createSignal,
   createMemo,
   For,
+  Index,
   Show,
   onCleanup,
   onMount,
@@ -66,7 +71,13 @@ import { RotationDial, NumberUnitField } from './fields'
 import { tokenizeKeyframe, NUMBER_UNIT_RE } from '@/utils/tokenize'
 import { setKeyframeSelectionSource, consumeKeyframeSelectionSource } from '@/utils/selectionSource'
 import { completionsFor, isAngleUnit, toDeg, formatAngle } from '@/utils/cssCompletions'
-import { scrubbedValue, clampToProperty } from '@/utils/scrub'
+import {
+  scrubbedValue,
+  clampToProperty,
+  baseStepFor,
+  stepWithModifiers,
+  type ScrubModifiers,
+} from '@/utils/scrub'
 import {
   addTransformFn,
   removeTransformFn,
@@ -117,6 +128,135 @@ function validate(type: ValueToken['type'], value: string): boolean {
  *  Ignores events from form fields — the inline edit input lives inside the
  *  chip span, and its keystrokes must not trigger activation or lose
  *  characters to preventDefault (e.g. spaces in cubic-bezier values). */
+// ── Shared chip-scrub session (module scope) ──────────────────────────────────
+//
+// Exactly one pointer can scrub one chip at a time, so the active gesture
+// lives at MODULE scope instead of inside a component: sub-token chips are
+// torn down and recreated whenever the store value changes mid-drag (the
+// tokenizer emits fresh SubToken objects each commit, and <For>/<Index> diff
+// by identity). A per-component closure would strand the running gesture on
+// a disposed component — this is why transform sub-tokens could never scrub.
+// Config callbacks capture plain data snapshots (start value, unit, apply
+// fn), never live component props.
+
+const SCRUB_THRESHOLD_PX = 4 // below this a press is still a tap → click opens editor
+
+interface ScrubSessionConfig {
+  property?: AnimatableProperty
+  unit: string
+  startValue: number
+  /** Called ≤1×/frame with the quantized next value; writes to the store. */
+  apply: (num: number, unit: string) => void
+}
+
+interface ScrubSession {
+  startX: number
+  cfg: ScrubSessionConfig
+  active: boolean // threshold crossed — actually scrubbing (vs tap)
+  pendingDx: number
+  mods: ScrubModifiers
+  raf: number
+  captureEl: EventTarget | null
+  captureId: number
+}
+
+let session: ScrubSession | null = null
+
+// Click latch: pointerup precedes click, so ending an ACTIVE scrub must
+// suppress the trailing click that would otherwise open the editor.
+let clickLatch = false
+
+function computeScrubValue(s: ScrubSession): number {
+  return clampToProperty(
+    s.cfg.property,
+    scrubbedValue(
+      {
+        startX: s.startX,
+        startValue: s.cfg.startValue,
+        unit: s.cfg.unit,
+        property: s.cfg.property,
+      },
+      s.pendingDx,
+      s.mods,
+    ),
+  )
+}
+
+function onScrubMove(e: PointerEvent) {
+  if (!session) return
+  const dx = e.clientX - session.startX
+  if (!session.active) {
+    if (Math.abs(dx) < SCRUB_THRESHOLD_PX) return // below threshold → still a tap
+    session.active = true
+    document.body.style.cursor = 'ew-resize'
+  }
+  session.pendingDx = dx
+  session.mods = { shift: e.shiftKey, alt: e.altKey } // read live so holds mid-drag work
+  if (!session.raf) {
+    session.raf = requestAnimationFrame(() => {
+      if (!session) return
+      session.raf = 0
+      const s = session
+      s.cfg.apply(computeScrubValue(s), s.cfg.unit)
+    })
+  }
+}
+
+function endScrub() {
+  window.removeEventListener('pointermove', onScrubMove)
+  window.removeEventListener('pointerup', endScrub)
+  window.removeEventListener('pointercancel', endScrub)
+  const s = session
+  session = null
+  if (!s) return
+  if (s.raf) cancelAnimationFrame(s.raf)
+  try {
+    ;(s.captureEl as HTMLElement | null)?.releasePointerCapture(s.captureId)
+  } catch {
+    /* element may already be gone */
+  }
+  if (!s.active) return
+  document.body.style.cursor = ''
+  // Final exact write from the last observed dx+modifiers: guarantees the
+  // throttled stream never loses the drag tail when release beats the frame.
+  s.cfg.apply(computeScrubValue(s), s.cfg.unit)
+  clickLatch = true
+  setTimeout(() => {
+    clickLatch = false
+  }, 0)
+}
+
+/** Begin a drag-scrub gesture on any numeric chip (mouse only; touch/pen
+ *  keep tap-to-edit). No-op for non-numeric chips. */
+function beginChipScrub(e: PointerEvent, cfg: ScrubSessionConfig): void {
+  if (e.pointerType !== 'mouse' || e.button !== 0) return
+  const target = e.currentTarget as HTMLElement | null
+  try {
+    target?.setPointerCapture(e.pointerId) // keeps events flowing outside the window
+  } catch {
+    /* synthetic events may not support capture */
+  }
+  session = {
+    startX: e.clientX,
+    cfg,
+    active: false,
+    pendingDx: 0,
+    mods: { shift: e.shiftKey, alt: e.altKey },
+    raf: 0,
+    captureEl: target,
+    captureId: e.pointerId,
+  }
+  window.addEventListener('pointermove', onScrubMove)
+  window.addEventListener('pointerup', endScrub)
+  window.addEventListener('pointercancel', endScrub)
+}
+
+/** True once, immediately after an active scrub gesture ends — chips call it
+ *  from onClick to avoid re-opening their editor after a drag. */
+function consumeClickSuppression(): boolean {
+  return clickLatch
+}
+
 interface NudgeOptions {
   scrubValue?: string
   scrubUnit?: string
@@ -138,18 +278,21 @@ function chipKeyDown(e: KeyboardEvent, action: () => void, nudge?: NudgeOptions)
     action()
     return
   }
-  // Arrow-key value nudge on focused number chips (registry-clamped).
+  // Arrow-key value nudge on focused number chips — UNIFIED modifier ladder
+  // (1-unit default · Alt ÷10 fine · Shift ×10 coarse), registry-clamped.
   if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
     e.preventDefault()
     const direction = e.key === 'ArrowUp' ? 1 : -1
-    const magnitude = e.shiftKey ? 10 : 1
+    const mods: ScrubModifiers = { shift: e.shiftKey, alt: e.altKey }
     // Sub-token chips carry an explicit nudge callback with their own value.
     if (nudge?.onNudge && nudge.scrubValue !== undefined) {
       const cur = Number.parseFloat(nudge.scrubValue)
       if (Number.isNaN(cur)) return
-      const unit = nudge.scrubUnit ?? ''
-      const step = direction * magnitude * (unit === '' ? 0.05 : 1)
-      const next = clampToProperty(nudge.clampProperty, cur + step)
+      // NOTE: the authored unit is preserved verbatim — coercing a missing
+      // unit to 'px' here used to corrupt unit-less args (`scale(2)` →
+      // `scale(2.05px)`).
+      const step = stepWithModifiers(baseStepFor(nudge.clampProperty), mods)
+      const next = clampToProperty(nudge.clampProperty, cur + direction * step)
       nudge.onNudge(next)
       return
     }
@@ -159,8 +302,8 @@ function chipKeyDown(e: KeyboardEvent, action: () => void, nudge?: NudgeOptions)
     const token = chip.textContent?.trim() ?? ''
     const m = NUMBER_UNIT_RE.exec(token)
     if (!m) return
-    const step = direction * magnitude * (property === 'opacity' || property === 'scale' ? 0.05 : 1)
-    const next = clampToProperty(property, Number.parseFloat(m[1]) + step)
+    const step = stepWithModifiers(baseStepFor(property), mods)
+    const next = clampToProperty(property, Number.parseFloat(m[1]) + direction * step)
     try {
       const path = JSON.parse(chip.dataset.path ?? '') as TokenPath
       if (path?.keyframeId) commit(path, `${next}${m[2] ?? ''}`)
@@ -256,6 +399,41 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken; property?: Animata
     setEditing(false)
   }
 
+  /** Drag-scrub entry for this sub-token chip. Snapshots everything the
+   *  gesture needs up front: each per-frame commit re-tokenizes the value,
+   *  replacing these chip components (<For>/<Index> diff by identity), so
+   *  the running gesture must never read live component props. The shared
+   *  module-scope session keeps the pointer flow alive across the swap. */
+  function startSubScrub(e: PointerEvent) {
+    const startNum = Number.parseFloat(props.sub.value)
+    if (Number.isNaN(startNum)) return // non-numeric args don't scrub
+    const pathSnapshot = props.parent.path
+    const subsSnapshot = [...(props.parent.subTokens ?? [])]
+    const assemblerSnapshot = subsSnapshot[0]?.assembler
+    const argIndex = props.sub.argIndex
+    beginChipScrub(e, {
+      property: props.property,
+      unit: props.sub.unit,
+      startValue: startNum,
+      apply: (num, unit) => {
+        if (!assemblerSnapshot || !pathSnapshot) return
+        const updated = subsSnapshot.map((st) =>
+          st.argIndex === argIndex ? { ...st, value: String(num), unit } : st,
+        ) as SubToken[]
+        commit(pathSnapshot, assemblerSnapshot(updated))
+      },
+    })
+  }
+
+  /** Live + final dial writes share one commit path; the duplicate final
+   *  write is idempotent (same formatted angle). */
+  const commitDialDeg = (d: number) => {
+    // ONE write per frame/release, formatted with DevTools per-unit precision
+    // (integers for deg/grad, ≤2dp turn / ≤4dp rad where round-trip allows).
+    const unit = props.sub.unit || 'deg'
+    commitSub(formatAngle(d, unit), unit)
+  }
+
   return (
     <Show
       when={editing()}
@@ -267,33 +445,29 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken; property?: Animata
           data-property={props.property}
           data-scrub-value={props.sub.value}
           data-scrub-unit={props.sub.unit}
-          aria-label={`Edit value ${props.sub.value}${props.sub.unit}`}
-          onClick={() => setEditing(true)}
+          aria-label={`Edit value ${props.sub.value}${props.sub.unit}. Arrow keys nudge · Alt fine · Shift ×10.`}
+          onClick={() => {
+            if (!consumeClickSuppression()) setEditing(true)
+          }}
+          onPointerDown={startSubScrub}
           onKeyDown={(e: KeyboardEvent) =>
             chipKeyDown(e, () => setEditing(true), {
               scrubValue: props.sub.value,
               scrubUnit: props.sub.unit,
+              // Preserve the authored unit verbatim — a missing unit stays
+              // missing (`scale(2)` must never become `scale(2.05px)`).
               onNudge: (v: number) => {
-                commitSub(String(v), props.sub.unit || 'px')
+                commitSub(String(v), props.sub.unit)
               },
               clampProperty: props.property,
             })
           }
-          title="Tap to edit · ↑↓ nudge"
+          title="Drag to scrub · ↑↓ nudge · Alt fine · Shift ×10 · tap to edit"
         >
           {props.sub.value}
           {props.sub.unit}
           <Show when={subDeg() !== null}>
-            <RotationDial
-              deg={subDeg()!}
-              onCommit={(d) => {
-                // ONE write per gesture/keyboard nudge, formatted with
-                // DevTools per-unit precision (integers for deg/grad,
-                // ≤2dp turn / ≤4dp rad where round-trip allows).
-                const unit = props.sub.unit || 'deg'
-                commitSub(formatAngle(d, unit), unit)
-              }}
-            />
+            <RotationDial deg={subDeg()!} onLive={commitDialDeg} onCommit={commitDialDeg} />
           </Show>
         </span>
       }
@@ -327,76 +501,20 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
   })
 
   // ── Safe scrubbing (mouse only; tap threshold preserves click-to-edit) ──
-  let scrub: {
-    startX: number
-    startValue: number
-    unit: string
-    active: boolean
-    raf: number
-    pendingDx: number
-    lastEvent: PointerEvent | null
-  } | null = null
-  let suppressClick = false
-
+  // Delegates to the shared module-scope session — the same machinery as the
+  // transform sub-token chips (one gesture at a time app-wide). Path is
+  // snapshotted up front so mid-drag commits never read stale closures.
   function startScrub(e: PointerEvent) {
-    if (e.pointerType !== 'mouse' || e.button !== 0) return // touch/pen keep tap-to-edit
     const { num, unit } = parsed()
     const startNum = Number.parseFloat(num)
     if (Number.isNaN(startNum)) return // non-numeric chips don't scrub
-    scrub = {
-      startX: e.clientX,
-      startValue: startNum,
+    const pathSnapshot = props.token.path
+    beginChipScrub(e, {
+      property: props.property,
       unit,
-      active: false,
-      raf: 0,
-      pendingDx: 0,
-      lastEvent: e,
-    }
-    window.addEventListener('pointermove', onScrubMove)
-    window.addEventListener('pointerup', onScrubEnd)
-  }
-
-  function onScrubMove(e: PointerEvent) {
-    if (!scrub) return
-    const dx = e.clientX - scrub.startX
-    if (!scrub.active) {
-      if (Math.abs(dx) < 4) return // below threshold → still a tap
-      scrub.active = true
-      document.body.style.cursor = 'ew-resize'
-    }
-    scrub.pendingDx = e.clientX - scrub.startX
-    scrub.lastEvent = e
-    if (!scrub.raf) {
-      scrub.raf = requestAnimationFrame(() => {
-        if (!scrub) return
-        const next = clampToProperty(
-          props.property,
-          scrubbedValue(
-            { startX: scrub.startX, startValue: scrub.startValue, unit: scrub.unit },
-            scrub.pendingDx,
-            { shift: scrub.lastEvent?.shiftKey, alt: scrub.lastEvent?.altKey },
-          ),
-        )
-        commit(props.token.path, `${next}${scrub.unit}`)
-        if (scrub) scrub.raf = 0
-      })
-    }
-  }
-
-  function onScrubEnd() {
-    window.removeEventListener('pointermove', onScrubMove)
-    window.removeEventListener('pointerup', onScrubEnd)
-    if (scrub?.raf) cancelAnimationFrame(scrub.raf)
-    // Latch: click fires AFTER pointerup, so a plain boolean reset too
-    // early and the post-drag click opened the editor. Clear on next tick.
-    if (scrub?.active) {
-      suppressClick = true
-      setTimeout(() => {
-        suppressClick = false
-      }, 0)
-    }
-    scrub = null
-    document.body.style.cursor = ''
+      startValue: startNum,
+      apply: (n, u) => commit(pathSnapshot, `${n}${u}`),
+    })
   }
 
   const dlId = `kf-dl-${Math.random().toString(36).slice(2)}`
@@ -417,6 +535,19 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
   // values render as `fnA(a, b) fnB(c)` instead of one merged pseudo-function.
   // argIndex encodes fnIndex * 100 + argInFn (see tokenize.ts), which is
   // stable even when a function has non-numeric args that produce no chip.
+  //
+  // LIVE-SCRUB STABILITY: every store write re-tokenizes the value into
+  // fresh token/subtoken objects. If the computed group identities changed
+  // on each commit, the <For>/<Index> below would tear down the very chip
+  // (and its mounted RotationDial) mid-gesture — which is exactly why #84
+  // had to go commit-on-release. So we cache groups behind a STRUCTURAL
+  // signature (fn order + arg counts): while the fn stack's shape is
+  // unchanged, the same group objects are returned and only their .subs
+  // arrays are refreshed, keeping every chip component instance alive
+  // across per-frame commits. Structural edits (add/remove/move fn, change
+  // arg count) change the signature → legitimate remount.
+  let lastGroupSig = ''
+  let lastGroups: { fi: number; fn: string; subs: SubToken[] }[] = []
   const transformGroups = () => {
     const subs = props.token.subTokens ?? []
     const names = [...props.token.value.matchAll(/([\w-]+)\(/g)].map((m) => m[1])
@@ -427,6 +558,14 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
       if (last && last.fi === fi) last.subs.push(st)
       else groups.push({ fi, fn: names[fi] ?? '?', subs: [st] })
     }
+    const sig = groups.map((g) => `${g.fi}:${g.fn}:${g.subs.length}`).join('|')
+    if (sig === lastGroupSig) {
+      // Same shape → keep identity, refresh args in place.
+      for (let i = 0; i < groups.length; i++) lastGroups[i].subs = groups[i].subs
+      return lastGroups
+    }
+    lastGroupSig = sig
+    lastGroups = groups
     return groups
   }
 
@@ -523,16 +662,21 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
                   <span class="kf-chip__sep"> </span>
                 </Show>
                 <span class="kf-chip__fn">{g.fn}(</span>
-                <For each={g.subs}>
+                {/* <Index> (not <For>): sub-token objects are recreated on
+                    every store commit, so reference-diffing would remount the
+                    chips mid-gesture. Index keeps each chip instance alive
+                    while its props flow fresh values through the getters. */}
+                <Index each={g.subs}>
                   {(sub, i) => (
                     <>
-                      <SubScrub sub={sub} parent={props.token} property={props.property} />
-                      <Show when={i() < g.subs.length - 1}>
+                      <SubScrub sub={sub()} parent={props.token} property={props.property} />
+                      {/* Index passes a plain numeric index (unlike For's accessor). */}
+                      <Show when={i < g.subs.length - 1}>
                         <span class="kf-chip__sep">, </span>
                       </Show>
                     </>
                   )}
-                </For>
+                </Index>
                 <span class="kf-chip__fn">)</span>
                 <button
                   class="kf-stack-btn"
@@ -610,13 +754,13 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
               role="button"
               data-property={props.property}
               data-path={JSON.stringify(props.token.path)}
-              aria-label={`Number value ${props.token.value}. Arrow keys nudge, Shift for ×10.`}
+              aria-label={`Number value ${props.token.value}. Arrow keys nudge · Alt fine · Shift ×10.`}
               onClick={() => {
-                if (!suppressClick) open()
+                if (!consumeClickSuppression()) open()
               }}
               onPointerDown={startScrub}
               onKeyDown={(e: KeyboardEvent) => chipKeyDown(e, openIfIdle)}
-              title="Drag to scrub · ↑↓ nudge · tap to edit"
+              title="Drag to scrub · ↑↓ nudge · Alt fine · Shift ×10 · tap to edit"
             >
               <span class="kf-chip__label">{props.token.value}</span>
               <Show when={angleDeg() !== null}>

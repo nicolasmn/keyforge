@@ -2,10 +2,14 @@
  * Shared inspector form controls, extracted from Inspector.tsx so sibling
  * panels (transform-origin section) can reuse them without circular imports.
  *
- * RotationDial — commit-on-release drag model (#68): dragging updates a LOCAL
- * dragDeg preview signal only; exactly ONE commit happens per gesture, on
- * pointerup/lostpointercapture; Escape cancels; Shift+drag snaps to 15°;
- * keyboard nudges commit immediately (arrows ±1°, Shift+arrows ±15°).
+ * RotationDial — LIVE drag model: every pointer move schedules a store write
+ * via `onLive`, coalesced to at most ONE call per animation frame; the local
+ * dragDeg preview still drives the needle so feedback is instant between
+ * frames. Alt/Shift quantize DURING the drag (1° default · Alt 0.1° fine ·
+ * Shift 10° coarse — unified app-wide ladder), anchored at the pre-drag
+ * angle. Pointerup/lostpointercapture commits the final exact value via
+ * `onCommit`; Escape restores the pre-drag value with one write (cancel).
+ * Keyboard nudges commit immediately (arrows ±1°, Alt ±0.1°, Shift ±10°).
  *
  * NumberUnitField — uncontrolled number+unit pair: value seeded once at
  * mount, committed on blur/Enter/unit-change, reverted on Escape. The unit
@@ -14,13 +18,21 @@
  */
 import { createSignal, For, Show } from 'solid-js'
 import type { AnimatableProperty } from '@/types'
-import { degFromPoint, wrapDeg } from '@/utils/dialGeometry'
+import { degFromPoint } from '@/utils/dialGeometry'
+import { unwrapAround, quantizeAngle } from '@/utils/rotationMath'
+import { stepWithModifiers, type ScrubModifiers } from '@/utils/scrub'
 import { PROPERTY_REGISTRY } from '@/utils/propertyRegistry'
-import { UNIT_GROUPS, isAngleUnit, toDeg, snapToMultiple } from '@/utils/cssCompletions'
+import { UNIT_GROUPS, isAngleUnit, toDeg } from '@/utils/cssCompletions'
 
 // ── RotationDial ───────────────────────────────────────────────────────────────
 
-export function RotationDial(props: { deg: number; onCommit?: (deg: number) => void }) {
+export function RotationDial(props: {
+  deg: number
+  /** Final exact commit — gesture end / keyboard nudge. */
+  onCommit?: (deg: number) => void
+  /** Live drag feedback — rAF-coalesced to ≤1 call per animation frame. */
+  onLive?: (deg: number) => void
+}) {
   const R = 7
   const cx = 9,
     cy = 9
@@ -32,18 +44,27 @@ export function RotationDial(props: { deg: number; onCommit?: (deg: number) => v
   const ny = () => +(cy + R * Math.sin(rad())).toFixed(2)
   const interactive = () => typeof props.onCommit === 'function'
   let svgEl: SVGSVGElement | undefined
-  let dragging = false
 
-  /** Pointer position → dial degrees (0° points up, clockwise positive). */
-  function degFromEvent(e: PointerEvent): number {
+  // Plain flags, not signals: they mutate at pointer-event frequency and are
+  // read only inside handlers/rAF, never by reactive JSX.
+  let dragging = false
+  let origDeg = 0 // pre-drag snapshot — Escape restores it, quantization anchors here
+  let lastRaw = 0 // last continuous pointer angle
+  let lastMods: ScrubModifiers = {}
+  let raf = 0 // pending onLive frame (0 = none scheduled)
+  let wrote = false // any live store write this gesture? (gates Escape restore)
+
+  /** Pointer position → continuous dial degrees around the pre-drag origin. */
+  function rawDegFromEvent(e: PointerEvent): number {
     const rect = svgEl!.getBoundingClientRect()
-    return degFromPoint(
+    const wrapped = degFromPoint(
       rect.left + rect.width / 2,
       rect.top + rect.height / 2,
       e.clientX,
       e.clientY,
       shownDeg(),
     )
+    return unwrapAround(origDeg, wrapped)
   }
 
   function onDragKey(e: KeyboardEvent) {
@@ -55,49 +76,71 @@ export function RotationDial(props: { deg: number; onCommit?: (deg: number) => v
     e.stopPropagation() // keep the owning chip from opening its editor
     e.preventDefault()
     dragging = true
+    wrote = false
+    origDeg = props.deg
+    lastRaw = rawDegFromEvent(e)
+    lastMods = { shift: e.shiftKey, alt: e.altKey }
     window.addEventListener('keydown', onDragKey) // Escape mid-drag cancels
     try {
       svgEl!.setPointerCapture(e.pointerId)
     } catch {
       /* synthetic events may not support capture */
     }
-    setDragDeg(degFromEvent(e)) // preview only — no store write yet
+    setDragDeg(quantizeAngle(origDeg, lastRaw, lastMods)) // needle preview
+  }
+
+  function flushLive() {
+    raf = 0
+    if (!dragging) return
+    props.onLive?.(quantizeAngle(origDeg, lastRaw, lastMods))
+    wrote = true
   }
 
   function onPointerMove(e: PointerEvent) {
     if (!dragging) return
     e.preventDefault()
-    const raw = degFromEvent(e)
-    setDragDeg(e.shiftKey ? snapToMultiple(raw, 15) : raw)
+    lastRaw = rawDegFromEvent(e)
+    lastMods = { shift: e.shiftKey, alt: e.altKey }
+    setDragDeg(quantizeAngle(origDeg, lastRaw, lastMods)) // instant needle
+    if (!raf) raf = requestAnimationFrame(flushLive) // ≤1 store write / frame
   }
 
   function cancelDrag() {
     if (!dragging) return
-    dragging = false
-    window.removeEventListener('keydown', onDragKey)
-    setDragDeg(undefined) // discard preview → needle restores props.deg
+    endDrag(false)
   }
 
-  /** End of gesture. Commits the final previewed angle exactly once. */
+  /** End of gesture. Live writes already happened per-frame; commit=true
+   *  lands one final exact value so throttling never loses the drag tail.
+   *  commit=false (Escape) restores the pre-drag value when we wrote. */
   function endDrag(commit: boolean) {
     if (!dragging) return
     dragging = false
     window.removeEventListener('keydown', onDragKey)
-    const final = dragDeg()
-    setDragDeg(undefined)
-    if (commit && final !== undefined) props.onCommit!(final)
+    if (raf) {
+      cancelAnimationFrame(raf)
+      raf = 0
+    }
+    const final = quantizeAngle(origDeg, lastRaw, lastMods)
+    setDragDeg(undefined) // discard preview → needle renders committed value
+    if (!commit) {
+      if (wrote && typeof props.onCommit === 'function') props.onCommit(origDeg)
+      return
+    }
+    props.onCommit!(final)
   }
 
   function onKeyDown(e: KeyboardEvent) {
     if (!interactive()) return
-    const step = e.shiftKey ? 15 : 1
+    const mods: ScrubModifiers = { shift: e.shiftKey, alt: e.altKey }
+    const step = stepWithModifiers(1, mods)
     let next: number | null = null
     if (e.key === 'ArrowUp' || e.key === 'ArrowRight') next = shownDeg() + step
     else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') next = shownDeg() - step
     else return
     e.preventDefault()
     e.stopPropagation()
-    props.onCommit!(wrapDeg(Math.round(next)))
+    props.onCommit!(((next % 360) + 360) % 360)
   }
 
   return (
@@ -116,7 +159,7 @@ export function RotationDial(props: { deg: number; onCommit?: (deg: number) => v
       aria-valuemin={interactive() ? 0 : undefined}
       aria-valuemax={interactive() ? 359 : undefined}
       aria-valuenow={interactive() ? Math.round(((shownDeg() % 360) + 360) % 360) : undefined}
-      aria-valuetext={interactive() ? `${Math.round(shownDeg())} degrees` : undefined}
+      aria-valuetext={interactive() ? `${Math.round(shownDeg() * 10) / 10} degrees` : undefined}
       classList={{ 'kf-rot-dial--live': interactive() }}
       onPointerDown={startDrag}
       onPointerMove={onPointerMove}
