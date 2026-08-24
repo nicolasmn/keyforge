@@ -15,11 +15,12 @@
  * e.relatedTarget to see if focus stayed inside the component. Only commit
  * when focus truly left.
  */
-import { createSignal, createMemo, For, Show, onCleanup, type Component } from 'solid-js'
+import { createSignal, createMemo, For, Show, onCleanup, onMount, type Component } from 'solid-js'
 import { render } from 'solid-js/web'
 import {
   selectedLayerId,
   getSelectedLayer,
+  getSelectedTrackAndKeyframe,
   addTrack,
   addKeyframe,
   updateKeyframe,
@@ -49,6 +50,7 @@ import {
   moveTransformFn,
   ADDABLE_TRANSFORM_FNS,
 } from '@/utils/transformStack'
+import { easeAllTrackKeyframes, EASY_EASE_EASING } from '@/utils/easingAssistant'
 
 const PROPERTIES: AnimatableProperty[] = [
   'opacity',
@@ -824,6 +826,16 @@ function TrackSection(props: {
           + KF
         </button>
         <button
+          class="track__add"
+          onClick={() =>
+            easeAllTrackKeyframes(props.layerId, props.track, EASY_EASE_EASING, updateKeyframe)
+          }
+          disabled={props.track.keyframes.length === 0}
+          title="Easy ease — set ease-out on every keyframe of this track (F9 works on the selected key's track)"
+        >
+          Easy ease
+        </button>
+        <button
           class="track__remove"
           onClick={() => removeTrack(props.layerId, props.track.id)}
           title={`Remove ${props.property} track`}
@@ -854,6 +866,35 @@ type Tab = 'inspector' | 'css'
 export default function Inspector() {
   const [activeTab, setActiveTab] = createSignal<Tab>('inspector')
   const layer = () => getSelectedLayer()
+
+  // ── Batch easing assistant shortcut (plan §3.2, Phase A) ──────────────
+  // F9 = AE's Easy Ease muscle memory: ease EVERY keyframe of the track
+  // that owns the selected keyframe. Phase-A scope is the track (the store
+  // holds a single selectedKeyframeId; multi-select is plan §2.2). Typing
+  // surfaces keep native behavior; with no keyframe selected it's a no-op —
+  // the per-track "Easy ease" button covers that case explicitly.
+  onMount(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'F9') return
+      const t = e.target as HTMLElement | null
+      if (
+        t &&
+        (t.isContentEditable ||
+          t.tagName === 'INPUT' ||
+          t.tagName === 'TEXTAREA' ||
+          t.tagName === 'SELECT')
+      ) {
+        return
+      }
+      const sel = getSelectedTrackAndKeyframe()
+      const lId = selectedLayerId()
+      if (!sel || !lId) return
+      e.preventDefault()
+      easeAllTrackKeyframes(lId, sel.track, EASY_EASE_EASING, updateKeyframe)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    onCleanup(() => window.removeEventListener('keydown', onKeyDown))
+  })
 
   function handleAddTrack(e: Event) {
     const sel = e.currentTarget as HTMLSelectElement
