@@ -537,3 +537,101 @@
 .empty-state__project {
   max-width: 16rem;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Always-on CodeMirror CSS editor (branch steward/cm-live-editor)
+
+   The CodeView panel is permanently an editor: no edit-mode swap.
+   Layout contract — the CM surface fills the whole panel below
+   toolbar/statusbar (owner: "should fill whole available space").
+   The CM theme itself is generated in CodeView.tsx from computed
+   app tokens; these rules only handle the flex skeleton + the few
+   pieces that stay real DOM outside CM.
+   ═══════════════════════════════════════════════════════════ */
+
+/* Editor fills everything between toolbar+statusbar and panel edge. */
+.code-view__editor {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.code-view__editor .cm-editor {
+  height: 100%;
+}
+.code-view__loading-pane {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+
+/* Textarea fallback when the lazy CM chunk fails to load. */
+.code-view__textarea {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  white-space: pre;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+}
+
+/* Toolbar left slot (replaces the removed scope-toggle checkbox). */
+.code-view__title {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  user-select: none;
+}
+.code-view__loading {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* Statusbar is ALWAYS present now (no editing gate), so it gets real
+   styling instead of riding on browser defaults (Phase A shipped it bare). */
+.code-view__statusbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+  min-height: 0;
+}
+.code-view__notice {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+/* "Document changed outside editor" chip — amber family via color-mix,
+   same overlay recipe as .css-import__backdrop (audit F12/F13 lineage). */
+.code-view__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: flex-start;
+  padding: 2px var(--space-2);
+  border-radius: 999px;
+  font-size: var(--font-size-xs);
+  color: var(--color-warning);
+  background: color-mix(in oklch, var(--color-warning) 14%, transparent);
+  border: 1px solid color-mix(in oklch, var(--color-warning) 45%, transparent);
+}
+.code-view__chip-btn {
+  font-size: var(--font-size-xs);
+  padding: 0 var(--space-2);
+  color: var(--color-warning);
+}
+.code-view__status {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted); /* ok */
+}
+.code-view__status--warn {
+  color: var(--color-warning);
+}
+.code-view__status--fatal {
+  color: var(--color-danger);
+}
