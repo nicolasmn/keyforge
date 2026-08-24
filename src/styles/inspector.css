@@ -378,6 +378,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Mini-curve thumbnail: stroke inherits the chip's easing color via
+   currentColor; fill must be none or the open path renders as a black
+   polygon smudge (SVG default fill applies to open paths too). */
+.kf-ease-thumb {
+  display: block;
+  flex-shrink: 0;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+}
 .kf-chip--string {
   color: var(--color-text-muted);
 }
