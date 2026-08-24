@@ -823,12 +823,9 @@
    the canvas so vertical scroll sync is designed out.
    ═══════════════════════════════════════════════════════════ */
 .row-headers {
-  position: absolute;
-  inset: 0 auto 0 0;
   width: var(--header-col-w, 146px);
   padding-top: 28px; /* HEADER_HEIGHT — aligns entries below the ruler */
   pointer-events: none;
-  z-index: 5;
 }
 .row-header {
   width: 100%;
