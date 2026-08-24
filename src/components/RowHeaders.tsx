@@ -7,12 +7,7 @@ import {
   setLayerVisibility,
   toggleLayerCollapsed,
 } from '@/store'
-import {
-  headerEntries,
-  HEADER_HEIGHT,
-  type RowHeaderEntry,
-  type TimelineRow,
-} from '@/utils/rowModel'
+import { headerEntries, type RowHeaderEntry, type TimelineRow } from '@/utils/rowModel'
 
 /**
  * Real-DOM header column for the timeline (plan §2/§3): one absolutely-
@@ -44,9 +39,6 @@ export default function RowHeaders(props: { rows: readonly TimelineRow[] }) {
 
   return (
     <div class="row-headers" aria-label="Timeline row headers">
-      {/* Ruler-height spacer: canvas draws its ruler above the first row;
-          this keeps DOM entries aligned with their canvas counterparts. */}
-      <div style={{ height: `${HEADER_HEIGHT}px`, 'flex-shrink': '0' }} aria-hidden="true" />
       <For each={headerEntries(props.rows)}>
         {(entry: RowHeaderEntry) =>
           entry.type === 'layer' ? (
@@ -85,7 +77,7 @@ function LayerHeaderRow(props: {
         'row-header--selected': isSelected(),
         'row-header--hidden': layer()?.visible === false,
       }}
-      style={{ top: `${props.entry.top}px`, height: `${props.entry.height}px` }}
+      style={{ height: `${props.entry.height}px` }}
       onClick={() => setSelectedLayerId(props.entry.layerId)}
     >
       <button
@@ -218,7 +210,7 @@ function TrackHeaderRow(props: { entry: Extract<RowHeaderEntry, { type: 'track' 
           doc.layers.find((l) => l.id === props.entry.layerId)?.visible === false,
         'row-header--selected': selectedLayerId() === props.entry.layerId,
       }}
-      style={{ top: `${props.entry.top}px`, height: `${props.entry.height}px` }}
+      style={{ height: `${props.entry.height}px` }}
       title={info().property}
       onClick={() => setSelectedLayerId(props.entry.layerId)}
     >
