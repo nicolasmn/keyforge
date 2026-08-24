@@ -11,15 +11,15 @@
 
 ### 1.1 The two surfaces
 
-| Capability | `LayerTree.tsx` (DOM panel) | `Timeline.tsx` canvas |
-| --- | --- | --- |
-| Selection | item `onClick` → `setSelectedLayerId` | layer-summary body click → select (`onPointerDown`, "select-only" comment); kf click selects owning layer |
-| Visibility | `<button>` eye, `aria-label` Hide/Show | **ignored** — canvas never reads `layer.visible`; only `Preview.tsx` consumes it (`visibility: hidden`) |
-| Collapse | `<button>` chevron, `aria-expanded` | drawn chevron ▸/▾ + `isDisclosureZone` (x ≤ 24) hit-zone, hover accent (`hoverDisclosureLayerId`), cursor `pointer` |
-| Rename | dbl-click / Enter → inline `<input>`; Esc cancel, blur commit (`renameLayer` trims, empty keeps old) | impossible (canvas text) |
-| Reorder | `@thisbeyond/solid-dnd` `closestCenter`, grip handle, `DragOverlay` ghost → `reorderLayer(fromIndex, toIndex)` | none |
-| Add / remove | `+` in panel header; hover-revealed `✕` per item | none |
-| AT access | **real buttons** — the app's only AT-discoverable layer controls | none — the canvas has no tabindex/role/aria (documented in `2026-08-24-collapsible-layers.md` §1) |
+| Capability   | `LayerTree.tsx` (DOM panel)                                                                                    | `Timeline.tsx` canvas                                                                                               |
+| ------------ | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Selection    | item `onClick` → `setSelectedLayerId`                                                                          | layer-summary body click → select (`onPointerDown`, "select-only" comment); kf click selects owning layer           |
+| Visibility   | `<button>` eye, `aria-label` Hide/Show                                                                         | **ignored** — canvas never reads `layer.visible`; only `Preview.tsx` consumes it (`visibility: hidden`)             |
+| Collapse     | `<button>` chevron, `aria-expanded`                                                                            | drawn chevron ▸/▾ + `isDisclosureZone` (x ≤ 24) hit-zone, hover accent (`hoverDisclosureLayerId`), cursor `pointer` |
+| Rename       | dbl-click / Enter → inline `<input>`; Esc cancel, blur commit (`renameLayer` trims, empty keeps old)           | impossible (canvas text)                                                                                            |
+| Reorder      | `@thisbeyond/solid-dnd` `closestCenter`, grip handle, `DragOverlay` ghost → `reorderLayer(fromIndex, toIndex)` | none                                                                                                                |
+| Add / remove | `+` in panel header; hover-revealed `✕` per item                                                               | none                                                                                                                |
+| AT access    | **real buttons** — the app's only AT-discoverable layer controls                                               | none — the canvas has no tabindex/role/aria (documented in `2026-08-24-collapsible-layers.md` §1)                   |
 
 Mobile: `LayerTree` is a dedicated "Layers" tab (`App.tsx`); coarse-pointer CSS forces `.btn` to ≥44 px and kills hover affordances.
 
@@ -28,7 +28,7 @@ Mobile: `LayerTree` is a dedicated "Layers" tab (`App.tsx`); coarse-pointer CSS 
 - `rowModel.ts` is the single vertical-layout truth: `HEADER_HEIGHT=28`, `TRACK_HEIGHT=LAYER_ROW_HEIGHT=36`, contiguous rows, `rowIndexAt`, `rowContentHeight`. Consumers multiply by dpr at the edge.
 - `LABEL_WIDTH=120` (Timeline-local): label strip is painted **on the canvas**; `timeToX/xToTime` map `[120, width]`. Ruler labels clamp to `x ≥ LABEL_WIDTH+2`.
 - Keyframes at `t=0` center at exactly `x=120` with hit slop `KF_RADIUS+8=14` ⇒ grabbable band `[106, 134]`. Playhead at `t≈0` grabs `[114, 126]`. **Any DOM covering `x < 120` collides with these.**
-- Today, clicking a *track*-row label scrubs/jumps the playhead (pointerdown falls through to scrub). Only *layer* summary rows are select-not-scrub. Unification should extend "label strip ≠ scrub target" to all rows (intentional behavior change, see §5.3).
+- Today, clicking a _track_-row label scrubs/jumps the playhead (pointerdown falls through to scrub). Only _layer_ summary rows are select-not-scrub. Unification should extend "label strip ≠ scrub target" to all rows (intentional behavior change, see §5.3).
 - Scroll model: `.timeline__scroll` (`overflow-y:auto`) → `<canvas>` sized `height = max(panel, rowContentHeight())`; no horizontal scroll; duration handle pinned at right edge.
 - `SplitLayout`: horizontal 3-pane `H_DEFAULT_PCT=[18,56,26]`, `H_MIN_PX=[160,300,220]`, `H_MAX_PX=[320,∞,400]`; vertical `[70,30]`. `clampPanelPixels` is generic and array-length agnostic. Panel sizes are **not** persisted — changing defaults is safe.
 
@@ -57,11 +57,11 @@ A real-DOM column hosts the row headers, positioned **inside the same scroll con
 
 Why (b) beats (a) canvas-drawn controls:
 
-1. **Scroll sync is designed out, not solved.** The column is an absolutely-positioned child of the stage that scrolls *with* the canvas in the same native scroller. Zero JS scroll listeners, zero translateY bookkeeping, cannot desync at any zoom/DPR/velocity. A transform-following overlay (naive b) or sticky hacks carry exactly the fragility this plan must avoid; this variant carries none.
+1. **Scroll sync is designed out, not solved.** The column is an absolutely-positioned child of the stage that scrolls _with_ the canvas in the same native scroller. Zero JS scroll listeners, zero translateY bookkeeping, cannot desync at any zoom/DPR/velocity. A transform-following overlay (naive b) or sticky hacks carry exactly the fragility this plan must avoid; this variant carries none.
 2. **DPR crispness is free.** Buttons/text render at native resolution; canvas keeps doing what it does well (diamonds, gridlines, strips, playhead).
 3. **a11y becomes strictly better, not "preserved".** Removing LayerTree removes the app's only real buttons — option (a) would need an invisible offscreen mirror DOM (double implementation, worst of both worlds). Here every control is a genuine `<button>` with `aria-expanded`/`aria-pressed`, keyboard-focusable in layer order. Net win over today (the canvas chevron was AT-invisible).
 4. **Inline rename is trivial** — an `<input>` flowing in a flexbox header, reusing LayerTree's proven editing pattern; no anchoring math.
-5. **Reorder gets a home** (§4): solid-dnd needs a 1:1 ordered list of draggables. The header column supplies *exactly one row per layer regardless of collapse state* — a property the canvas row list fundamentally lacks (collapsed layers hide their tracks). The column is the natural dnd substrate.
+5. **Reorder gets a home** (§4): solid-dnd needs a 1:1 ordered list of draggables. The header column supplies _exactly one row per layer regardless of collapse state_ — a property the canvas row list fundamentally lacks (collapsed layers hide their tracks). The column is the natural dnd substrate.
 
 Why not the hybrid (c) (DOM buttons + canvas-painted names): two sources of truth for label visuals (font mismatch: canvas monospace-11px vs CSS font stack; duplicated ellipsis logic), and no compensating benefit. Full absorption into the column also makes names real text (selectable, zoomable, i18n-crisp).
 
@@ -75,7 +75,7 @@ export const KF_HIT_GUARD_PX = 14                       // = KF_RADIUS + old slo
 export const HEADER_COLUMN_WIDTH = LABEL_WIDTH − KF_HIT_GUARD_PX   // 120 → 106 today
 ```
 
-Canvas stops painting *any* text/glyphs in `[0, 106)`; the 14 px guard band shows bare row background + hairlines (reads as pre-lane padding). Zero interaction regressions. `LABEL_WIDTH` itself widens to **160** in Phase A (see §3.1) so names don't starve.
+Canvas stops painting _any_ text/glyphs in `[0, 106)`; the 14 px guard band shows bare row background + hairlines (reads as pre-lane padding). Zero interaction regressions. `LABEL_WIDTH` itself widens to **160** in Phase A (see §3.1) so names don't starve.
 
 ### 2.3 Component ownership
 
@@ -87,24 +87,24 @@ Canvas stops painting *any* text/glyphs in `[0, 106)`; the 14 px guard band show
 
 ### 3.1 Dimensions
 
-| Token | Value | Notes |
-| --- | --- | --- |
-| `LABEL_WIDTH` | **160** (was 120) | one Timeline constant; ruler clamps, `timeToX`, wheel math, density-strip offsets all derive from it already |
-| `HEADER_COLUMN_WIDTH` | 146 (= 160 − 14 guard) | exported from rowModel; the DOM column's width |
-| Row height | 36 desktop · **44 on `(pointer:coarse)`** | `buildRowModel(layers, collapsedSet?, heights?)` gains an optional heights param (defaults preserve constants; purity/tests intact). Timeline passes `{trackHeight:44, layerRowHeight:44}` from a one-shot `matchMedia` check |
-| Layer header layout | `[chevron 20][eye 20][name flex][✕ 16 (B)]` + `[grip 14 (B)]` | gaps 4 px; at 146 px Phase A leaves ≈98 px for the name (≥ today's 92); Phase B ≈68 px with ellipsis — acceptable, optionally revisit width |
-| Track header | indent 26 px + `track.property` muted text | non-interactive label; click selects owning layer |
+| Token                 | Value                                                         | Notes                                                                                                                                                                                                                         |
+| --------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LABEL_WIDTH`         | **160** (was 120)                                             | one Timeline constant; ruler clamps, `timeToX`, wheel math, density-strip offsets all derive from it already                                                                                                                  |
+| `HEADER_COLUMN_WIDTH` | 146 (= 160 − 14 guard)                                        | exported from rowModel; the DOM column's width                                                                                                                                                                                |
+| Row height            | 36 desktop · **44 on `(pointer:coarse)`**                     | `buildRowModel(layers, collapsedSet?, heights?)` gains an optional heights param (defaults preserve constants; purity/tests intact). Timeline passes `{trackHeight:44, layerRowHeight:44}` from a one-shot `matchMedia` check |
+| Layer header layout   | `[chevron 20][eye 20][name flex][✕ 16 (B)]` + `[grip 14 (B)]` | gaps 4 px; at 146 px Phase A leaves ≈98 px for the name (≥ today's 92); Phase B ≈68 px with ellipsis — acceptable, optionally revisit width                                                                                   |
+| Track header          | indent 26 px + `track.property` muted text                    | non-interactive label; click selects owning layer                                                                                                                                                                             |
 
 ### 3.2 Controls (per layer header)
 
-| Control | Element | Behavior |
-| --- | --- | --- |
-| Chevron | `<button aria-expanded={…} aria-label="Expand/Collapse layer NAME">` | `toggleLayerCollapsed`; rotates via CSS (reuse `--ease-out-expo` transition) |
-| Eye | `<button aria-pressed={!visible} aria-label="Hide/Show layer NAME">` | `setLayerVisibility`; hidden state dims header (opacity .45) **and** the layer's canvas rows |
-| Name | `<button>` (Enter/F2/dbl-click → rename) rendering ellipsized name | click selects layer |
-| Rename input | `<input aria-label="Rename layer">` autofocus | Enter/blur commit via `renameLayer` (trim + fallback already in store), Esc cancels, focus returns to name button |
-| Remove (Phase B) | hover-revealed `<button aria-label="Remove layer">✕` | `removeLayer` |
-| Grip (Phase B) | hover-revealed drag handle | solid-dnd sortable handle |
+| Control          | Element                                                              | Behavior                                                                                                          |
+| ---------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Chevron          | `<button aria-expanded={…} aria-label="Expand/Collapse layer NAME">` | `toggleLayerCollapsed`; rotates via CSS (reuse `--ease-out-expo` transition)                                      |
+| Eye              | `<button aria-pressed={!visible} aria-label="Hide/Show layer NAME">` | `setLayerVisibility`; hidden state dims header (opacity .45) **and** the layer's canvas rows                      |
+| Name             | `<button>` (Enter/F2/dbl-click → rename) rendering ellipsized name   | click selects layer                                                                                               |
+| Rename input     | `<input aria-label="Rename layer">` autofocus                        | Enter/blur commit via `renameLayer` (trim + fallback already in store), Esc cancels, focus returns to name button |
+| Remove (Phase B) | hover-revealed `<button aria-label="Remove layer">✕`                 | `removeLayer`                                                                                                     |
+| Grip (Phase B)   | hover-revealed drag handle                                           | solid-dnd sortable handle                                                                                         |
 
 Selection styling mirrors the canvas: selected layer's headers get `--color-accent-dim` background; canvas keeps tinting lanes with `--color-row-selected`. Both read `selectedLayerId`.
 
@@ -150,9 +150,9 @@ Ghost row appended at column end: `+ Add layer` (muted, dashed underline on hove
 Horizontal split becomes **2-pane: Preview | Inspector**:
 
 ```ts
-const H_DEFAULT_PCT = [68, 32]      // was [18, 56, 26]
-const H_MIN_PX   = [300, 220]       // was [160, 300, 220]
-const H_MAX_PX   = [Infinity, 400]  // was [320, Infinity, 400]
+const H_DEFAULT_PCT = [68, 32] // was [18, 56, 26]
+const H_MIN_PX = [300, 220] // was [160, 300, 220]
+const H_MAX_PX = [Infinity, 400] // was [320, Infinity, 400]
 ```
 
 Mechanical change: drop the `layerTree` prop/ref/panel, shrink the arrays. `clampPanelPixels` is length-generic — untouched; `SplitLayout.test.ts` gains a 2-panel case. Gutter dbl-click reset and window-resize reclamp work unchanged. No persisted sizes exist, so no migration.
@@ -163,7 +163,7 @@ The "Layers" tab dies (its content now rides inside the Preview tab's embedded T
 
 ### 5.3 Intentional behavior changes to call out in review
 
-1. Clicking a *track* label no longer scrubs/jumps the playhead (previously fell through to scrub) — consistent with the established "label strip is a control surface" rule for summary rows.
+1. Clicking a _track_ label no longer scrubs/jumps the playhead (previously fell through to scrub) — consistent with the established "label strip is a control surface" rule for summary rows.
 2. Hidden layers dim in the timeline instead of being ignored (they were never removed — row-model identity depends on them staying put).
 3. Names become selectable/copyable text (canvas text wasn't).
 
@@ -221,16 +221,16 @@ Scrub · kf drag + snap ghost · duration-handle drag + touch tap prompt · whee
 
 ## 8. Risks & mitigations
 
-| Risk | Reality | Mitigation |
-| --- | --- | --- |
-| Scroll desync (classic overlay killer) | **Designed out**: column is a flow-positioned sibling inside the same native scroller; no JS involved | Acceptance A2 asserts no scrollTop writes |
-| DPR blur | DOM column immune; canvas untouched | None needed |
-| Touch targets < 44 px on 36 px rows | Real | Coarse-pointer bumps row heights to 44 via `buildRowModel` heights param + `.btn`-style min sizes on header buttons |
-| `t=0` kf/playhead under the column | Real geometry collision | 14 px guard band (`HEADER_COLUMN_WIDTH`); acceptance A3 |
-| dnd lacks container autoscroll | solid-dnd doesn't auto-scroll ancestors | Small rAF autoscroll helper when pointer nears scroller edges during drag (~30 lines), or ship-v1 with documented limit if row counts stay small — decide at review |
-| Narrow column starves names | 146 px minus controls | `LABEL_WIDTH`=160 now; ellipsis everywhere; optional width prop per breakpoint |
-| Muscle-memory loss for tree users | Owner-driven change | Ghost add-row + hover affordances ease transition; Inspector untouched |
-| Split.js defaults drift | None — sizes aren't persisted | Fresh defaults safe |
+| Risk                                   | Reality                                                                                               | Mitigation                                                                                                                                                          |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scroll desync (classic overlay killer) | **Designed out**: column is a flow-positioned sibling inside the same native scroller; no JS involved | Acceptance A2 asserts no scrollTop writes                                                                                                                           |
+| DPR blur                               | DOM column immune; canvas untouched                                                                   | None needed                                                                                                                                                         |
+| Touch targets < 44 px on 36 px rows    | Real                                                                                                  | Coarse-pointer bumps row heights to 44 via `buildRowModel` heights param + `.btn`-style min sizes on header buttons                                                 |
+| `t=0` kf/playhead under the column     | Real geometry collision                                                                               | 14 px guard band (`HEADER_COLUMN_WIDTH`); acceptance A3                                                                                                             |
+| dnd lacks container autoscroll         | solid-dnd doesn't auto-scroll ancestors                                                               | Small rAF autoscroll helper when pointer nears scroller edges during drag (~30 lines), or ship-v1 with documented limit if row counts stay small — decide at review |
+| Narrow column starves names            | 146 px minus controls                                                                                 | `LABEL_WIDTH`=160 now; ellipsis everywhere; optional width prop per breakpoint                                                                                      |
+| Muscle-memory loss for tree users      | Owner-driven change                                                                                   | Ghost add-row + hover affordances ease transition; Inspector untouched                                                                                              |
+| Split.js defaults drift                | None — sizes aren't persisted                                                                         | Fresh defaults safe                                                                                                                                                 |
 
 ## 9. Explicitly out of scope
 

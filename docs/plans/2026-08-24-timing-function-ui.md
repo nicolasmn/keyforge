@@ -23,16 +23,16 @@ the only editing surface is `EasingEditor` mounted **inline inside the owning
 
 Happy path from "looking at a keyframe" to "new easing applied":
 
-| Step | Action | Cost / note |
-| --- | --- | --- |
-| 0 | Locate keyframe on timeline or inspector | — |
-| 1 | Click diamond (timeline) → selects kf + layer, inspector scrolls row into view (#82 cross-highlight) | skipped if already in inspector |
-| 2 | Scan row for the easing affordance | it's **plain text** (`ease-out`) in mono purple; no curve thumbnail, no chevron — reads as a label until you know to click it |
-| 3 | Click chip → `EasingEditor` expands **below the row** | layout shift: every row below is pushed down by a ~600–700px block (canvas 120px + 17 wrapping preset chips + Saved section + Spring section with sliders/demo/output/apply + save form) |
-| 4 | Apply: click preset / drag handles / paste raw value | commits are live during handle drag (see 1.2-F8); spring needs an extra explicit "Use spring curve" click |
-| 5 | Close: ✕ button or window-level Escape | Escape is swallowed while focus is in any input |
+| Step | Action                                                                                               | Cost / note                                                                                                                                                                              |
+| ---- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | Locate keyframe on timeline or inspector                                                             | —                                                                                                                                                                                        |
+| 1    | Click diamond (timeline) → selects kf + layer, inspector scrolls row into view (#82 cross-highlight) | skipped if already in inspector                                                                                                                                                          |
+| 2    | Scan row for the easing affordance                                                                   | it's **plain text** (`ease-out`) in mono purple; no curve thumbnail, no chevron — reads as a label until you know to click it                                                            |
+| 3    | Click chip → `EasingEditor` expands **below the row**                                                | layout shift: every row below is pushed down by a ~600–700px block (canvas 120px + 17 wrapping preset chips + Saved section + Spring section with sliders/demo/output/apply + save form) |
+| 4    | Apply: click preset / drag handles / paste raw value                                                 | commits are live during handle drag (see 1.2-F8); spring needs an extra explicit "Use spring curve" click                                                                                |
+| 5    | Close: ✕ button or window-level Escape                                                               | Escape is swallowed while focus is in any input                                                                                                                                          |
 
-**Step count: 3 interactions minimum from an inspector-centric view (click chip → pick → close), 5 from a timeline-centric view.** The interaction count isn't the worst part — the *context loss* is:
+**Step count: 3 interactions minimum from an inspector-centric view (click chip → pick → close), 5 from a timeline-centric view.** The interaction count isn't the worst part — the _context loss_ is:
 
 ### 1.2 Friction list (ranked)
 
@@ -50,7 +50,7 @@ Happy path from "looking at a keyframe" to "new easing applied":
     uniform rotated squares; nothing encodes the segment's curve class).
     Double-clicking a diamond does nothing easing-related.
 - **F3 — No motion preview for bezier/preset edits.** Only the Spring section
-  has a ball demo. Chrome DevTools fires a preview animation on *every* change
+  has a ball demo. Chrome DevTools fires a preview animation on _every_ change
   ("Any change triggers a ball animation"); here, picking `anticipate` vs
   `settle` shows two similar static curves and you must close and watch the
   main stage (and replay manually).
@@ -155,15 +155,15 @@ cubic-bezier.com-class tools and current DevTools docs.)
 
 ### 2.5 Synthesis — what the bar looks like
 
-| Capability | DevTools | cubic-bezier.net | AE/Rive | Keyforge today |
-| --- | --- | --- | --- | --- |
-| Access at the property/key | ✅ popover at declaration | n/a | ✅ per-key panel | ❌ inline mega-block |
-| Motion preview on change | ✅ every change | ✅ looping | ✅ graph scrub | ⚠️ spring only |
-| Compare/race candidates | ❌ | ✅ headline | ⚠️ manual | ❌ |
-| Visual preset browser | ✅ named+grouped | ✅ | ✅ icon grid | ❌ flat text chips |
-| Numeric handle fields | ✅ (linear stops) | ✅ x1y1x2y2 | ✅ influence % | ⚠️ raw string only |
-| Speed/velocity lens | ❌ | ❌ | ✅ | ❌ |
-| steps()/hold support | ⚠️ keyword only | ❌ | ✅ | ❌ (accepted but unrenderable) |
+| Capability                 | DevTools                  | cubic-bezier.net | AE/Rive          | Keyforge today                 |
+| -------------------------- | ------------------------- | ---------------- | ---------------- | ------------------------------ |
+| Access at the property/key | ✅ popover at declaration | n/a              | ✅ per-key panel | ❌ inline mega-block           |
+| Motion preview on change   | ✅ every change           | ✅ looping       | ✅ graph scrub   | ⚠️ spring only                 |
+| Compare/race candidates    | ❌                        | ✅ headline      | ⚠️ manual        | ❌                             |
+| Visual preset browser      | ✅ named+grouped          | ✅               | ✅ icon grid     | ❌ flat text chips             |
+| Numeric handle fields      | ✅ (linear stops)         | ✅ x1y1x2y2      | ✅ influence %   | ⚠️ raw string only             |
+| Speed/velocity lens        | ❌                        | ❌               | ✅               | ❌                             |
+| steps()/hold support       | ⚠️ keyword only           | ❌               | ✅               | ❌ (accepted but unrenderable) |
 
 ---
 
@@ -273,13 +273,14 @@ leverage answer to "which feel do I want?" (the actual question users bring to
 this editor), proven headline-grade in this exact domain by cubic-bezier.net,
 and cheap once the preview-zone rAF driver exists.
 
-Design: header ⚑ pins the *current* curve as a candidate lane (max 3 pinned;
+Design: header ⚑ pins the _current_ curve as a candidate lane (max 3 pinned;
 oldest evicted). Each lane shows dot + 12px label (preset name or `P1,P2`).
 Pins persist per editor session only (no storage schema change). Clicking a
 lane's label applies that candidate to the keyframe (compare → adopt is one
 click — the workflow the tool exists for).
 
 Cost estimate: **M (~1–1.5 days)**.
+
 - Shared sampling util `sampleEasing(value, t): number` unifying bezier /
   linear-stops / steps-later paths (~40 lines + tests) — also serves row-chip
   thumbnails and timeline glyphs, so it's on the critical path anyway.
@@ -288,8 +289,8 @@ Cost estimate: **M (~1–1.5 days)**.
   calls, no per-frame allocations beyond path strings; pauses on
   `document.hidden`; reduced-motion swaps to a discrete stepped marker.
 - Pin state + tests (~30 lines). No store/schema/export changes.
-Risk: none meaningful; perf bounded (≤4 lanes × 60 samples/frame ≈ trivial);
-main care point is not running the loop while the editor is closed.
+  Risk: none meaningful; perf bounded (≤4 lanes × 60 samples/frame ≈ trivial);
+  main care point is not running the loop while the editor is closed.
 
 ---
 
@@ -322,37 +323,41 @@ Improvements, in order:
 ## 7. Phased improvements (effort: S ≤ half-day · M ~1–2 days · L ≥ 3 days / epic)
 
 ### Phase S1 — feel-the-change fast wins (no structural moves)
-| Item | Fixes | Effort | Notes |
-| --- | --- | --- | --- |
-| Ball/preview loop for ALL easings (extract spring-demo mechanism) | F3 | S | rAF + `sampleEasing`; reduced-motion fallback; kills the bezier/spring preview asymmetry |
-| Commit-on-release for handle drags (dial contract #68): local preview during drag, one write on pointerup, Escape cancels restoring pre-drag value | F8 | S | aligns three surfaces on one contract; pre-work for undo |
-| Mini-curve thumbnails on preset chips + easing chips (read-only first) | F2, F5 | S–M | shared `sampleEasing` + tiny renderer; overshoot-aware y-scale |
-| Numeric P1/P2 fields bound to handles | F9-adjacent | S | catalog §3.3 |
-| Invalid raw-input error state + copy button | F9 | S | parse-fail → red ring + hint, keep last-good handles |
-| Shift+F9 / Cmd+Shift+F9 = ease-in / ease-out per track | AE parity | S | extends `easingAssistant.ts`; update F9 title copy |
+
+| Item                                                                                                                                               | Fixes       | Effort | Notes                                                                                    |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ------ | ---------------------------------------------------------------------------------------- |
+| Ball/preview loop for ALL easings (extract spring-demo mechanism)                                                                                  | F3          | S      | rAF + `sampleEasing`; reduced-motion fallback; kills the bezier/spring preview asymmetry |
+| Commit-on-release for handle drags (dial contract #68): local preview during drag, one write on pointerup, Escape cancels restoring pre-drag value | F8          | S      | aligns three surfaces on one contract; pre-work for undo                                 |
+| Mini-curve thumbnails on preset chips + easing chips (read-only first)                                                                             | F2, F5      | S–M    | shared `sampleEasing` + tiny renderer; overshoot-aware y-scale                           |
+| Numeric P1/P2 fields bound to handles                                                                                                              | F9-adjacent | S      | catalog §3.3                                                                             |
+| Invalid raw-input error state + copy button                                                                                                        | F9          | S      | parse-fail → red ring + hint, keep last-good handles                                     |
+| Shift+F9 / Cmd+Shift+F9 = ease-in / ease-out per track                                                                                             | AE parity   | S      | extends `easingAssistant.ts`; update F9 title copy                                       |
 
 ### Phase M1 — access + structure
-| Item | Fixes | Effort | Notes |
-| --- | --- | --- | --- |
-| Single-instance anchored popover re-platform of EasingEditor (body-portal, flip/clamp, focus return, aria-expanded) | F1 | M | biggest UX win; establishes reusable Popover primitive |
-| Tabbed editor: Curve ⇄ Spring; spring commits on slider release; delete "Use spring curve" | F6, Q4 | M | same canvas both tabs; `linear()` values auto-open Spring tab |
-| Preset taxonomy: grouped visual grid, descriptive names/tooltips, collapsible | F5 | M | metadata on `BUILTIN_PRESETS`; keep exact-match active detection + add normalized-bezier match |
-| Timeline easing glyphs between diamonds | F2 | M | catalog §3.1; sampled from stored strings; theme-aware |
-| Dbl-click/right-click diamond → select + open popover; Copy/Parse easing actions | F10 | S | rides popover from item 1 |
+
+| Item                                                                                                                | Fixes  | Effort | Notes                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------- | ------ | ------ | ---------------------------------------------------------------------------------------------- |
+| Single-instance anchored popover re-platform of EasingEditor (body-portal, flip/clamp, focus return, aria-expanded) | F1     | M      | biggest UX win; establishes reusable Popover primitive                                         |
+| Tabbed editor: Curve ⇄ Spring; spring commits on slider release; delete "Use spring curve"                          | F6, Q4 | M      | same canvas both tabs; `linear()` values auto-open Spring tab                                  |
+| Preset taxonomy: grouped visual grid, descriptive names/tooltips, collapsible                                       | F5     | M      | metadata on `BUILTIN_PRESETS`; keep exact-match active detection + add normalized-bezier match |
+| Timeline easing glyphs between diamonds                                                                             | F2     | M      | catalog §3.1; sampled from stored strings; theme-aware                                         |
+| Dbl-click/right-click diamond → select + open popover; Copy/Parse easing actions                                    | F10    | S      | rides popover from item 1                                                                      |
 
 ### Phase M2 — comparison
-| Item | Fixes | Effort | Notes |
-| --- | --- | --- | --- |
-| Ghost-race lanes (pin up to 3, click label to adopt) | F4, Q3 | M | §5 cost estimate; depends on preview-zone driver |
+
+| Item                                                 | Fixes  | Effort | Notes                                            |
+| ---------------------------------------------------- | ------ | ------ | ------------------------------------------------ |
+| Ghost-race lanes (pin up to 3, click label to adopt) | F4, Q3 | M      | §5 cost estimate; depends on preview-zone driver |
 
 ### Phase L — deep capabilities (each its own plan/epic)
-| Item | Fixes | Effort | Notes |
-| --- | --- | --- | --- |
-| L1 `linear()` stop-graph editor (add/move/remove stops) on Spring tab | F6, catalog §3.6 | L | `parseLinearEasing` exists; canonical round-trip tests mandatory |
-| L2 Library manager: rename/dup/import-export/pin-from-library/usage counts | Q5 | M–L | items 1–5 of §6 split out if M1 capacity is tight |
-| L3 Read-only speed-graph lens overlay (per-track diagnostic) | prior-art gap | M | catalog §3.11 guardrail: never authored directly |
-| L4 steps()/hold support end-to-end (types, glyph, tab, export/import round-trip) | F9 | L | catalog §3.9 |
-| L5 Multi-select batch ease (marquee §2.2 dependency) generalizing F9 | F10 | L | store selection-set epic first |
+
+| Item                                                                             | Fixes            | Effort | Notes                                                            |
+| -------------------------------------------------------------------------------- | ---------------- | ------ | ---------------------------------------------------------------- |
+| L1 `linear()` stop-graph editor (add/move/remove stops) on Spring tab            | F6, catalog §3.6 | L      | `parseLinearEasing` exists; canonical round-trip tests mandatory |
+| L2 Library manager: rename/dup/import-export/pin-from-library/usage counts       | Q5               | M–L    | items 1–5 of §6 split out if M1 capacity is tight                |
+| L3 Read-only speed-graph lens overlay (per-track diagnostic)                     | prior-art gap    | M      | catalog §3.11 guardrail: never authored directly                 |
+| L4 steps()/hold support end-to-end (types, glyph, tab, export/import round-trip) | F9               | L      | catalog §3.9                                                     |
+| L5 Multi-select batch ease (marquee §2.2 dependency) generalizing F9             | F10              | L      | store selection-set epic first                                   |
 
 Sequencing rationale: S1 removes the daily annoyances without touching
 structure; M1's popover is the enabling platform for everything else (tabs,
@@ -364,6 +369,7 @@ L items are independently valuable but each deserves its own researched plan.
 ## 8. Test / QA checklist
 
 Unit (pure functions — follow repo pattern of extracting math to `utils/`):
+
 - [ ] `sampleEasing(value, t)` parity: bezier ↔ `evalCubicBezier`; `linear()`
       stops ↔ parsed spring output; named keywords resolve via
       `BUILTIN_PRESETS`; unknown → null (thumbnail falls back to straight line).
@@ -386,6 +392,7 @@ Unit (pure functions — follow repo pattern of extracting math to `utils/`):
       paused when `document.hidden` and when editor closed.
 
 Integration / manual QA:
+
 - [ ] Popover: opens anchored to chip, flips when near panel edge, closes on
       outside-click/Escape/reselect; focus trapped while open; focus returns to
       chip on close; only one instance ever mounted; survives track collapse

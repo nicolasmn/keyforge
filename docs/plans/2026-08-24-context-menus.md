@@ -14,15 +14,15 @@
 
 Timeline.tsx exposes every primitive a hit-test-driven menu needs:
 
-| Helper | Location | Gives us |
-| --- | --- | --- |
-| `cssX(e)` / `cssY(e)` | Timeline.tsx:556–562 | CSS-px coords inside the canvas (work for `MouseEvent` too) |
+| Helper                                      | Location                           | Gives us                                                           |
+| ------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------ |
+| `cssX(e)` / `cssY(e)`                       | Timeline.tsx:556–562               | CSS-px coords inside the canvas (work for `MouseEvent` too)        |
 | `rows()` memo → `buildRowModel(doc.layers)` | Timeline.tsx:79, utils/rowModel.ts | Every visible row's y-band, type (`track` \| `layer`), ids, counts |
-| `rowIndexAt(rows, y)` | rowModel.ts:116 | Row under a y (null over ruler / past last row) |
-| `isDisclosureZone(x)` | rowModel.ts:129 | Whether x sits in the chevron strip (`≤ 24px`) |
-| `hitTestKeyframe(x, y)` | Timeline.tsx:595–611 | `{layerId, trackId, kfId}` of the diamond under the point |
-| `hitTestDisclosure(x, y)` | Timeline.tsx:614–620 | `LayerRow` when the point is in a layer row's chevron zone |
-| `timeToX` / `xToTime` | Timeline.tsx:81–90 | ↔ conversion for "add keyframe at position" |
+| `rowIndexAt(rows, y)`                       | rowModel.ts:116                    | Row under a y (null over ruler / past last row)                    |
+| `isDisclosureZone(x)`                       | rowModel.ts:129                    | Whether x sits in the chevron strip (`≤ 24px`)                     |
+| `hitTestKeyframe(x, y)`                     | Timeline.tsx:595–611               | `{layerId, trackId, kfId}` of the diamond under the point          |
+| `hitTestDisclosure(x, y)`                   | Timeline.tsx:614–620               | `LayerRow` when the point is in a layer row's chevron zone         |
+| `timeToX` / `xToTime`                       | Timeline.tsx:81–90                 | ↔ conversion for "add keyframe at position"                        |
 
 The canvas has no DOM per object — confirmed. Menus must anchor at **viewport coordinates** (`e.clientX/clientY`) in a fixed-position portal; item lists are computed from these helpers at open time.
 
@@ -30,7 +30,7 @@ The canvas has no DOM per object — confirmed. Menus must anchor at **viewport 
 
 - **`.kf-doc-menu`** (DocBar #83): popover surface reusing `.kf-stack-picker` tokens (surface bg, border, radius-md, color-mix shadow), `role="menu"` + `[role="menuitem"]`, z-index 60 (below the modal scrim's z-100). Styles live in app.css ~643–700.
 - **The uniform #48 close contract** (implemented in DocBar.tsx:203–268): document-level `pointerdown` closes when target is outside the menu root; `keydown` Escape closes as fallback when focus has left; per-root handler owns Escape while focus is inside and refocuses the trigger; `focusout` closes when focus leaves the root; Arrow/Home/End rove items by querying `[role="menuitem"]`.
-- **`runMenuAction(kind, action)`** (DocBar.tsx:191–195): close first → restore focus → *then* run the action, so modals/file-pickers open from a sane anchor. Context menus must copy this ordering.
+- **`runMenuAction(kind, action)`** (DocBar.tsx:191–195): close first → restore focus → _then_ run the action, so modals/file-pickers open from a sane anchor. Context menus must copy this ordering.
 - **Portal precedent**: Inspector mounts its `<datalist>` host via `render()` into a `document.body` child (Inspector.tsx:162–178) — same technique serves the single context-menu host.
 
 ### 1.3 Mutation inventory (what menus can already call)
@@ -62,12 +62,18 @@ Existing, all autosave-safe through `setDoc`: `addLayer`, `removeLayer`, `rename
 Pure function in NEW `src/utils/menuPosition.ts` (node-testable, matches rowModel house style):
 
 ```ts
-export interface MenuPlacement { left: number; top: number }
-export const MENU_VIEWPORT_MARGIN = 8;
+export interface MenuPlacement {
+  left: number
+  top: number
+}
+export const MENU_VIEWPORT_MARGIN = 8
 export function placeMenu(
-  x: number, y: number,          // desired anchor (viewport px)
-  w: number, h: number,          // measured menu box (offsetWidth/Height)
-  vw: number, vh: number,        // viewport (innerWidth/innerHeight)
+  x: number,
+  y: number, // desired anchor (viewport px)
+  w: number,
+  h: number, // measured menu box (offsetWidth/Height)
+  vw: number,
+  vh: number, // viewport (innerWidth/innerHeight)
 ): MenuPlacement
 ```
 
@@ -113,6 +119,7 @@ export function ContextMenuHost(): JSX.Element
 Three-line summary: `open(x, y, items)` shows one global fixed-positioned `role="menu"` portal anchored at viewport coords with flip/clamp placement; `items` is a flat data array (`item`/`separator`) evaluated at call time, each carrying its own `onSelect`; the host owns the full #48 lifecycle — focus first enabled item, Arrow/Home/End rove, Enter/Space activate (close → restore focus → run), Escape/outside-pointerdown/focus-out/window-blur/**scroll(capture)** close.
 
 Design notes:
+
 - **Single instance**: `open()` replaces state wholesale — no stacking, matches "exactly one cluster menu open" precedent (audit F15).
 - **Close on scroll (capture)**: menus anchor to viewport coords; any scroll invalidates the anchor silently. Closing is the correct, simple behavior (native OS menus behave likewise). `scroll` listener registered with `{capture: true}` catches the timeline's own scroller.
 - **Focus contract**: opening always moves focus into the menu (first enabled item). Mouse users lose nothing (no text selection to preserve on canvas/tree rows); keyboard users land where they expect. Close restores focus to `document.activeElement` captured at open time (the #48 restoration rule generalized — there is no trigger button to return to).
@@ -131,59 +138,59 @@ Convention: ✅ existing mutation · 🆕 NEW mutation · ⚙ UI-only. All selec
 
 ### 4.1 Timeline canvas — keyframe diamond (`hitTestKeyframe`)
 
-| Item | Action | Mutation |
-| --- | --- | --- |
+| Item               | Action                                                                                          | Mutation                                                |
+| ------------------ | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
 | Duplicate keyframe | clone at `time + snapIncrement-or-default-offset`, fresh id, same value/easing; select the copy | 🆕 `duplicateKeyframe(layerId, trackId, kfId, atTime?)` |
-| Easy-ease key | set `easing: 'ease-out'` (`EASY_EASE_EASING`) on this key | ✅ `updateKeyframe(…, { easing })` |
-| Set hold | set `easing: 'steps(1, end)'` on this key | ✅ `updateKeyframe(…, { easing })` |
-| Edit curve… | select key (already done) + focus the Inspector easing chip (scroll-into-view rides F11) | ⚙ `setSelectedKeyframeId` (already selected) |
-| ― separator ― | | |
-| Delete keyframe | remove | ✅ `removeKeyframe(layerId, trackId, kfId)` |
+| Easy-ease key      | set `easing: 'ease-out'` (`EASY_EASE_EASING`) on this key                                       | ✅ `updateKeyframe(…, { easing })`                      |
+| Set hold           | set `easing: 'steps(1, end)'` on this key                                                       | ✅ `updateKeyframe(…, { easing })`                      |
+| Edit curve…        | select key (already done) + focus the Inspector easing chip (scroll-into-view rides F11)        | ⚙ `setSelectedKeyframeId` (already selected)            |
+| ― separator ―      |                                                                                                 |                                                         |
+| Delete keyframe    | remove                                                                                          | ✅ `removeKeyframe(layerId, trackId, kfId)`             |
 
 Also: `setSelectedKeyframeId(kfId)` + `setSelectedLayerId(layerId)` + `setKeyframeSelectionSource('canvas')` fire at open time (mirrors onPointerDown:706–716).
 
 ### 4.2 Timeline canvas — track lane (`rowIndexAt` → `TrackRow`, x beyond label gutter)
 
-| Item | Action | Mutation |
-| --- | --- | --- |
-| Add keyframe here | `addKeyframe(layerId, trackId, { time: snapTime(xToTime(x)), value: '', easing: 'ease-out' })` — empty value triggers the store's smart-default capture (store/index.ts:601–629) | ✅ `addKeyframe` |
-| Easy-ease track | ease every key of this track | ✅ `easeAllTrackKeyframes(…)` |
-| Clear track | remove track + its keys (matches the Inspector ✕ semantics; transform-stack merge guards make this safe per #66/#79) | ✅ `removeTrack(layerId, trackId)` |
+| Item              | Action                                                                                                                                                                           | Mutation                           |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| Add keyframe here | `addKeyframe(layerId, trackId, { time: snapTime(xToTime(x)), value: '', easing: 'ease-out' })` — empty value triggers the store's smart-default capture (store/index.ts:601–629) | ✅ `addKeyframe`                   |
+| Easy-ease track   | ease every key of this track                                                                                                                                                     | ✅ `easeAllTrackKeyframes(…)`      |
+| Clear track       | remove track + its keys (matches the Inspector ✕ semantics; transform-stack merge guards make this safe per #66/#79)                                                             | ✅ `removeTrack(layerId, trackId)` |
 
 Right-click also selects the owning layer (`setSelectedLayerId(row.layerId)`).
 
 ### 4.3 Timeline canvas — layer summary row (`rowIndexAt` → `LayerRow`)
 
-| Item | Action | Mutation |
-| --- | --- | --- |
-| Collapse / Expand (label flips on `layer.collapsed`) | toggle | ✅ `toggleLayerCollapsed(layerId)` |
-| Rename… | start the LayerTree inline edit for this layer | ⚙ rename-bus (below) → ✅ `renameLayer` on commit |
-| Duplicate layer | deep-copy layer + tracks + kfs with fresh ids, insert directly after source, select copy | 🆕 `duplicateLayer(layerId)` |
-| ― separator ― | | |
-| Delete layer | remove | ✅ `removeLayer(layerId)` (danger) |
+| Item                                                 | Action                                                                                   | Mutation                                          |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| Collapse / Expand (label flips on `layer.collapsed`) | toggle                                                                                   | ✅ `toggleLayerCollapsed(layerId)`                |
+| Rename…                                              | start the LayerTree inline edit for this layer                                           | ⚙ rename-bus (below) → ✅ `renameLayer` on commit |
+| Duplicate layer                                      | deep-copy layer + tracks + kfs with fresh ids, insert directly after source, select copy | 🆕 `duplicateLayer(layerId)`                      |
+| ― separator ―                                        |                                                                                          |                                                   |
+| Delete layer                                         | remove                                                                                   | ✅ `removeLayer(layerId)` (danger)                |
 
 Rename plumbing (⚙ UI-only, not a store mutation): export a tiny signal from LayerTree module scope — `const [renameTargetId, requestLayerRename] = createSignal<string|null>(null)` — consumed by the existing `editingId` mechanism (SortableLayer enters edit mode when `props.layer.id === renameTargetId()`). Keeps ONE rename editor implementation; the canvas menu merely points at it. (Fallback alternative if owner dislikes cross-component coupling: `window.prompt('Rename layer', …)` mirroring `promptDuration()` — cheaper, uglier.)
 
 ### 4.4 LayerTree rows (`<li>` gets `onContextMenu` + `tabindex={0}`)
 
-| Item | Action | Mutation |
-| --- | --- | --- |
-| Rename… | enter inline edit | ⚙ same bus → ✅ `renameLayer` |
-| Duplicate layer | as §4.3 | 🆕 `duplicateLayer(layerId)` |
-| Collapse/Expand in timeline | mirrors canvas chevron | ✅ `toggleLayerCollapsed` |
-| Move up / Move down | `reorderLayer(i, i−1)` / `reorderLayer(i, i+1)` clamped; both hidden (not disabled) at edges | ✅ `reorderLayer` |
-| ― separator ― | | |
-| Delete layer | | ✅ `removeLayer` (danger) |
+| Item                        | Action                                                                                       | Mutation                      |
+| --------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------- |
+| Rename…                     | enter inline edit                                                                            | ⚙ same bus → ✅ `renameLayer` |
+| Duplicate layer             | as §4.3                                                                                      | 🆕 `duplicateLayer(layerId)`  |
+| Collapse/Expand in timeline | mirrors canvas chevron                                                                       | ✅ `toggleLayerCollapsed`     |
+| Move up / Move down         | `reorderLayer(i, i−1)` / `reorderLayer(i, i+1)` clamped; both hidden (not disabled) at edges | ✅ `reorderLayer`             |
+| ― separator ―               |                                                                                              |                               |
+| Delete layer                |                                                                                              | ✅ `removeLayer` (danger)     |
 
 Move up/down is the keyboard-free dnd alternative the mission asked for; drag handle untouched.
 
 ### 4.5 Inspector keyframe rows — **Phase B**
 
-| Item | Action | Mutation |
-| --- | --- | --- |
-| Copy value | `navigator.clipboard.writeText(kf.value)` | ⚙ clipboard |
-| Paste value | `navigator.clipboard.readText()` → validate non-empty → `updateKeyframe(…, { value })` (readText may reject without permission → catch, no-op; empty/garbage already guarded by store) | ✅ `updateKeyframe` |
-| Delete keyframe | | ✅ `removeKeyframe` |
+| Item            | Action                                                                                                                                                                                 | Mutation            |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| Copy value      | `navigator.clipboard.writeText(kf.value)`                                                                                                                                              | ⚙ clipboard         |
+| Paste value     | `navigator.clipboard.readText()` → validate non-empty → `updateKeyframe(…, { value })` (readText may reject without permission → catch, no-op; empty/garbage already guarded by store) | ✅ `updateKeyframe` |
+| Delete keyframe |                                                                                                                                                                                        | ✅ `removeKeyframe` |
 
 Worth it? Moderately — copy/paste between keys is real workflow but low-frequency; delete already has a dedicated ✕. Defer to Phase B as planned; do NOT let it gate Phase A.
 
@@ -204,7 +211,10 @@ export function duplicateLayer(layerId: string): string | null
  *  (defaultOffset = snapIncrement() when active else 100ms), clamped to [0, duration].
  *  Re-sorts the track; returns the new id (null on unknown ids). Does NOT change selection. */
 export function duplicateKeyframe(
-  layerId: string, trackId: string, keyframeId: string, atTime?: number,
+  layerId: string,
+  trackId: string,
+  keyframeId: string,
+  atTime?: number,
 ): string | null
 ```
 
@@ -271,7 +281,7 @@ Same pattern on `.kf-row` (§4.5). Nothing in Phase A blocks or precludes it; `M
 1. Roles mirror DocBar: `role="menu"` + `role="menuitem"`; separators `role="separator"`; `aria-label` names each menu ("Keyframe actions", "Layer actions", …).
 2. Focus is moved into the menu on open and restored to the pre-open `activeElement` on every close path — the #48 contract generalized to trigger-less menus.
 3. Keyboard: arrows/Home/End rove skipping separators & disabled items; Enter/Space activate; Escape closes + restores; Tab closes (natural order continues). Shift+F10/Menu-key support arrives free on DOM targets (D3); canvas remains pointer-only by the standing no-tabindex decision, with LayerTree as the AT-complete equivalent surface (same rationale as the collapsible-layers disclosure).
-4. Screen-reader announcement of *actions taken* is owned by the mutations' existing surfaces (selection changes, Inspector updates) — no extra live regions; matches the collapsible-layers plan stance.
+4. Screen-reader announcement of _actions taken_ is owned by the mutations' existing surfaces (selection changes, Inspector updates) — no extra live regions; matches the collapsible-layers plan stance.
 5. Touch: Android long-press fires `contextmenu` (works); iOS Safari does not — touch users keep every affordance they have today (buttons, +KF, Easy-ease). Not a regression; noted as out of scope.
 
 ---
@@ -295,28 +305,16 @@ Estimate: Phase A ~1 day; Phase B ~half day (mostly QA).
 ## 9. Test list
 
 Unit — `menuPosition.test.ts` (node):
+
 1. Default placement at cursor; margins respected.
 2. Right-edge flip (`x + w > vw − margin`) → left-aligned to cursor; bottom-edge flip → above cursor.
 3. Corner case (bottom-right): both axes flip; still within viewport.
 4. Clamp: huge menu near origin clamps to margin, never negative.
 5. Menu larger than viewport: clamped to margin (degenerate but defined).
 
-Store — extend `mutations.test.ts`:
-6. `duplicateLayer`: fresh ids everywhere (ids ∩ source ids = ∅), inserted immediately after source, name `"X copy"` uniquified against siblings, returns new id, selection moves to copy, autosave scheduled.
-7. `duplicateLayer` unknown id → null, no write.
-8. `duplicateKeyframe`: copies value/easing, fresh id, lands at requested `atTime` (and default offset otherwise), clamps ≥0 and ≤duration, track re-sorted, selection untouched.
-9. `duplicateKeyframe` unknown layer/track/kf → null, no write.
+Store — extend `mutations.test.ts`: 6. `duplicateLayer`: fresh ids everywhere (ids ∩ source ids = ∅), inserted immediately after source, name `"X copy"` uniquified against siblings, returns new id, selection moves to copy, autosave scheduled. 7. `duplicateLayer` unknown id → null, no write. 8. `duplicateKeyframe`: copies value/easing, fresh id, lands at requested `atTime` (and default offset otherwise), clamps ≥0 and ≤duration, track re-sorted, selection untouched. 9. `duplicateKeyframe` unknown layer/track/kf → null, no write.
 
-Manual QA checklist:
-10. Canvas: right-click diamond/lane/summary row → correct menus; right-click ruler and below-last-row → NATIVE menu appears; textarea/import dialog keeps native cut/paste.
-11. Right-click does NOT scrub/playhead-jump anywhere (Step 0 verified); mid-drag right-click ignored.
-12. Right-click unselected keyframe selects it; Inspector follows (F11 cross-highlight intact); Delete/Duplicate act on that key.
-13. Flip behavior: menus near right/bottom edges flip inward; nothing clips.
-14. Keyboard: Tab to a tree row → Shift+F10 opens; arrows/Enter activate Move up/down; Escape restores focus to the row.
-15. Close paths: outside click, second right-click elsewhere (moves/closes), Escape, window blur, scrolling the timeline panel — all close; no orphan menu after project switch (`openProject` should close any open menu via scroll/state reset — verify; add explicit `contextMenu.close()` in `resetTransientState` if not).
-16. Actions round-trip: duplicate layer → undo-less safety (fresh ids, exports valid); collapse from menu matches chevron; clear track leaves other tracks untouched.
-17. Light theme: menu tokens correct (color-mix shadow recipe).
-18. Reduced-motion: instant open/close (no transitions added anyway).
+Manual QA checklist: 10. Canvas: right-click diamond/lane/summary row → correct menus; right-click ruler and below-last-row → NATIVE menu appears; textarea/import dialog keeps native cut/paste. 11. Right-click does NOT scrub/playhead-jump anywhere (Step 0 verified); mid-drag right-click ignored. 12. Right-click unselected keyframe selects it; Inspector follows (F11 cross-highlight intact); Delete/Duplicate act on that key. 13. Flip behavior: menus near right/bottom edges flip inward; nothing clips. 14. Keyboard: Tab to a tree row → Shift+F10 opens; arrows/Enter activate Move up/down; Escape restores focus to the row. 15. Close paths: outside click, second right-click elsewhere (moves/closes), Escape, window blur, scrolling the timeline panel — all close; no orphan menu after project switch (`openProject` should close any open menu via scroll/state reset — verify; add explicit `contextMenu.close()` in `resetTransientState` if not). 16. Actions round-trip: duplicate layer → undo-less safety (fresh ids, exports valid); collapse from menu matches chevron; clear track leaves other tracks untouched. 17. Light theme: menu tokens correct (color-mix shadow recipe). 18. Reduced-motion: instant open/close (no transitions added anyway).
 
 ---
 
