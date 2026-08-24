@@ -14,6 +14,7 @@ export function createStarterBoxLayer(): Layer {
     id: nanoid(),
     name: 'Box',
     visible: true,
+    collapsed: false,
     element: {
       tag: 'div',
       text: '',
@@ -74,6 +75,7 @@ export function createSampleDoc(): AnimationDocument {
         id: nanoid(),
         name: 'Box',
         visible: true,
+        collapsed: false,
         element: {
           tag: 'div',
           text: '',
@@ -120,6 +122,7 @@ export function createSampleDoc(): AnimationDocument {
         id: nanoid(),
         name: 'Dot',
         visible: true,
+        collapsed: false,
         element: {
           tag: 'div',
           text: '',

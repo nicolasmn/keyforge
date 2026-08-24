@@ -25,6 +25,7 @@ const validDoc: AnimationDocument = {
       id: 'L1',
       name: 'Box',
       visible: true,
+      collapsed: false,
       element: { tag: 'div', text: '', initialCss: '' },
       tracks: [
         {
@@ -116,6 +117,49 @@ describe('deserializeDoc rejects malformed payloads', () => {
   it('accepts an empty layers array (legitimate cleared document)', () => {
     const empty = { ...validDoc, layers: [] }
     expect(validatePersisted({ version: 1, savedAt: 1, doc: empty })).toEqual(empty)
+  })
+})
+
+describe('collapse field normalization (optional, no version bump)', () => {
+  it('loads a legacy payload without collapsed — treated as expanded', () => {
+    // Clone and strip the collapsed key: simulates a pre-collapse save.
+    const legacy = JSON.parse(JSON.stringify(validDoc))
+    delete legacy.layers[0].collapsed
+    expect(legacy.layers[0]).not.toHaveProperty('collapsed')
+    const restored = validatePersisted({ version: 1, savedAt: 1, doc: legacy })
+    expect(restored).not.toBeNull()
+    expect(restored!.layers[0].collapsed).toBe(false)
+  })
+
+  it('normalizes non-boolean garbage to false instead of rejecting', () => {
+    for (const garbage of ['"yes"', '1', 'null', '"true"', '{}']) {
+      const payload = JSON.parse(JSON.stringify(validDoc))
+      payload.layers[0].collapsed = JSON.parse(garbage)
+      const restored = validatePersisted({ version: 1, savedAt: 1, doc: payload })
+      expect(restored, `garbage=${garbage}`).not.toBeNull()
+      expect(restored!.layers[0].collapsed, `garbage=${garbage}`).toBe(false)
+    }
+  })
+
+  it('preserves a real boolean through validation', () => {
+    const flagged = JSON.parse(JSON.stringify(validDoc))
+    flagged.layers[0].collapsed = true
+    const restored = validatePersisted({ version: 1, savedAt: 1, doc: flagged })
+    expect(restored!.layers[0].collapsed).toBe(true)
+  })
+
+  it('round-trips serialize → deserialize preserving collapsed: true', () => {
+    const flagged: AnimationDocument = {
+      ...validDoc,
+      layers: [{ ...validDoc.layers[0], collapsed: true }],
+    }
+    const restored = deserializeDoc(serializeDoc(flagged))
+    expect(restored).toEqual(flagged)
+    expect(restored!.layers[0].collapsed).toBe(true)
+  })
+
+  it('still rejects wrong-version payloads (no accidental v2 acceptance)', () => {
+    expect(deserializeDoc(JSON.stringify({ version: 2, doc: validDoc }))).toBeNull()
   })
 })
 

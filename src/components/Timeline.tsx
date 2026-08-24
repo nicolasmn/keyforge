@@ -1,4 +1,4 @@
-import { createEffect, onCleanup, onMount } from 'solid-js'
+import { createEffect, createMemo, onCleanup, onMount } from 'solid-js'
 import {
   doc,
   playhead,
@@ -9,21 +9,27 @@ import {
   selectedKeyframeId,
   setSelectedKeyframeId,
   setSelectedLayerId,
+  toggleLayerCollapsed,
   updateKeyframe,
   snapIncrement,
 } from '@/store'
 import { snapTime } from '@/utils/snap'
 import { chooseLabelStep, formatTick, minorStepFor } from '@/utils/rulerScale'
+import {
+  HEADER_HEIGHT,
+  buildRowModel,
+  rowContentHeight,
+  rowIndexAt,
+  isDisclosureZone,
+  type LayerRow,
+  type TrackRow,
+} from '@/utils/rowModel'
 import Playback from '@/components/Playback'
 
-const TRACK_HEIGHT = 36
-const HEADER_HEIGHT = 28
 const LABEL_WIDTH = 120
 const KF_RADIUS = 6
 const TOUCH_SLOP = 10
 const HANDLE_HIT = 12
-/** Extra px added below the last track row when sizing the canvas. */
-const CONTENT_PAD_BOTTOM = 2
 /** Half-width of the playhead's grabbable column, in CSS px (audit F24). */
 const PLAYHEAD_HIT = 6
 /** Breathing room required after each ruler label (plan §4). */
@@ -32,6 +38,8 @@ const LABEL_GAP_PX = 12
 const MIN_TICK_SPACING_PX = 6
 /** Opacity for lane gridlines over track backgrounds (plan §3). */
 const GRIDLINE_ALPHA = 0.35
+/** Density-strip band cap: >6 tracks merge their surplus into the 6th band. */
+const MAX_STRIP_BANDS = 6
 
 export default function Timeline() {
   let canvas: HTMLCanvasElement | undefined
@@ -47,8 +55,19 @@ export default function Timeline() {
   let movedPastSlop = false
   /** Keyframe under the cursor (audit F10b/F25) — hover feedback only. */
   let hoverKf: { layerId: string; trackId: string; kfId: string } | null = null
+  /** Layer whose canvas chevron is hovered — accent-color feedback only. */
+  let hoverDisclosureLayerId: string | null = null
   /** Cursor x over the ruler/scrub (CSS px) — drives the ghost time chip (F10c/F23). */
   let ghostX: number | null = null
+
+  /**
+   * Single source of truth for vertical geometry (see utils/rowModel.ts).
+   * Never recompute `y = HEADER_HEIGHT + row * TRACK_HEIGHT` locally — ask
+   * this memo. Consumers: draw(), hit-testing, cursor logic, resize().
+   * buildRowModel transitively tracks track counts AND collapse flags, so
+   * reactive effects can depend on `rows().length` alone for sizing.
+   */
+  const rows = createMemo(() => buildRowModel(doc.layers))
 
   function timeToX(time: number, width: number) {
     return LABEL_WIDTH + (time / doc.duration) * (width - LABEL_WIDTH)
@@ -90,6 +109,7 @@ export default function Timeline() {
     const colorBg = cssVars.getPropertyValue('--color-surface').trim()
     const colorBorder = cssVars.getPropertyValue('--color-border').trim()
     const colorText = cssVars.getPropertyValue('--color-text-muted').trim()
+    const colorTextStrong = cssVars.getPropertyValue('--color-text').trim()
     const colorAccent = cssVars.getPropertyValue('--color-accent').trim()
     const colorPrimary = cssVars.getPropertyValue('--color-primary').trim()
     const trackColors = [
@@ -191,62 +211,179 @@ export default function Timeline() {
       ctx.textAlign = 'left'
     }
 
-    let row = 0
-    doc.layers.forEach((layer) => {
-      layer.tracks.forEach((track, ti) => {
-        const y = (HEADER_HEIGHT + row * TRACK_HEIGHT) * dpr
-        ctx.fillStyle = selectedLayerId() === layer.id ? 'hsl(220 12% 15%)' : colorBg
-        ctx.fillRect(0, y, width, TRACK_HEIGHT * dpr)
-        // Label gridlines through the lanes (plan §3): after the row
-        // background but before diamonds, so full-height lines stay visible
-        // without washing out keyframes.
+    // Id lookups for the model's rows (rows carry ids, draw needs objects).
+    const layerById = new Map(doc.layers.map((l) => [l.id, l] as const))
+    const trackIndexOf = new Map<string, number>()
+    for (const l of doc.layers) l.tracks.forEach((t, ti) => trackIndexOf.set(t.id, ti))
+
+    /** Measure-and-chop text to fit `maxWidthCss`, ellipsizing the tail. */
+    const fitText = (text: string, maxWidthCss: number): string => {
+      if (ctx.measureText(text).width / dpr <= maxWidthCss) return text
+      let s = text
+      while (s.length > 1 && ctx.measureText(`${s}…`).width / dpr > maxWidthCss) s = s.slice(0, -1)
+      return `${s}…`
+    }
+
+    /** Track lane — pixel-identical to the pre-model version. */
+    const drawTrackRow = (row: TrackRow) => {
+      const layer = layerById.get(row.layerId)
+      const ti = trackIndexOf.get(row.trackId)
+      if (!layer || ti === undefined) return
+      const track = layer.tracks[ti]
+      if (!track) return
+      const y = row.y * dpr
+      ctx.fillStyle = selectedLayerId() === row.layerId ? 'hsl(220 12% 15%)' : colorBg
+      ctx.fillRect(0, y, width, row.height * dpr)
+      // Label gridlines through the lanes (plan §3): after the row
+      // background but before diamonds, so full-height lines stay visible
+      // without washing out keyframes.
+      ctx.save()
+      ctx.globalAlpha = GRIDLINE_ALPHA
+      ctx.fillStyle = colorBorder
+      for (const t of majorTimes) {
+        ctx.fillRect(timeToX(t, width / dpr) * dpr, y, 1, row.height * dpr)
+      }
+      ctx.restore()
+      ctx.fillStyle = colorBorder
+      ctx.fillRect(0, y + row.height * dpr - 1, width, 1)
+      ctx.fillStyle = colorText
+      ctx.font = `${10 * dpr}px monospace`
+      ctx.textBaseline = 'middle'
+      ctx.fillText(`${layer.name} / ${track.property}`, 8 * dpr, y + (row.height / 2) * dpr)
+      ctx.fillStyle = colorBorder
+      ctx.fillRect(LABEL_WIDTH * dpr, y + (row.height / 2) * dpr, width - LABEL_WIDTH * dpr, 1)
+      track.keyframes.forEach((kf) => {
+        const x = timeToX(kf.time, width / dpr) * dpr
+        const cy2 = y + (row.height / 2) * dpr
+        const isSelected = selectedKeyframeId() === kf.id
+        const isHovered =
+          hoverKf !== null &&
+          hoverKf.layerId === row.layerId &&
+          hoverKf.trackId === row.trackId &&
+          hoverKf.kfId === kf.id
         ctx.save()
-        ctx.globalAlpha = GRIDLINE_ALPHA
-        ctx.fillStyle = colorBorder
-        for (const t of majorTimes) {
-          ctx.fillRect(timeToX(t, width / dpr) * dpr, y, 1, TRACK_HEIGHT * dpr)
+        ctx.translate(x, cy2)
+        ctx.rotate(Math.PI / 4)
+        // Hover scales 1.3× (F10b/F25); selected reads as white + accent ring;
+        // every diamond carries a 1px bg outline so it stays crisp on all
+        // four track colors (F25).
+        const r = KF_RADIUS * dpr * (isHovered ? 1.3 : 1)
+        const color = trackColors[ti % trackColors.length]
+        ctx.fillStyle = isSelected ? '#fff' : color
+        ctx.fillRect(-r / 2, -r / 2, r, r)
+        ctx.lineWidth = 1 * dpr
+        ctx.strokeStyle = colorBg
+        ctx.strokeRect(-r / 2, -r / 2, r, r)
+        if (isSelected) {
+          ctx.lineWidth = 2 * dpr
+          ctx.strokeStyle = colorAccent
+          ctx.strokeRect(-r / 2 - 1.5 * dpr, -r / 2 - 1.5 * dpr, r + 3 * dpr, r + 3 * dpr)
         }
         ctx.restore()
-        ctx.fillStyle = colorBorder
-        ctx.fillRect(0, y + TRACK_HEIGHT * dpr - 1, width, 1)
+      })
+    }
+
+    /** Collapsed-layer summary row: chevron + name + counts + mini-density strip. */
+    const drawLayerRow = (row: LayerRow) => {
+      const y = row.y * dpr
+      const hD = row.height * dpr
+      const isSelected = selectedLayerId() === row.layerId
+      // Group-header background: slightly darker neutral so summary rows read
+      // as groups; the selected-layer tint wins when it applies.
+      ctx.fillStyle = isSelected ? 'hsl(220 12% 15%)' : 'hsl(220 10% 11%)'
+      ctx.fillRect(0, y, width, hD)
+      // Full-width top + bottom hairlines separate groups crisply.
+      ctx.fillStyle = colorBorder
+      ctx.fillRect(0, y, width, 1)
+      ctx.fillRect(0, y + hD - 1, width, 1)
+
+      const layer = layerById.get(row.layerId)
+      // ── Chevron ▸/▾ at x ≈ 8–20, vertically centered; accent on hover.
+      const cxDev = 14 * dpr
+      const cyDev = y + hD / 2
+      const arm = 4 * dpr
+      ctx.strokeStyle = hoverDisclosureLayerId === row.layerId ? colorAccent : colorText
+      ctx.lineWidth = 1.5 * dpr
+      ctx.lineJoin = 'round'
+      ctx.lineCap = 'round'
+      ctx.beginPath()
+      if (layer?.collapsed !== true) {
+        // Expanded (or zero-track rider row) — points down.
+        ctx.moveTo(cxDev - arm, cyDev - arm / 2)
+        ctx.lineTo(cxDev, cyDev + arm / 2)
+        ctx.lineTo(cxDev + arm, cyDev - arm / 2)
+      } else {
+        // Collapsed — points right.
+        ctx.moveTo(cxDev - arm / 2, cyDev - arm)
+        ctx.lineTo(cxDev + arm / 2, cyDev)
+        ctx.lineTo(cxDev - arm / 2, cyDev + arm)
+      }
+      ctx.stroke()
+
+      // ── Label gutter: bold layer name, then muted " · N tracks · M kfs".
+      const labelXCss = 28
+      const maxLabelWCss = LABEL_WIDTH - 28
+      const labelY = y + hD / 2
+      ctx.font = `bold ${11 * dpr}px monospace`
+      ctx.textBaseline = 'middle'
+      const nameText = fitText(layer?.name ?? '', maxLabelWCss)
+      const nameWDev = ctx.measureText(nameText).width
+      ctx.fillStyle = colorTextStrong
+      ctx.fillText(nameText, labelXCss * dpr, labelY)
+      const suffix = ` · ${row.trackCount} tracks · ${row.kfCount} kfs`
+      const roomWCss = maxLabelWCss - nameWDev / dpr
+      if (roomWCss > 4) {
+        ctx.font = `${11 * dpr}px monospace`
         ctx.fillStyle = colorText
-        ctx.font = `${10 * dpr}px monospace`
-        ctx.textBaseline = 'middle'
-        ctx.fillText(`${layer.name} / ${track.property}`, 8 * dpr, y + (TRACK_HEIGHT / 2) * dpr)
-        ctx.fillStyle = colorBorder
-        ctx.fillRect(LABEL_WIDTH * dpr, y + (TRACK_HEIGHT / 2) * dpr, width - LABEL_WIDTH * dpr, 1)
-        track.keyframes.forEach((kf) => {
-          const x = timeToX(kf.time, width / dpr) * dpr
-          const cy2 = y + (TRACK_HEIGHT / 2) * dpr
-          const isSelected = selectedKeyframeId() === kf.id
-          const isHovered =
-            hoverKf !== null &&
-            hoverKf.layerId === layer.id &&
-            hoverKf.trackId === track.id &&
-            hoverKf.kfId === kf.id
+        ctx.fillText(fitText(suffix, roomWCss), labelXCss * dpr + nameWDev, labelY)
+      }
+
+      // ── Mini-density strip in the lanes area: one thin band per track,
+      // stacked and centered in the row — a silent preview of expansion.
+      // Capped at MAX_STRIP_BANDS bands; surplus tracks merge into the last.
+      const tracksOfLayer = layer?.tracks ?? []
+      const bandCount = Math.min(tracksOfLayer.length, MAX_STRIP_BANDS)
+      if (bandCount === 0) return
+      const bandH = Math.min(4, Math.floor((row.height - 8) / bandCount))
+      if (bandH <= 0) return
+      const stripH = bandCount * bandH
+      let bandYCss = row.y + (row.height - stripH) / 2
+      const laneLeftDev = LABEL_WIDTH * dpr
+      const laneWDev = Math.max(0, width - LABEL_WIDTH * dpr - HANDLE_HIT * dpr)
+      for (let b = 0; b < bandCount; b++) {
+        const from = b
+        const to = b === MAX_STRIP_BANDS - 1 ? tracksOfLayer.length : b + 1
+        const slice = tracksOfLayer.slice(from, to)
+        const hasKfs = slice.some((t) => t.keyframes.length > 0)
+        if (!hasKfs) {
+          // Faint baseline dash keeps "track exists but no keyframes" legible.
           ctx.save()
-          ctx.translate(x, cy2)
-          ctx.rotate(Math.PI / 4)
-          // Hover scales 1.3× (F10b/F25); selected reads as white + accent ring;
-          // every diamond carries a 1px bg outline so it stays crisp on all
-          // four track colors (F25).
-          const r = KF_RADIUS * dpr * (isHovered ? 1.3 : 1)
-          const color = trackColors[ti % trackColors.length]
-          ctx.fillStyle = isSelected ? '#fff' : color
-          ctx.fillRect(-r / 2, -r / 2, r, r)
-          ctx.lineWidth = 1 * dpr
-          ctx.strokeStyle = colorBg
-          ctx.strokeRect(-r / 2, -r / 2, r, r)
-          if (isSelected) {
-            ctx.lineWidth = 2 * dpr
-            ctx.strokeStyle = colorAccent
-            ctx.strokeRect(-r / 2 - 1.5 * dpr, -r / 2 - 1.5 * dpr, r + 3 * dpr, r + 3 * dpr)
+          ctx.globalAlpha = 0.15
+          ctx.fillStyle = colorBorder
+          ctx.fillRect(laneLeftDev, (bandYCss + bandH / 2) * dpr, laneWDev, Math.max(1, dpr))
+          ctx.restore()
+        } else {
+          ctx.save()
+          ctx.globalAlpha = 0.35
+          for (let ti2 = from; ti2 < to; ti2++) {
+            // Global track index keys the color, so bands match the diamonds
+            // expanding reveals.
+            ctx.fillStyle = trackColors[ti2 % trackColors.length]
+            for (const kf of tracksOfLayer[ti2].keyframes) {
+              const kx = timeToX(kf.time, width / dpr) * dpr
+              ctx.fillRect(kx, bandYCss * dpr, 3 * dpr, bandH * dpr)
+            }
           }
           ctx.restore()
-        })
-        row++
-      })
-    })
+        }
+        bandYCss += bandH
+      }
+    }
+
+    for (const row of rows()) {
+      if (row.type === 'track') drawTrackRow(row)
+      else drawLayerRow(row)
+    }
 
     // Playhead (audit F24): triangle head in the ruler, glow while
     // scrubbing, time bubble during drags. The line itself stays a 2px
@@ -341,13 +478,6 @@ export default function Timeline() {
     ctx.fillText(text, x + padX, y + h / 2 + 0.5 * dpr)
   }
 
-  /** Number of track rows drawn below the ruler header. */
-  function totalTrackRows() {
-    let rows = 0
-    for (const layer of doc.layers) rows += layer.tracks.length
-    return rows
-  }
-
   function resize() {
     if (!canvas) return
     const dpr = window.devicePixelRatio || 1
@@ -355,8 +485,9 @@ export default function Timeline() {
     // the transport strip above — so "visible rows" math stays correct.
     const rect = canvas.parentElement!.getBoundingClientRect()
     // Grow beyond the visible panel when there are more rows than fit, so the
-    // container can scroll vertically instead of clipping tracks.
-    const contentHeight = HEADER_HEIGHT + totalTrackRows() * TRACK_HEIGHT + CONTENT_PAD_BOTTOM
+    // container can scroll vertically instead of clipping tracks. Height comes
+    // from the row model — never recomputed locally.
+    const contentHeight = rowContentHeight(rows())
     const height = Math.max(rect.height, contentHeight)
     canvas.width = rect.width * dpr
     canvas.height = height * dpr
@@ -396,27 +527,39 @@ export default function Timeline() {
       canvas!.style.cursor = 'ew-resize'
       return
     }
+    // Disclosure zones read as buttons before anything scrub/grab-shaped.
+    if (hitTestDisclosure(x, y)) {
+      canvas!.style.cursor = 'pointer'
+      return
+    }
     canvas!.style.cursor = hitTestKeyframe(x, y) ? 'grab' : ''
   }
 
   function hitTestKeyframe(x: number, y: number) {
-    let row = 0
-    for (const layer of doc.layers) {
-      for (const track of layer.tracks) {
-        const ry = HEADER_HEIGHT + row * TRACK_HEIGHT
-        const cy = ry + TRACK_HEIGHT / 2
-        if (Math.abs(y - cy) < TRACK_HEIGHT / 2) {
-          for (const kf of track.keyframes) {
-            const kx = timeToX(kf.time, canvas!.offsetWidth)
-            if (Math.abs(x - kx) < KF_RADIUS + 8) {
-              return { layerId: layer.id, trackId: track.id, kfId: kf.id }
-            }
-          }
-        }
-        row++
+    const i = rowIndexAt(rows(), y)
+    if (i === null) return null
+    const row = rows()[i]
+    // Layer rows never contain keyframes — hover/cursor fall through.
+    if (row.type !== 'track') return null
+    const layer = doc.layers.find((l) => l.id === row.layerId)
+    const track = layer?.tracks.find((t) => t.id === row.trackId)
+    if (!layer || !track) return null
+    for (const kf of track.keyframes) {
+      const kx = timeToX(kf.time, canvas!.offsetWidth)
+      if (Math.abs(x - kx) < KF_RADIUS + 8) {
+        return { layerId: layer.id, trackId: track.id, kfId: kf.id }
       }
     }
     return null
+  }
+
+  /** The LayerRow under (x, y) when x sits in its chevron zone, else null. */
+  function hitTestDisclosure(x: number, y: number): LayerRow | null {
+    const i = rowIndexAt(rows(), y)
+    if (i === null) return null
+    const row = rows()[i]
+    if (row.type !== 'layer' || !isDisclosureZone(x)) return null
+    return row
   }
 
   function promptDuration() {
@@ -472,6 +615,22 @@ export default function Timeline() {
       setPlayhead(snappedXToTime(x))
       return
     }
+    // Disclosure click zones take precedence over every other gesture below
+    // the header — a chevron press must never start a scrub or playhead jump.
+    const hitRowIdx = rowIndexAt(rows(), y)
+    const hitRow = hitRowIdx !== null ? rows()[hitRowIdx] : null
+    if (hitRow?.type === 'layer') {
+      if (isDisclosureZone(x)) {
+        toggleLayerCollapsed(hitRow.layerId)
+        endDrag()
+        return
+      }
+      // Summary-row body: select-only — the label strip is a control surface,
+      // not a scrub target (prevents surprise playhead jumps).
+      setSelectedLayerId(hitRow.layerId)
+      endDrag()
+      return
+    }
     const hit = hitTestKeyframe(x, y)
     if (hit) {
       draggingKf = hit
@@ -514,9 +673,10 @@ export default function Timeline() {
       })
     }
     if (activePointerId === null) {
-      // Hover-only state: zone cursor, hovered diamond, ghost chip (F10/F25).
+      // Hover-only state: zone cursor, hovered diamond/chevron, ghost chip.
       const overRulerOrScrub = y < HEADER_HEIGHT || nearPlayhead(x)
       hoverKf = overRulerOrScrub ? null : hitTestKeyframe(x, y)
+      hoverDisclosureLayerId = overRulerOrScrub ? null : (hitTestDisclosure(x, y)?.layerId ?? null)
       ghostX = y < HEADER_HEIGHT ? x : null
       updateCursor(x, y)
     }
@@ -525,6 +685,7 @@ export default function Timeline() {
 
   function onPointerLeave() {
     hoverKf = null
+    hoverDisclosureLayerId = null
     ghostX = null
     scheduleDraw()
   }

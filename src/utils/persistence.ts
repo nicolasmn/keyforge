@@ -49,6 +49,11 @@ export function validatePersisted(parsed: unknown): AnimationDocument | null {
   if (!Array.isArray(d.layers)) return null
   for (const layer of d.layers) {
     if (typeof layer?.id !== 'string' || typeof layer?.name !== 'string') return null
+    // Collapse is optional view state: old payloads lack it (→ expanded),
+    // and hand-edited storage may hold non-booleans. Coerce instead of
+    // rejecting — a required field or version bump would wipe every
+    // existing save back to emptyDefaultDoc().
+    if (typeof layer.collapsed !== 'boolean') layer.collapsed = false
     if (!Array.isArray(layer.tracks)) return null
     for (const track of layer.tracks) {
       if (typeof track?.id !== 'string' || typeof track?.property !== 'string') return null

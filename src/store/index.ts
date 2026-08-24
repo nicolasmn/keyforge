@@ -164,6 +164,7 @@ export function addLayer() {
         id,
         name: `Layer ${d.layers.length + 1}`,
         visible: true,
+        collapsed: false,
         element: {
           tag: 'div',
           text: '',
@@ -228,6 +229,25 @@ export function setLayerVisibility(layerId: string, visible: boolean) {
       if (layer) layer.visible = visible
     }),
   )
+}
+
+/**
+ * Collapse state for the timeline: a collapsed layer renders ONE summary
+ * row instead of one row per track. View state (like `visible`), so it
+ * rides the normal setDoc autosave path.
+ */
+export function setLayerCollapsed(layerId: string, collapsed: boolean) {
+  setDoc(
+    produce((d) => {
+      const layer = d.layers.find((l) => l.id === layerId)
+      if (layer) layer.collapsed = collapsed
+    }),
+  )
+}
+
+export function toggleLayerCollapsed(layerId: string) {
+  const current = doc.layers.find((l) => l.id === layerId)?.collapsed === true
+  setLayerCollapsed(layerId, !current)
 }
 
 /**
