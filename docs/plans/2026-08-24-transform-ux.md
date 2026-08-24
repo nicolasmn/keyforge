@@ -26,12 +26,13 @@ Scope: root-cause fix for "cannot re-add transform fns after deleting all of the
    ```tsx
    <Show when={props.token.type === 'transform' && (props.token.subTokens?.length ?? 0) > 0}>
    ```
+
    (`Inspector.tsx:708`). With type `'string'` this gate is false, so the row
    falls through to the generic text chip branch (`Inspector.tsx:827-…`),
    which has **no add affordance at all**. Dead end.
 
 **Hidden escape hatch (undiscoverable):** typing e.g. `scale(2)` into the
-generic chip *does* recover — `validate('string', …)` accepts any non-empty
+generic chip _does_ recover — `validate('string', …)` accepts any non-empty
 string (`Inspector.tsx:87`) and the next tokenize reclassifies as transform.
 But `completionsFor('string')` returns `[]` (`src/utils/cssCompletions.ts:173-190`)
 and the chip's aria-label says "Edit string value none", so no user will find it.
@@ -104,11 +105,11 @@ no visual feedback) → tap each arg chip to edit.
 
 Alternatives considered:
 
-| Option | Effect | Scope |
-|---|---|---|
-| **A. Always-visible inline "+" + empty-state chip** | Fixes dead end AND cuts one step; add-from-zero becomes: click + → pick fn. | Minimal — required by the fix anyway |
-| B. Preset stacks ("slide-up", "pop", "spin") atop the picker | One click = meaningful multi-fn stack with visible defaults | Moderate (preset table + picker section) |
-| C. Paste-a-transform shorthand | Already works today (generic chip accepts any string); just undiscoverable | ~Free as hint copy inside A's empty state |
+| Option                                                       | Effect                                                                      | Scope                                     |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------- | ----------------------------------------- |
+| **A. Always-visible inline "+" + empty-state chip**          | Fixes dead end AND cuts one step; add-from-zero becomes: click + → pick fn. | Minimal — required by the fix anyway      |
+| B. Preset stacks ("slide-up", "pop", "spin") atop the picker | One click = meaningful multi-fn stack with visible defaults                 | Moderate (preset table + picker section)  |
+| C. Paste-a-transform shorthand                               | Already works today (generic chip accepts any string); just undiscoverable  | ~Free as hint copy inside A's empty state |
 
 **Primary recommendation: A**, folding C's hint into the empty-state copy.
 It resolves both owner complaints with one mechanism and zero new concepts.
@@ -145,20 +146,17 @@ B is a good fast-follow but adds surface area; defer unless asked.
 ## 5. Test list
 
 Tokenizer (`tokenizeLayer.test.ts` / `transformStack.test.ts`):
+
 1. Transform track, `kf.value='none'` → token type `'transform'`, `subTokens` `[]`.
 2. Defensive: transform track, `kf.value=''` → same (store rejects empties, but tokenizer shouldn't crash).
 3. Non-transform tracks unchanged: opacity `'42'`→number, colors→color; `translate`/`rotate` tracks still classify by value text.
 4. `detectType('none','value')` still `'string'` (pin, so behavior is intentional).
 5. `removeTransformFn` last-fn → `'none'`; `addTransformFn('none', …)` recovers; `moveTransformFn` bounds on single-fn stack.
 
-Component behavior (no component test infra in repo — extract pure gate helper if we want it unit-tested, else manual QA checklist):
-6. Delete last fn → chip remains transform-shaped with (+); picker opens from empty state; added fn appears; Escape closes picker; chip keyboard-focusable; aria-labels say "no functions" not "string".
-7. Undo (single-write path) restores prior stack.
+Component behavior (no component test infra in repo — extract pure gate helper if we want it unit-tested, else manual QA checklist): 6. Delete last fn → chip remains transform-shaped with (+); picker opens from empty state; added fn appears; Escape closes picker; chip keyboard-focusable; aria-labels say "no functions" not "string". 7. Undo (single-write path) restores prior stack.
 
-#55 follow-up (separate commit if taken):
-8. `mergeTransformTracks` drops `'none'` samples from joins; all-`'none'` group → `'none'`.
-9. Pin hold-across-none-boundary in `sampleTrackValue`.
+#55 follow-up (separate commit if taken): 8. `mergeTransformTracks` drops `'none'` samples from joins; all-`'none'` group → `'none'`. 9. Pin hold-across-none-boundary in `sampleTrackValue`.
 
 ---
 
-*Scratch verification: `src/utils/scratch-deadend.test.ts` in worktree `/root/workspace/kf-plan-transform` (untracked; delete after implementation lands its permanent equivalents).*
+_Scratch verification: `src/utils/scratch-deadend.test.ts` in worktree `/root/workspace/kf-plan-transform` (untracked; delete after implementation lands its permanent equivalents)._

@@ -49,6 +49,7 @@ ctx.stroke()
 ```
 
 Notes:
+
 - The hairline body (`fillRect(ph, 0, 2*dpr, height)` with/without glow) is untouched.
 - The apex lands at y=10px like the old version and like the old `capY` clamp, so it
   stays inside `HEADER_HEIGHT` even if that constant shrinks.
@@ -78,6 +79,7 @@ export function snapTime(t: number, increment: SnapIncrement, max?: number): num
 ```
 
 Design notes:
+
 - `Math.round` half-up at exact midpoints (`1250 @ inc=500 → 1500`) — document it; don't chase banker's rounding.
 - Integer increments keep results FP-exact (products of integers within ms ranges), so no epsilon fixup needed. The wheel path can still feed fractional `t`; snapping normalizes it.
 - Clamping to `max` (the doc duration) happens here so every call site gets one consistent contract instead of re-implementing `Math.min/max`.
@@ -88,8 +90,9 @@ Design notes:
 Next to the playhead signals (~line 118):
 
 ```ts
-export const [snapIncrement, setSnapIncrement] =
-  createSignal<SnapIncrement>(loadPrefs()?.snapIncrement ?? 'off')
+export const [snapIncrement, setSnapIncrement] = createSignal<SnapIncrement>(
+  loadPrefs()?.snapIncrement ?? 'off',
+)
 ```
 
 Import from utils to avoid a circular dep: store imports persistence; persistence
@@ -99,15 +102,15 @@ imports the type from `snap.ts` (types only) — no cycle since `snap.ts` import
 
 All user-driven gestures snap; the rAF playback loop must **not**.
 
-| Site | Line | Change |
-|---|---|---|
-| Ruler pointer-down jump | ~421 | `setPlayhead(snapTime(xToTime(x, w), snapIncrement(), doc.duration))` |
-| Lanes empty-area click jump | ~441 | same wrap |
-| Scrub move | ~457 | same wrap |
-| Wheel nudge | ~507 | `setPlayhead((prev) => snapTime(prev + e.deltaX * msPerPx, snapIncrement(), doc.duration))` |
-| Keyframe drag time | ~461–463 | `time: snapTime(Math.round(xToTime(x, w)), snapIncrement(), doc.duration)` — existing `Math.round` becomes redundant when inc≥1 but keep it as the `'off'` behavior |
-| Duration handle `applyDurationFromX` | ~58 | leave as-is (already quantized to 50ms); note as possible follow-up |
-| `promptDuration` / Playback / EmptyState jumps | — | leave unsnapped: they are explicit numeric inputs or resets, not gestures |
+| Site                                           | Line     | Change                                                                                                                                                              |
+| ---------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ruler pointer-down jump                        | ~421     | `setPlayhead(snapTime(xToTime(x, w), snapIncrement(), doc.duration))`                                                                                               |
+| Lanes empty-area click jump                    | ~441     | same wrap                                                                                                                                                           |
+| Scrub move                                     | ~457     | same wrap                                                                                                                                                           |
+| Wheel nudge                                    | ~507     | `setPlayhead((prev) => snapTime(prev + e.deltaX * msPerPx, snapIncrement(), doc.duration))`                                                                         |
+| Keyframe drag time                             | ~461–463 | `time: snapTime(Math.round(xToTime(x, w)), snapIncrement(), doc.duration)` — existing `Math.round` becomes redundant when inc≥1 but keep it as the `'off'` behavior |
+| Duration handle `applyDurationFromX`           | ~58      | leave as-is (already quantized to 50ms); note as possible follow-up                                                                                                 |
+| `promptDuration` / Playback / EmptyState jumps | —        | leave unsnapped: they are explicit numeric inputs or resets, not gestures                                                                                           |
 
 Wheel hysteresis: snapping `prev + delta` each event means small trackpad deltas hold at a
 detent until accumulated movement crosses inc/2 — this is the intended stepped feel, not a bug.
@@ -118,6 +121,7 @@ If it feels sticky at inc=1000, an un-snapped accumulator ref can be added later
 Owner floated ruler-right-click vs playback cluster, "keep minimal".
 
 **Recommended: native `<select>` appended to `Playback.tsx`.**
+
 - ~15 lines: `<select value={snapIncrement()} onChange={e => { setSnapIncrement(v); savePrefs(...) }}>` labeled `Snap:` with options `Off / 1ms / 10ms / 0.1s / 0.5s / 1s`.
 - Always visible ⇒ discoverable (right-click-on-canvas menus never get found).
 - Native select gets keyboard/screenreader support free, matching the accessibility bar set in #57/#58.
@@ -156,18 +160,29 @@ export function deserializePrefs(raw: string | null): PersistedPrefs | null {
   try {
     const p = JSON.parse(raw)
     if (p?.version !== 1) return null
-    return { version: 1, snapIncrement: SNAP_VALUES.includes(p.snapIncrement) ? p.snapIncrement : 'off' }
+    return {
+      version: 1,
+      snapIncrement: SNAP_VALUES.includes(p.snapIncrement) ? p.snapIncrement : 'off',
+    }
   } catch {
     return null
   }
 }
 
 export function loadPrefs(): PersistedPrefs | null {
-  try { return deserializePrefs(localStorage.getItem(PREFS_KEY)) } catch { return null }
+  try {
+    return deserializePrefs(localStorage.getItem(PREFS_KEY))
+  } catch {
+    return null
+  }
 }
 
 export function savePrefs(p: PersistedPrefs): void {
-  try { localStorage.setItem(PREFS_KEY, serializePrefs(p)) } catch { /* best-effort */ }
+  try {
+    localStorage.setItem(PREFS_KEY, serializePrefs(p))
+  } catch {
+    /* best-effort */
+  }
 }
 ```
 
@@ -177,6 +192,7 @@ prefs will accrete future toggles (gridline visibility, default zoom) without an
 ### 2f. Unit tests
 
 `src/utils/snap.test.ts`:
+
 1. `'off'` returns input unchanged, including fractional input and out-of-range input.
 2. Rounds to nearest increment: `(1234, 100) → 1200`, `(1260, 100) → 1300`.
 3. Half-up midpoint documented: `(1250, 500) → 1500`, `(249.9, 500) → 0`, `(250, 500) → 500`.
@@ -188,11 +204,7 @@ prefs will accrete future toggles (gridline visibility, default zoom) without an
 9. Non-finite guard: `(NaN, 100)` returns NaN unchanged; `(Infinity, 100)` unchanged.
 10. Every `SNAP_VALUES` entry divides evenly into itself: `snapTime(v, v) === v`.
 
-`src/utils/persistence.test.ts` (additions):
-11. `deserializePrefs(null)` / garbage JSON / wrong `version` → `null`.
-12. Unknown `snapIncrement` value (e.g. `42`) coerces to `'off'`.
-13. Roundtrip `serializePrefs` → `deserializePrefs` preserves value.
-14. `loadPrefs/savePrefs` tolerate a throwing `localStorage` (mock).
+`src/utils/persistence.test.ts` (additions): 11. `deserializePrefs(null)` / garbage JSON / wrong `version` → `null`. 12. Unknown `snapIncrement` value (e.g. `42`) coerces to `'off'`. 13. Roundtrip `serializePrefs` → `deserializePrefs` preserves value. 14. `loadPrefs/savePrefs` tolerate a throwing `localStorage` (mock).
 
 `src/utils/rulerScale.test.ts` (see §4):
 15–18 listed there.
@@ -206,7 +218,7 @@ Today major ticks draw only inside the header: `ctx.fillRect(x*dpr, 0, 1, HEADER
 ### Ordering problem (why this isn't a one-line change)
 
 Track rows paint **opaque** backgrounds (`hsl(220 12% 15%)` / `colorBg`) across the full
-canvas width *after* the ruler pass. Gridlines drawn during the ruler pass get erased.
+canvas width _after_ the ruler pass. Gridlines drawn during the ruler pass get erased.
 
 ### Recommended approach: per-row segment, drawn after row bg, before diamonds
 
@@ -221,17 +233,13 @@ ctx.globalAlpha = 0.35
 ctx.fillStyle = colorBorder
 for (let i = 0; i <= tickCount; i++) {
   const x = timeToX((doc.duration / tickCount) * i, width / dpr)
-  ctx.fillRect(
-    x * dpr,
-    (HEADER_HEIGHT + row * TRACK_HEIGHT) * dpr,
-    1 * dpr,
-    TRACK_HEIGHT * dpr,
-  )
+  ctx.fillRect(x * dpr, (HEADER_HEIGHT + row * TRACK_HEIGHT) * dpr, 1 * dpr, TRACK_HEIGHT * dpr)
 }
 ctx.restore()
 ```
 
 Why per-row segments rather than one post-rows pass:
+
 - Preserves z-order with a minimal diff: row bg < gridline < diamond. A single pass after all rows would overpaint diamonds; splitting rows into two loops is a bigger refactor for identical pixels.
 - Cost is trivial (majors × rows fillRects, ≤ a few hundred).
 
@@ -294,6 +302,7 @@ export function chooseLabelStep(
 ```
 
 Concrete algorithm (final form for implementation):
+
 1. Start `best = duration / 10` (today's behavior — never coarser than shipped).
 2. Iterate candidates coarse → fine. For each step `s`:
    - Format the representative label at `t = duration` (widest realistic string).
@@ -308,20 +317,14 @@ Label formatting (`formatTick(t, step)`): switch unit by magnitude —
 Trailing-zero trim optional; keep monospace font so widths are predictable.
 
 Majors then tick at multiples of `step` from 0 up to `floor(duration / step) * step`. Note:
-the last major may land *before* `duration` for non-divisible steps — acceptable; the
+the last major may land _before_ `duration` for non-divisible steps — acceptable; the
 duration readout at the right edge (`${doc.duration}ms`, already bold/primary) still marks the end. Today's divisible case renders identically.
 
 Minors: replace the fixed `MINOR_TICKS=50` with `minorStep = labelStep / 5`, skipping minors that would sit < 4px apart (`if (minorStep * pxPerMs < 4) minorStep = labelStep / 2`). Keeps the ruler readable at both extremes.
 
 Ghost/time-chip formatting is untouched.
 
-Unit tests (`src/utils/rulerScale.test.ts`):
-15. Narrow lane (labels would collide at baseline) returns exactly `duration / 10` — today's output.
-16. Wide lane returns a finer nice step (assert `result < duration / 10 && result ∈ candidates`).
-17. Collision guarantee with a fake measurer: chosen step satisfies `intervals * (width+gap) <= laneWidth`.
-18. Monotonicity: widening the lane never coarsens the step.
-19. Never finer than 1 ms even on absurdly wide lanes; never coarser than `duration / 10`.
-20. `candidateSteps` contains 1, 2, 5, 10… pattern and caps at `duration / 2`.
+Unit tests (`src/utils/rulerScale.test.ts`): 15. Narrow lane (labels would collide at baseline) returns exactly `duration / 10` — today's output. 16. Wide lane returns a finer nice step (assert `result < duration / 10 && result ∈ candidates`). 17. Collision guarantee with a fake measurer: chosen step satisfies `intervals * (width+gap) <= laneWidth`. 18. Monotonicity: widening the lane never coarsens the step. 19. Never finer than 1 ms even on absurdly wide lanes; never coarser than `duration / 10`. 20. `candidateSteps` contains 1, 2, 5, 10… pattern and caps at `duration / 2`.
 
 Synergy (noting only): once adaptive steps exist, a future "snap follows label step" mode falls out for free — out of scope here.
 
@@ -329,18 +332,18 @@ Synergy (noting only): once adaptive steps exist, a future "snap follows label s
 
 ## Risks & mitigations
 
-| Risk | Mitigation |
-|---|---|
-| Default snap changes existing feel | Ship default `'off'`; owner can flip the persisted pref. All gesture sites wrapped uniformly so enabling later is a one-value change. |
-| Wheel-snap stickiness at large increments | Expected detent behavior; if it feels wrong at 1s, add an un-snapped accumulator ref (isolated to `onWheel`). |
-| Gridline contrast wrong on light/dark themes | Use `--color-border` + `globalAlpha` 0.35; eyeball both themes; single constant to tune. |
-| Opaque row backgrounds erasing gridlines | Per-row draw ordering specified in §3; regression is visually obvious. |
-| `measureText` called with wrong font (wrong widths → collisions) | Measure inside `draw()` after font assignment; inject measurer into pure fn; test 17 guards collision math. |
-| Last major tick not at `duration` for arbitrary steps | Accepted deviation; right-edge duration readout unaffected. Documented in §4. |
-| Keyframes collapsing onto t=0 when dragging with coarse snap (e.g. 1s) | Same behavior as any DAW; sort in `updateKeyframe` already handles ties. No guard needed. |
-| Prefs corruption / stale schema | Independent `keyforge:prefs:v1` key; validator falls back to `'off'`; doc payload untouched (no migration). |
-| Playback loop accidentally snapping | Snapping lives only in Timeline gesture handlers; Preview's rAF `setPlayhead(next)` untouched. Add a code-comment warning at the signal definition. |
-| Triangle stroke vs pure revert ambiguity | Flagged as decision point in §1; one-line difference. |
+| Risk                                                                   | Mitigation                                                                                                                                          |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Default snap changes existing feel                                     | Ship default `'off'`; owner can flip the persisted pref. All gesture sites wrapped uniformly so enabling later is a one-value change.               |
+| Wheel-snap stickiness at large increments                              | Expected detent behavior; if it feels wrong at 1s, add an un-snapped accumulator ref (isolated to `onWheel`).                                       |
+| Gridline contrast wrong on light/dark themes                           | Use `--color-border` + `globalAlpha` 0.35; eyeball both themes; single constant to tune.                                                            |
+| Opaque row backgrounds erasing gridlines                               | Per-row draw ordering specified in §3; regression is visually obvious.                                                                              |
+| `measureText` called with wrong font (wrong widths → collisions)       | Measure inside `draw()` after font assignment; inject measurer into pure fn; test 17 guards collision math.                                         |
+| Last major tick not at `duration` for arbitrary steps                  | Accepted deviation; right-edge duration readout unaffected. Documented in §4.                                                                       |
+| Keyframes collapsing onto t=0 when dragging with coarse snap (e.g. 1s) | Same behavior as any DAW; sort in `updateKeyframe` already handles ties. No guard needed.                                                           |
+| Prefs corruption / stale schema                                        | Independent `keyforge:prefs:v1` key; validator falls back to `'off'`; doc payload untouched (no migration).                                         |
+| Playback loop accidentally snapping                                    | Snapping lives only in Timeline gesture handlers; Preview's rAF `setPlayhead(next)` untouched. Add a code-comment warning at the signal definition. |
+| Triangle stroke vs pure revert ambiguity                               | Flagged as decision point in §1; one-line difference.                                                                                               |
 
 ## Suggested implementation order (single PR is fine)
 

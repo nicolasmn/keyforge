@@ -11,11 +11,11 @@
 
 Today the timeline is a **flat enumeration of track rows**: every track of every layer gets exactly `TRACK_HEIGHT = 36px`, in layer order then track order. Three independent pieces of code re-derive that same enumeration by hand:
 
-| Site | Location | What it assumes |
-|---|---|---|
-| `draw()` | Timeline.tsx:160–205 | `let row = 0`; nested `layers.forEach → tracks.forEach`; `y = (HEADER_HEIGHT + row * TRACK_HEIGHT) * dpr`; `row++` per track |
-| `hitTestKeyframe()` | Timeline.tsx:351–369 | Same nested loop with its own `let row = 0`; `ry = HEADER_HEIGHT + row * TRACK_HEIGHT`; band test `Math.abs(y - cy) < TRACK_HEIGHT / 2` |
-| `totalTrackRows()` → `resize()` | Timeline.tsx:296–300, 302–315 | Content height = `HEADER_HEIGHT + Σ(layer.tracks.length) * TRACK_HEIGHT + CONTENT_PAD_BOTTOM` |
+| Site                            | Location                      | What it assumes                                                                                                                         |
+| ------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `draw()`                        | Timeline.tsx:160–205          | `let row = 0`; nested `layers.forEach → tracks.forEach`; `y = (HEADER_HEIGHT + row * TRACK_HEIGHT) * dpr`; `row++` per track            |
+| `hitTestKeyframe()`             | Timeline.tsx:351–369          | Same nested loop with its own `let row = 0`; `ry = HEADER_HEIGHT + row * TRACK_HEIGHT`; band test `Math.abs(y - cy) < TRACK_HEIGHT / 2` |
+| `totalTrackRows()` → `resize()` | Timeline.tsx:296–300, 302–315 | Content height = `HEADER_HEIGHT + Σ(layer.tracks.length) * TRACK_HEIGHT + CONTENT_PAD_BOTTOM`                                           |
 
 Two Solid effects also encode the flat model:
 
@@ -65,18 +65,18 @@ export const DISCLOSURE_ZONE_WIDTH = 24
 
 export interface TrackRow {
   type: 'track'
-  y: number        // CSS px, below ruler
-  height: number   // TRACK_HEIGHT
+  y: number // CSS px, below ruler
+  height: number // TRACK_HEIGHT
   layerId: string
   trackId: string
 }
 export interface LayerRow {
   type: 'layer'
   y: number
-  height: number   // LAYER_ROW_HEIGHT
+  height: number // LAYER_ROW_HEIGHT
   layerId: string
   trackCount: number
-  kfCount: number  // total keyframes across the layer's tracks
+  kfCount: number // total keyframes across the layer's tracks
 }
 export type TimelineRow = TrackRow | LayerRow
 
@@ -128,7 +128,9 @@ export interface Layer {
 - New mutation next to `setLayerVisibility` (same produce-through-`setDoc` shape so autosave fires via `setDocWrapped`):
 
 ```ts
-export function setLayerCollapsed(layerId: string, collapsed: boolean) { /* produce: find layer, assign */ }
+export function setLayerCollapsed(layerId: string, collapsed: boolean) {
+  /* produce: find layer, assign */
+}
 export function toggleLayerCollapsed(layerId: string) {
   setLayerCollapsed(layerId, !(getLayer(layerId)?.collapsed === true))
 }
@@ -170,6 +172,7 @@ In `draw()`, replace the nested forEach with `for (const row of rows())`, branch
 **TrackRow** — pixel-identical to today (bg highlight if `selectedLayerId() === row.layerId`, border hairline, `${layer.name} / ${property}` label, lane rule, diamonds with hover/selection states). Extracting today's per-track block into `drawTrackRow(ctx, row, ...)` keeps this readable.
 
 **LayerRow (summary)** — same band height (36px), visually distinct:
+
 - Background: selected-layer tint applies here too (§7); plus a slightly darker neutral (`hsl(220 10% 11%)`) for all layer rows so they read as group headers.
 - **Chevron** ▸/▾ drawn at x ≈ 8–20, centered vertically (two-line stroke path, rotates by state). Accent color on hover.
 - **Label** (bold 11px mono): layer name, then muted ` · N tracks · M kfs` appended when it fits within `LABEL_WIDTH − 28`, else truncated with ellipsis via measure-and-clip.
@@ -192,7 +195,10 @@ Add a disclosure button as the first control inside each `SortableLayer <li>`, b
 ```tsx
 <button
   class="btn btn--ghost layer-tree__disclosure"
-  onClick={(e) => { e.stopPropagation(); toggleLayerCollapsed(props.layer.id) }}
+  onClick={(e) => {
+    e.stopPropagation()
+    toggleLayerCollapsed(props.layer.id)
+  }}
   aria-expanded={props.layer.collapsed === true}
   title={props.layer.collapsed ? 'Expand layer' : 'Collapse layer'}
 >

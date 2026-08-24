@@ -11,14 +11,14 @@
 
 ### 1a. Registry / type system — transform-origin is absent everywhere
 
-| Site | Evidence |
-|---|---|
-| `AnimatableProperty` union | `src/types/index.ts:11–21` — 10 properties (`opacity, transform, background-color, color, border-radius, width, height, scale, translate, rotate`). No transform-origin. |
-| Property registry | `src/utils/propertyRegistry.ts:30–95` — no entry. Reusable pieces: `LENGTH_UNITS` at :28, validation helpers :166–180, value-syntax normalizer `toCssPropertyValue` :127–164 (rotate/translate/scale only). |
-| Import whitelist | `src/utils/cssImport.ts:27–38` (`ANIMATABLE`). A `transform-origin` decl **inside @keyframes stops** is parsed (:104–137) then dropped with an "unsupported property" warning (:239–241). Companion element blocks are barely read — only `animation-duration` is sniffed (:151–156) — so an origin authored next to the keyframes is lost on import today. |
-| Inspector property dropdown | `src/components/Inspector.tsx:60–71` (`PROPERTIES`) rendered at :1203–1215. |
-| Smart first values | `src/store/index.ts:399–413` (`DEFAULT_FIRST_VALUE`). |
-| Emission | `decl()` (`src/utils/keyframes.ts:33–39`) emits track decls; element rules from `generateCss` (`src/utils/css.ts:44–72`, rule body :60–67) and `layerBlock` (`src/utils/export.ts:26–44`, body :37–42) contain ONLY `animation-*` decls. `transform-origin` appears nowhere in src except `app.css:484` — which is the **stage's own** scale origin (see 1c), unrelated to layers. |
+| Site                        | Evidence                                                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AnimatableProperty` union  | `src/types/index.ts:11–21` — 10 properties (`opacity, transform, background-color, color, border-radius, width, height, scale, translate, rotate`). No transform-origin.                                                                                                                                                                                                           |
+| Property registry           | `src/utils/propertyRegistry.ts:30–95` — no entry. Reusable pieces: `LENGTH_UNITS` at :28, validation helpers :166–180, value-syntax normalizer `toCssPropertyValue` :127–164 (rotate/translate/scale only).                                                                                                                                                                        |
+| Import whitelist            | `src/utils/cssImport.ts:27–38` (`ANIMATABLE`). A `transform-origin` decl **inside @keyframes stops** is parsed (:104–137) then dropped with an "unsupported property" warning (:239–241). Companion element blocks are barely read — only `animation-duration` is sniffed (:151–156) — so an origin authored next to the keyframes is lost on import today.                        |
+| Inspector property dropdown | `src/components/Inspector.tsx:60–71` (`PROPERTIES`) rendered at :1203–1215.                                                                                                                                                                                                                                                                                                        |
+| Smart first values          | `src/store/index.ts:399–413` (`DEFAULT_FIRST_VALUE`).                                                                                                                                                                                                                                                                                                                              |
+| Emission                    | `decl()` (`src/utils/keyframes.ts:33–39`) emits track decls; element rules from `generateCss` (`src/utils/css.ts:44–72`, rule body :60–67) and `layerBlock` (`src/utils/export.ts:26–44`, body :37–42) contain ONLY `animation-*` decls. `transform-origin` appears nowhere in src except `app.css:484` — which is the **stage's own** scale origin (see 1c), unrelated to layers. |
 
 ### 1b. Where static CSS lives — and why it round-trips
 
@@ -55,7 +55,10 @@ One latent inconsistency to note but NOT fix here: exports key the element rule 
 **Structured optional field on `LayerElement`; never mirrored into initialCss.**
 
 ```ts
-export interface OriginPoint { x: string; y: string } // length-percentage strings: '50%', '0px', '2em'…
+export interface OriginPoint {
+  x: string
+  y: string
+} // length-percentage strings: '50%', '0px', '2em'…
 
 export interface LayerElement {
   tag: string
@@ -138,6 +141,7 @@ See §1d: preview correctness is already satisfied for anything placed in initia
 ## 7. Phasing
 
 **Phase A — static origin + picker + debug view (one PR)**
+
 1. types: `OriginPoint`, `LayerElement.origin?`.
 2. store: `setLayerOrigin` / `clearLayerOrigin` (setDoc funnel → autosave).
 3. persistence: malformed-origin coercion in validatePersisted; prefs gain additive `showOrigins` + Playback strip checkbox.
@@ -149,6 +153,7 @@ See §1d: preview correctness is already satisfied for anything placed in initia
 9. Tests (§8) + manual QA matrix (themes × reduced-motion × mobile tab × playback scrubbing).
 
 **Phase B — animatable track (separate PR)**
+
 1. `'transform-origin'` joins `AnimatableProperty` + registry meta (`units LENGTH_UNITS`, defaultValue `'50% 50%'`, kind interpolable) + `DEFAULT_FIRST_VALUE`.
 2. Tokenizer/chips: today a `"10% 20px"` value falls through to the generic 'string' chip (`tokenize.ts` NUMBER_UNIT_RE :5 is single-value) — needs a dedicated two-component mini-editor (or sub-token split à la transform fns).
 3. Interpolation: extend `lerpNumeric` (`interpolate.ts:14–37`) to pairwise-lerp two-component values when units match per-axis; else hold (existing fallback semantics).

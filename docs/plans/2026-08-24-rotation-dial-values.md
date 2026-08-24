@@ -23,22 +23,22 @@ All line numbers refer to `origin/main` @ `39054e1`.
     deg={subDeg()!}
     onChange={(d) => {
       const unit = props.sub.unit || 'deg'
-      commitSub(String(+fromDeg(d, unit).toFixed(2)), unit)   // ← every move
+      commitSub(String(+fromDeg(d, unit).toFixed(2)), unit) // ← every move
     }}
   />
   ```
 
 - `commitSub` (`Inspector.tsx:458-467`) → `commit()` (`Inspector.tsx:67-75`) → `updateKeyframe` (`store/index.ts:288-309`). Each call runs an immer `produce` over the whole doc and re-schedules autosave (`setDocWrapped`, `store/index.ts:101-108`; autosave itself is debounced 300 ms at `store/index.ts:65-79`, so persistence is OK — but reactive churn is per-move).
 
-### 2b. Uniform `.toFixed(2)` in the *authored* unit is lossy for rad/turn/grad
+### 2b. Uniform `.toFixed(2)` in the _authored_ unit is lossy for rad/turn/grad
 
 `degFromEvent` (`Inspector.tsx:179-187`) already emits **integer degrees**, so in `deg` units everything round-trips losslessly. The damage happens when converting back to non-degree units with two decimals:
 
-| unit | 50° becomes | back to degrees | error |
-|------|-------------|-----------------|-------|
-| `turn` | `(50/360).toFixed(2)` = `"0.14"` | 50.4° | 0.4° |
-| `rad` | `(0.8727).toFixed(2)` = `"0.87"` | 49.84° | 0.16° |
-| `grad` | `"55.56"` | 50.004° | ~0° |
+| unit   | 50° becomes                      | back to degrees | error |
+| ------ | -------------------------------- | --------------- | ----- |
+| `turn` | `(50/360).toFixed(2)` = `"0.14"` | 50.4°           | 0.4°  |
+| `rad`  | `(0.8727).toFixed(2)` = `"0.87"` | 49.84°          | 0.16° |
+| `grad` | `"55.56"`                        | 50.004°         | ~0°   |
 
 Worse, consecutive degree positions collapse to identical strings: in `turn`, every angle from 0–89° rounds to one of just `"0.00"`…`"0.25"` (1° ≈ 0.00278 turn). That is exactly the "sometimes two, sometimes three or four sub-zero values" report: dragging produces runs of `0.00`, `0.01`, `0.02` … that barely change and don't track the pointer.
 
@@ -46,7 +46,7 @@ Worse, consecutive degree positions collapse to identical strings: in `turn`, ev
 
 `RotationDial` renders purely from `props.deg` (no internal drag state; hand position derived at `Inspector.tsx:171-173`). During a drag:
 
-move → commit quantized string → store write → `props.sub.value` changes → `subDeg()` re-parses it (`Inspector.tsx:452-456`) → `props.deg` snaps to the *quantized* value, fighting the pointer. The needle visibly sticks/jumps in rad/turn/grad.
+move → commit quantized string → store write → `props.sub.value` changes → `subDeg()` re-parses it (`Inspector.tsx:452-456`) → `props.deg` snaps to the _quantized_ value, fighting the pointer. The needle visibly sticks/jumps in rad/turn/grad.
 
 ### 2d. What is already correct
 
@@ -68,7 +68,7 @@ Sources (devtools-frontend, `front_end/ui/legacy/components/inline_editor/`):
 Findings:
 
 1. **Drag granularity:** continuous — `updateAngleFromMousePosition(mouseX, mouseY, shouldSnapToMultipleOf15Degrees)` converts raw pointer radians to the authored unit with **no rounding during drag**; rounding is applied afterwards by `CSSAngle.updateAngle()`.
-2. **Shift during drag = snap to multiples of 15°** (coarse, *not* fine): `Math.round(radian / multipleInRadian) * multipleInRadian` where the multiple is 15 deg. DevTools has no "fine mode" modifier on the dial.
+2. **Shift during drag = snap to multiples of 15°** (coarse, _not_ fine): `Math.round(radian / multipleInRadian) * multipleInRadian` where the multiple is 15 deg. DevTools has no "fine mode" modifier on the dial.
 3. **Move throttling:** `mousemoveThrottler = new Common.Throttler.Throttler(16.67 /* 60fps */)` — updates coalesced to one per frame, but they are still continuous live updates while pressed (it's editing a live stylesheet).
 4. **Keyboard / wheel:** shared helper `getNewAngleFromEvent(angle, event)` — base step **±1°** (`π/180` rad); **Shift multiplies by 10 → ±10°**. Wired to ArrowUp/ArrowDown (`CSSAngle.onKeydown`) and mouse wheel (`onEditorWheel`).
 5. **Rounding at commit/display:** `roundAngleByUnit(angle)` — **deg & grad → nearest integer; rad → up to 4 decimals; turn → up to 2 decimals**. `CSSAngle.updateAngle()` applies this before dispatching `ValueChangedEvent`, so the string written back is always clean per-unit (`90grad`, `0.25turn`, `0.7854rad`).
@@ -94,9 +94,10 @@ Sketch of the wiring fix (SubScrub):
 
 ```tsx
 <RotationDial
-  deg={dragDeg() ?? subDeg()!}          // local preview wins mid-drag
-  onPreview={(d) => setDragDeg(d)}      // pointerdown/move — no store writes
-  onCommit={(d) => {                    // pointerup / lostpointercapture / final key nudge
+  deg={dragDeg() ?? subDeg()!} // local preview wins mid-drag
+  onPreview={(d) => setDragDeg(d)} // pointerdown/move — no store writes
+  onCommit={(d) => {
+    // pointerup / lostpointercapture / final key nudge
     const unit = props.sub.unit || 'deg'
     commitSub(formatAngle(d, unit), unit)
     setDragDeg(undefined)
