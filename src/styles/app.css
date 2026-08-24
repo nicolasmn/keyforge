@@ -259,6 +259,12 @@
   .btn--active {
     color: var(--color-accent) !important;
   }
+  /* Undo/redo in the transport strip grey out when there is nothing to
+     step through — .playback--compact inherits (same base class). */
+  .playback .btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
   /* ── Snap increment picker ─────────────────────────────── */
   .playback__snap {
     display: flex;

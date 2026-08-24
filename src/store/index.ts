@@ -4,12 +4,14 @@ import type { AnimationDocument, Layer, Track, Keyframe, AnimatableProperty } fr
 import { nanoid } from '@/utils/nanoid'
 import {
   serializeDoc,
+  deserializeDoc,
   saveToStorage,
   hasOnboarded,
   markOnboarded,
   loadPrefs,
   savePrefs,
 } from '@/utils/persistence'
+import { createUndoStack } from '@/utils/undoStack'
 import {
   DEFAULT_PROJECT_NAME,
   localStorageProjectsPort,
@@ -130,9 +132,113 @@ function cancelPendingSave() {
   savePending = false
 }
 
+// ── Undo / redo (document history) ─────────────────────────────────────
+// Snapshot-based, DOCUMENT-ONLY scope: selection, playhead and which
+// project is active are deliberately NOT part of history (agreed design).
+//
+// The entire mutation surface funnels through setDocWrapped → autosave,
+// so that wrapper is the single interception point; replaceDoc (import /
+// sample-load / reset) participates too — those are real user actions.
+//
+// Snapshots are serializeDoc(doc) strings taken BEFORE each committed
+// write (serialize reads through the Solid proxy, so it captures the
+// pre-mutation state). Restores parse back through deserializeDoc and
+// reconcile into the store via the same path as document swaps.
+const undoStack = createUndoStack<string>()
+
+/** Reactive flags for the transport-strip buttons + keyboard shortcuts. */
+export const canUndo = undoStack.canUndo
+export const canRedo = undoStack.canRedo
+
+/**
+ * True while a history restoration is being written into the doc store,
+ * so commitWithHistory treats it as bookkeeping instead of a new action
+ * (an undo must not push an entry onto its own undo stack).
+ */
+let applyingHistory = false
+
+/**
+ * Single interception point shared by setDocWrapped + replaceDoc:
+ * capture the pre-write present, apply the mutation, record it as one
+ * undo step (bursts inside 300ms coalesce inside the stack itself).
+ */
+function commitWithHistory(mutate: () => void): void {
+  if (applyingHistory) {
+    mutate()
+    return
+  }
+  const previousPresent = serializeDoc(doc)
+  mutate()
+  undoStack.push(previousPresent)
+}
+
+/**
+ * Restore a snapshot through the same whole-document swap path used by
+ * replaceDoc/activateProject. Returns false if the payload failed to
+ * validate (defensive — snapshots only ever come from serialized live
+ * state, so this should never fire).
+ */
+function applySnapshot(raw: string): boolean {
+  const next = deserializeDoc(raw)
+  if (!next) return false
+  applyingHistory = true
+  try {
+    setDocRaw(reconcile(next))
+  } finally {
+    applyingHistory = false
+  }
+  return true
+}
+
+/**
+ * Post-restore reconciliation for everything history does NOT track:
+ * drop selections that may reference entities of the previous document
+ * generation (selection resets to first layer / null) and keep the
+ * playhead inside the restored duration.
+ */
+function settleAfterHistoryRestore(restored: AnimationDocument): void {
+  setSelectedLayerId(restored.layers[0]?.id ?? null)
+  setSelectedKeyframeId(null)
+  setPlaying(false)
+  setPlayhead((p) => Math.min(p, restored.duration))
+}
+
+/**
+ * Step one snapshot back. Returns false when there is nothing to undo.
+ * Restores flow through the normal save path (immediate flush, like any
+ * other whole-document swap), so autosaved storage stays consistent.
+ */
+export function undo(): boolean {
+  const target = undoStack.undo(serializeDoc(doc))
+  if (target === null) return false
+  if (!applySnapshot(target)) return false
+  settleAfterHistoryRestore(doc)
+  flushSave()
+  return true
+}
+
+/** Symmetric to undo(): re-apply the most recently undone state. */
+export function redo(): boolean {
+  const target = undoStack.redo(serializeDoc(doc))
+  if (target === null) return false
+  if (!applySnapshot(target)) return false
+  settleAfterHistoryRestore(doc)
+  flushSave()
+  return true
+}
+
+/**
+ * History is per-document: switching projects starts a fresh timeline so
+ * snapshots of document A can never be reconciled into document B.
+ */
+function resetHistory(): void {
+  undoStack.clear()
+}
+
 /** Replace the whole document (import / reset) and persist now. */
 export function replaceDoc(next: AnimationDocument) {
-  setDocRaw(reconcile(next))
+  // Import/sample-load are real user actions → they join undo history.
+  commitWithHistory(() => setDocRaw(reconcile(next)))
   syncOnboardingFlag()
   flushSave()
 }
@@ -144,14 +250,17 @@ if (typeof window !== 'undefined') {
 
 /**
  * The single write path for document mutations. Wraps the raw store setter
- * so autosave scheduling can't be bypassed by any mutation.
+ * so autosave scheduling AND undo-history capture can't be bypassed by any
+ * mutation.
  */
 function setDocWrapped(
   updater: AnimationDocument | ((prev: AnimationDocument) => AnimationDocument),
 ): void
 function setDocWrapped<K extends keyof AnimationDocument>(key: K, value: AnimationDocument[K]): void
 function setDocWrapped(...args: unknown[]): void {
-  ;(setDocRaw as unknown as (...a: unknown[]) => void)(...args)
+  commitWithHistory(() => {
+    ;(setDocRaw as unknown as (...a: unknown[]) => void)(...args)
+  })
   scheduleSave()
 }
 const setDoc = setDocWrapped
@@ -215,6 +324,7 @@ function activateProject(id: string, next: AnimationDocument) {
   setProjects(sortByRecency(projects()))
   port.writeIndex({ version: 1, projects: projects(), activeId: id })
   syncOnboardingFlag()
+  resetHistory() // snapshots of the outgoing document must not leak across
   resetTransientState()
 }
 
