@@ -8,6 +8,11 @@ import {
   hasOnboarded,
   markOnboarded,
   clearOnboarded,
+  PREFS_KEY,
+  serializePrefs,
+  deserializePrefs,
+  loadPrefs,
+  savePrefs,
 } from './persistence'
 import type { AnimationDocument } from '@/types'
 
@@ -181,5 +186,102 @@ describe('onboarding flag', () => {
     })
     expect(hasOnboarded()).toBe(false)
     expect(() => markOnboarded()).not.toThrow()
+  })
+})
+
+describe('prefs (keyforge:prefs:v1)', () => {
+  let backing: Map<string, string> | null = null
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    backing = null
+  })
+
+  function stubStorage() {
+    backing = new Map()
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => (backing as Map<string, string>).get(k) ?? null,
+      setItem: (k: string, v: string) => void (backing as Map<string, string>).set(k, v),
+      removeItem: (k: string) => void (backing as Map<string, string>).delete(k),
+    })
+  }
+
+  it('uses the keyforge:prefs:v1 key', () => {
+    expect(PREFS_KEY).toBe('keyforge:prefs:v1')
+  })
+
+  it('returns null for null/empty/garbage input', () => {
+    expect(deserializePrefs(null)).toBeNull()
+    expect(deserializePrefs('')).toBeNull()
+    expect(deserializePrefs('not json{')).toBeNull()
+    expect(deserializePrefs('42')).toBeNull()
+  })
+
+  it('returns null for wrong version or non-object payloads', () => {
+    expect(deserializePrefs(JSON.stringify({ version: 2, snapIncrement: 'off' }))).toBeNull()
+    expect(deserializePrefs(JSON.stringify({ snapIncrement: 'off' }))).toBeNull()
+    expect(deserializePrefs(JSON.stringify([]))).toBeNull()
+  })
+
+  it("coerces unknown snapIncrement values to 'off'", () => {
+    const raw = JSON.stringify({ version: 1, snapIncrement: 42 })
+    const prefs = deserializePrefs(raw)
+    expect(prefs).toEqual({ version: 1, snapIncrement: 'off' })
+  })
+
+  it("accepts every valid snap value including 'off'", () => {
+    for (const v of ['off', 1, 10, 100, 500, 1000] as const) {
+      const raw = JSON.stringify({ version: 1, snapIncrement: v })
+      expect(deserializePrefs(raw)).toEqual({ version: 1, snapIncrement: v })
+    }
+  })
+
+  it('round-trips serialize → deserialize preserving value', () => {
+    for (const v of ['off', 1, 10, 100, 500, 1000] as const) {
+      const payload = serializePrefs({ version: 1, snapIncrement: v })
+      expect(deserializePrefs(payload)).toEqual({ version: 1, snapIncrement: v })
+    }
+  })
+
+  it('stamps version 1 in serialized output', () => {
+    const parsed = JSON.parse(serializePrefs({ version: 1, snapIncrement: 100 }))
+    expect(parsed.version).toBe(1)
+    expect(parsed.snapIncrement).toBe(100)
+  })
+
+  it('loadPrefs/savePrefs round-trip through localStorage', () => {
+    stubStorage()
+    expect(loadPrefs()).toBeNull() // nothing stored yet
+    savePrefs({ version: 1, snapIncrement: 500 })
+    expect(loadPrefs()).toEqual({ version: 1, snapIncrement: 500 })
+    expect(backing!.get(PREFS_KEY)).toBeTypeOf('string')
+  })
+
+  it('loadPrefs/savePrefs degrade gracefully without localStorage', () => {
+    // No stub: node env has no global localStorage.
+    expect(() => loadPrefs()).not.toThrow()
+    expect(() => savePrefs({ version: 1, snapIncrement: 100 })).not.toThrow()
+    expect(loadPrefs()).toBeNull()
+  })
+
+  it('loadPrefs/savePrefs swallow throwing localStorage', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('SecurityError')
+      },
+      setItem: () => {
+        throw new Error('QuotaExceededError')
+      },
+      removeItem: () => {
+        throw new Error('SecurityError')
+      },
+    })
+    expect(loadPrefs()).toBeNull()
+    expect(() => savePrefs({ version: 1, snapIncrement: 10 })).not.toThrow()
+  })
+
+  it('corrupt stored JSON yields null rather than crashing boot', () => {
+    stubStorage()
+    backing!.set(PREFS_KEY, '{{{')
+    expect(loadPrefs()).toBeNull()
   })
 })

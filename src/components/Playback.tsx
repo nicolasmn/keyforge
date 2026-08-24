@@ -1,4 +1,4 @@
-import { createSignal, Show } from 'solid-js'
+import { createSignal, For, Show } from 'solid-js'
 import {
   playing,
   setPlaying,
@@ -8,7 +8,20 @@ import {
   playhead,
   doc,
   setDuration,
+  snapIncrement,
+  setSnapIncrement,
 } from '@/store'
+import { savePrefs } from '@/utils/persistence'
+import type { SnapIncrement } from '@/utils/snap'
+
+const SNAP_OPTIONS: readonly { value: SnapIncrement; label: string }[] = [
+  { value: 'off', label: 'Off' },
+  { value: 1, label: '1ms' },
+  { value: 10, label: '10ms' },
+  { value: 100, label: '0.1s' },
+  { value: 500, label: '0.5s' },
+  { value: 1000, label: '1s' },
+]
 
 export default function Playback() {
   const [editingDuration, setEditingDuration] = createSignal(false)
@@ -73,6 +86,23 @@ export default function Playback() {
       >
         ⟲
       </button>
+      <label
+        class="playback__snap"
+        title="Snap — scrub, wheel and keyframe drags jump to this increment"
+      >
+        Snap
+        <select
+          value={String(snapIncrement())}
+          onChange={(e) => {
+            const raw = (e.currentTarget as HTMLSelectElement).value
+            const v = SNAP_OPTIONS.find((o) => String(o.value) === raw)?.value ?? 'off'
+            setSnapIncrement(v)
+            savePrefs({ version: 1, snapIncrement: v })
+          }}
+        >
+          <For each={SNAP_OPTIONS}>{(o) => <option value={String(o.value)}>{o.label}</option>}</For>
+        </select>
+      </label>
       <span class="playback__time">
         {(playhead() / 1000).toFixed(2)}s /{' '}
         <Show

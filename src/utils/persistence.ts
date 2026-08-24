@@ -1,4 +1,6 @@
 import type { AnimationDocument } from '@/types'
+import type { SnapIncrement } from './snap'
+import { SNAP_VALUES } from './snap'
 
 // ── Document persistence (localStorage) ───────────────────────────────
 // Pure functions, no Solid coupling, so they unit-test in node.
@@ -126,5 +128,71 @@ export function clearOnboarded(): void {
     localStorage.removeItem(ONBOARDING_KEY)
   } catch {
     // ignore
+  }
+}
+
+// ── UI preferences ────────────────────────────────────────────────────
+// Independent key from the document payload (no v1→v2 doc migration risk)
+// with its own object-with-version shape so future toggles (gridline
+// visibility, default zoom…) accrete without another key bump. Same
+// best-effort, node-safe pattern as the onboarding flag above.
+
+export const PREFS_KEY = 'keyforge:prefs:v1'
+
+export interface PersistedPrefs {
+  version: 1
+  snapIncrement: SnapIncrement
+}
+
+function isSnapIncrement(v: unknown): v is SnapIncrement {
+  if (v === 'off') return true
+  return (
+    typeof v === 'number' && Number.isInteger(v) && (SNAP_VALUES as readonly number[]).includes(v)
+  )
+}
+
+export function serializePrefs(p: PersistedPrefs): string {
+  return JSON.stringify(p)
+}
+
+/**
+ * Returns validated prefs, or null when missing/corrupt.
+ * Unknown snap values fall back to 'off' instead of rejecting the payload,
+ * so a future rename can't strand the whole prefs blob.
+ */
+export function deserializePrefs(raw: string | null): PersistedPrefs | null {
+  if (!raw) return null
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return null
+  }
+  if (typeof parsed !== 'object' || parsed === null) return null
+  const p = parsed as Partial<PersistedPrefs>
+  if (p.version !== 1) return null
+  return {
+    version: 1,
+    snapIncrement: isSnapIncrement(p.snapIncrement) ? p.snapIncrement : 'off',
+  }
+}
+
+/** Best-effort read; returns null without localStorage or on failure. */
+export function loadPrefs(): PersistedPrefs | null {
+  try {
+    if (typeof localStorage === 'undefined') return null
+    return deserializePrefs(localStorage.getItem(PREFS_KEY))
+  } catch {
+    return null
+  }
+}
+
+/** Persist the prefs. Best-effort — storage failures are ignored. */
+export function savePrefs(p: PersistedPrefs): void {
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(PREFS_KEY, serializePrefs(p))
+  } catch {
+    // storage unavailable/full — the setting just won't survive a reload
   }
 }

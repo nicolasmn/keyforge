@@ -8,7 +8,9 @@ import {
   loadFromStorage,
   hasOnboarded,
   markOnboarded,
+  loadPrefs,
 } from '@/utils/persistence'
+import type { SnapIncrement } from '@/utils/snap'
 import { interpolatedValueAt } from '@/utils/interpolate'
 import { createStarterBoxLayer } from '@/utils/sampleDoc'
 
@@ -119,6 +121,19 @@ export const [selectedKeyframeId, setSelectedKeyframeId] = createSignal<string |
 export const [playhead, setPlayhead] = createSignal(0) // ms
 export const [playing, setPlaying] = createSignal(false)
 export const [loop, setLoop] = createSignal(true)
+
+// ── Snapping preference ────────────────────────────────────────────────
+/**
+ * Increment user-driven gestures (scrub, wheel nudge, keyframe drag)
+ * quantize to. Restored from persisted prefs once at module init.
+ *
+ * ⚠️ Preview's rAF playback loop must NEVER read this — animation stays
+ * smooth and unsnapped regardless of the preference. Snapping lives only
+ * in Timeline's gesture handlers.
+ */
+export const [snapIncrement, setSnapIncrement] = createSignal<SnapIncrement>(
+  loadPrefs()?.snapIncrement ?? 'off',
+)
 
 // ── Mutations ──────────────────────────────────────────────────────────
 
