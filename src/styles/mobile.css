@@ -54,7 +54,8 @@
 
     .app__mobile-timeline {
       flex-shrink: 0;
-      height: 160px;
+      /* 184px = transport bar + ruler + one row + borders (44px touch targets) */
+      height: 184px;
       display: flex;
       flex-direction: column;
       border-top: 1px solid var(--color-border);

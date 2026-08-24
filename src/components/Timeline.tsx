@@ -14,6 +14,7 @@ import {
 } from '@/store'
 import { snapTime } from '@/utils/snap'
 import { chooseLabelStep, formatTick, minorStepFor } from '@/utils/rulerScale'
+import Playback from '@/components/Playback'
 
 const TRACK_HEIGHT = 36
 const HEADER_HEIGHT = 28
@@ -350,6 +351,8 @@ export default function Timeline() {
   function resize() {
     if (!canvas) return
     const dpr = window.devicePixelRatio || 1
+    // The canvas's dedicated parent is .timeline__scroll — the panel box minus
+    // the transport strip above — so "visible rows" math stays correct.
     const rect = canvas.parentElement!.getBoundingClientRect()
     // Grow beyond the visible panel when there are more rows than fit, so the
     // container can scroll vertically instead of clipping tracks.
@@ -599,16 +602,24 @@ export default function Timeline() {
 
   return (
     <div class="timeline">
-      <canvas
-        ref={setCanvasRef}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerLeave}
-        onLostPointerCapture={onLostPointerCapture}
-        onWheel={onWheel}
-        onDblClick={onDblClick}
-      />
+      {/* Transport strip above the ruler (plan: playback-in-timeline) — the
+          controls govern this ruler/playhead/snap, so they live next to it.
+          resize() still reads canvas.parentElement, which is .timeline__scroll
+          below; the ResizeObserver registered on that wrapper retargets
+          automatically since it observes whatever wraps the canvas at mount. */}
+      <Playback variant="compact" />
+      <div class="timeline__scroll">
+        <canvas
+          ref={setCanvasRef}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerLeave={onPointerLeave}
+          onLostPointerCapture={onLostPointerCapture}
+          onWheel={onWheel}
+          onDblClick={onDblClick}
+        />
+      </div>
     </div>
   )
 }

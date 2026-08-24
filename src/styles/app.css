@@ -341,9 +341,6 @@
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
 }
-.app__doc-header .playback {
-  margin-left: auto;
-}
 .doc-bar {
   display: flex;
   align-items: center;
@@ -470,4 +467,26 @@
 .split-shell .preview__canvas {
   transform: scale(var(--preview-scale, 1));
   transform-origin: center;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Playback-in-timeline (branch steward/playback-in-timeline)
+   Transport strip lives inside the timeline panel, above the
+   ruler; the canvas scrolls in its own flex-1 wrapper so the
+   ResizeObserver sizing math is unchanged.
+   ═══════════════════════════════════════════════════════════ */
+.timeline {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.timeline__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.playback--compact {
+  padding: var(--space-1) var(--space-2);
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--color-border);
 }
