@@ -116,7 +116,6 @@ export default function Preview() {
     <div class="preview" ref={panelRef}>
       <style ref={styleEl} />
       <div class="preview__canvas">
-        <OriginOverlay />
         <For each={doc.layers}>
           {(layer) => (
             <div
@@ -130,6 +129,10 @@ export default function Preview() {
             </div>
           )}
         </For>
+        {/* Transform-origin debug view + pick surface. Sibling AFTER the
+            layers (plan §3): the overlay is position:absolute inset:0, so
+            it never joins the canvas flex flow and only stacks above it. */}
+        <OriginOverlay />
       </div>
     </div>
   )
