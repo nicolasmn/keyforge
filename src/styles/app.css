@@ -505,3 +505,35 @@
   gap: var(--space-1);
   border-bottom: 1px solid var(--color-border);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Projects system (branch steward/projects-system)
+   DocBar switcher + EmptyState project cards.
+   ═══════════════════════════════════════════════════════════ */
+.doc-bar__switcher {
+  max-width: 14rem;
+  font-size: var(--font-size-sm);
+}
+.empty-state__projects {
+  margin-top: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: center;
+}
+.empty-state__projects-label {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.empty-state__project-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+}
+.empty-state__project {
+  max-width: 16rem;
+}

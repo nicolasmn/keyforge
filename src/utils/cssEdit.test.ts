@@ -346,20 +346,26 @@ vi.mock('@/utils/persistence', async (importOriginal) => {
 })
 
 describe('replaceDoc after commit flushes autosave immediately', () => {
-  it('saveToStorage fires synchronously on replaceDoc (no debounce wait)', async () => {
-    const persistence = await import('@/utils/persistence')
-    const saveSpy = vi.mocked(persistence.saveToStorage)
-    saveSpy.mockClear()
+  it('flushes the ACTIVE project key synchronously on replaceDoc (no debounce wait)', async () => {
+    // Projects system: autosave writes keyforge:project:<activeId>:v1 via
+    // localStorage directly, so assert through a real storage stub.
+    const backing = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => backing.get(k) ?? null,
+      setItem: (k: string, v: string) => void backing.set(k, v),
+      removeItem: (k: string) => void backing.delete(k),
+    })
 
-    const { replaceDoc } = await import('@/store')
+    const { replaceDoc, activeProjectId } = await import('@/store')
     const doc = makeDoc({ layers: [boxLayer(), hiddenLayer()] })
     const result = commitEditedCss(buildEditableSnapshot(doc), doc)
     expect(result.fatal).toBe(false)
     replaceDoc(result.nextDoc!)
 
-    expect(saveSpy).toHaveBeenCalledTimes(1)
-    const payload = JSON.parse(saveSpy.mock.calls[0][0])
+    const { projectKey } = await import('@/utils/projects')
+    const payload = JSON.parse(backing.get(projectKey(activeProjectId()!))!)
     expect(payload.doc.name).toBe('My Ad')
     expect(payload.doc.layers.map((l: Layer) => l.name).sort()).toEqual(['Box', 'Dot'])
+    vi.unstubAllGlobals()
   })
 })

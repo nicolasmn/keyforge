@@ -1,15 +1,19 @@
-import { Show } from 'solid-js'
+import { For, Show } from 'solid-js'
 import {
   doc,
   onboarded,
-  setDoc,
   addStarterLayer,
+  listProjects,
+  activeProjectId,
+  openProject,
+  createProjectWithDoc,
   setSelectedLayerId,
   setSelectedKeyframeId,
   setPlayhead,
   setPlaying,
 } from '@/store'
 import { createSampleDoc } from '@/utils/sampleDoc'
+import { SAMPLE_PROJECT_NAME } from '@/utils/projects'
 
 /**
  * EmptyState — guided first-run overlay shown in the workspace (preview)
@@ -27,15 +31,23 @@ import { createSampleDoc } from '@/utils/sampleDoc'
  */
 export default function EmptyState() {
   function loadSample() {
-    const sample = createSampleDoc()
-    setDoc(sample)
+    // The sample is a real project now (plan §5): open the seeded one when it
+    // exists; re-register it (fresh ids) only if the user deleted it earlier.
+    const seeded = listProjects().find((p) => p.name === SAMPLE_PROJECT_NAME)
+    if (!seeded || !openProject(seeded.id)) {
+      createProjectWithDoc(SAMPLE_PROJECT_NAME, createSampleDoc)
+    }
     // Selection/playhead may point at entities that no longer exist — reset them
-    setSelectedLayerId(sample.layers[0]?.id ?? null)
+    setSelectedLayerId(doc.layers[0]?.id ?? null)
     setSelectedKeyframeId(null)
     setPlayhead(0)
     // Start playback right away so the sample visibly animates immediately
     setPlaying(true)
   }
+
+  /** Other projects the user can jump straight into from onboarding. */
+  const otherProjects = () =>
+    listProjects().filter((p) => p.id !== activeProjectId() && p.name !== SAMPLE_PROJECT_NAME)
 
   return (
     <Show when={doc.layers.length === 0 && !onboarded()}>
@@ -60,6 +72,27 @@ export default function EmptyState() {
               Load sample animation
             </button>
           </div>
+
+          <Show when={otherProjects().length > 0}>
+            <div class="empty-state__projects">
+              <p class="empty-state__projects-label">Your projects</p>
+              <div class="empty-state__project-list" role="list">
+                <For each={otherProjects()}>
+                  {(p) => (
+                    <button
+                      class="btn btn--ghost empty-state__project"
+                      role="listitem"
+                      onClick={() => {
+                        void openProject(p.id)
+                      }}
+                    >
+                      {p.name}
+                    </button>
+                  )}
+                </For>
+              </div>
+            </div>
+          </Show>
         </div>
       </div>
     </Show>
