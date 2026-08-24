@@ -1,0 +1,71 @@
+/* ════════════════════════════════════════════════════════════
+   Motion personality pass (audit F18)
+   Chrome entrances and idle life — "felt but unfelt":
+   token durations/easings only, subtle travel, reduced-motion safe.
+   Canvas timeline motion lives in Timeline.tsx, not here.
+   ════════════════════════════════════════════════════════════ */
+
+@keyframes kf-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes kf-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Diamonds carry their own rotate(45deg); the loop composes with it. */
+@keyframes kf-diamond-float {
+  0%,
+  100% {
+    transform: rotate(45deg) translateY(0);
+  }
+  50% {
+    transform: rotate(45deg) translateY(-4px);
+  }
+}
+
+/* ── Entrances: easing editor + CSS-import modal ─────────── */
+/* Play on <Show> mount; Solid keeps them mounted while open,
+   so no replay-on-rerender surprises. Exit beats intentionally
+   omitted until a coordinated close transition exists. */
+.easing-editor,
+.css-import {
+  animation: kf-rise-in var(--duration-base) var(--ease-out-expo) both;
+}
+
+.css-import__backdrop {
+  animation: kf-fade-in var(--duration-base) ease-out both;
+}
+
+/* ── Idle life: empty-state diamond staggered float ───────── */
+.empty-state__diamond {
+  animation: kf-diamond-float 3s ease-in-out infinite;
+}
+.empty-state__diamond--mid {
+  animation-delay: 0.4s;
+}
+.empty-state__diamond--faint {
+  animation-delay: 0.8s;
+}
+
+/* ── Reduced motion: chrome goes still ────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .easing-editor,
+  .css-import,
+  .css-import__backdrop,
+  .empty-state__diamond {
+    animation: none;
+  }
+}
