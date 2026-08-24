@@ -588,6 +588,22 @@
   padding: 8px;
 }
 
+/* ── EasingEditor popover container — fixed-position overlay anchored
+   via inline left/top from EasingEditor.reposition(). Without this rule
+   the inline left/top do nothing (left/top need a positioned element)
+   and the popover falls into document flow at the body's end. ── */
+.easing-popover {
+  position: fixed;
+  z-index: 1000;
+  width: 320px;
+  max-height: min(520px, calc(100vh - 16px));
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+}
+
 /* ── EasingEditor interior (ported from removed token-view.css;
    vars translated to the design system that actually exists) ── */
 .easing-editor {
