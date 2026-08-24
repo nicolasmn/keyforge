@@ -756,6 +756,191 @@
   padding-inline: var(--space-1, 4px);
 }
 
+/* ── Popover chrome: header tabs, actions, preview, footer ──
+   (second salvage-loss from the #86 agent death: these rules were
+   never written, leaving the popover interior as raw HTML) */
+.easing-editor__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+}
+.easing-editor__tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--color-surface-2);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+.easing-editor__tab {
+  font-size: var(--chip-fs);
+  padding: 3px 10px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: calc(var(--radius-sm) - 1px);
+  cursor: pointer;
+}
+.easing-editor__tab:hover {
+  color: var(--color-text);
+}
+.easing-editor__tab--active {
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 20%);
+}
+.easing-editor__spacer {
+  flex: 1;
+}
+.easing-editor__action {
+  font-size: var(--chip-fs);
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
+.easing-editor__action--on {
+  color: var(--color-accent);
+}
+.easing-editor__preview-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+.easing-editor__preview {
+  flex: 1;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  position: relative;
+  overflow: hidden;
+}
+.easing-editor__preview-dot {
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  width: 10px;
+  height: 10px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+@keyframes kf-easing-run-a {
+  from {
+    left: 4px;
+  }
+  to {
+    left: calc(100% - 14px);
+  }
+}
+@keyframes kf-easing-run-b {
+  from {
+    left: 4px;
+  }
+  to {
+    left: calc(100% - 14px);
+  }
+}
+.easing-editor__spring-out {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+}
+.easing-editor__footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+}
+.easing-editor__nums {
+  display: flex;
+  gap: var(--space-2, 8px);
+  align-items: center;
+}
+.easing-editor__nums--off {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.easing-editor__num {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--chip-fs);
+  font-family: var(--mono);
+  color: var(--color-text-muted);
+}
+.easing-editor__num input {
+  width: 5ch;
+  font-family: var(--mono);
+  font-size: var(--chip-fs);
+}
+.easing-editor__group-label {
+  font-size: var(--label-fs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.75;
+}
+.easing-editor__chevron {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0 2px;
+  display: inline-flex;
+  align-items: center;
+}
+.easing-editor__chevron:hover {
+  color: var(--color-text);
+}
+.easing-editor__hint {
+  font-size: var(--label-fs);
+  color: var(--color-text-muted);
+  padding-inline: var(--space-1, 4px);
+}
+.easing-editor__hint--error {
+  color: var(--color-danger);
+}
+.easing-editor__presets--visual {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-1, 4px);
+}
+.easing-editor__preset--visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 4px;
+  cursor: pointer;
+}
+.easing-editor__presets-toggle {
+  font-size: var(--label-fs);
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 2px 0;
+  text-align: left;
+}
+.easing-editor__presets-toggle:hover {
+  color: var(--color-text);
+}
+.easing-editor__spring-param {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  font-size: var(--chip-fs);
+  color: var(--color-text-muted);
+}
+.easing-editor__spring-param em {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 10px;
+  min-width: 5ch;
+}
+
 /* ── Spring (linear()) generator section ─────────────────── */
 .easing-editor__spring {
   display: flex;
