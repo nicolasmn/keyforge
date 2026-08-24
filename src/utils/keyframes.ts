@@ -1,5 +1,6 @@
 import type { Layer, AnimationDocument, Track } from '@/types'
-import { composeSpatialTracks, toIndividualPropertyValue } from './spatialCompose'
+import { composeSpatialTracks } from './spatialCompose'
+import { toCssPropertyValue } from './propertyRegistry'
 
 /**
  * Shared keyframe building logic used by css.ts (preview) and export.ts (export).
@@ -32,7 +33,7 @@ export interface KeyframeBlocks {
 function decl(track: Track, value: string): string {
   const emitted =
     track.property === 'rotate' || track.property === 'translate' || track.property === 'scale'
-      ? toIndividualPropertyValue(track.property, value)
+      ? toCssPropertyValue(track.property, value)
       : value
   return `${track.property}:${emitted};`
 }
@@ -162,6 +163,11 @@ export function buildSplitKeyframeBlocks(
             r.exact && r.easing && r.easing !== 'linear'
               ? ` animation-timing-function:${r.easing};`
               : ''
+          // Normalize to the individual property's own syntax: a rotate
+          // track storing `rotate(360deg)` must emit `rotate:360deg;` —
+          // the function form is invalid CSS here and browsers silently
+          // drop it, leaving the property at its initial value (none).
+          // decl() routes rotate/translate/scale through toCssPropertyValue.
           return `  ${pct}% { ${decl(track, r.value)}${timing} }`
         })
         .filter(Boolean)

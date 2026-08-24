@@ -769,6 +769,61 @@
   align-self: flex-start;
 }
 
+/* ── Spring ball demo (live preview of the generated linear()) ── */
+.easing-editor__spring-demo-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+.easing-editor__spring-demo {
+  position: relative;
+  flex-shrink: 0;
+  width: 120px;
+  height: 24px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.easing-editor__spring-demo-row .easing-editor__spring-out {
+  flex: 1;
+  min-width: 0;
+}
+.easing-editor__spring-dot {
+  position: absolute;
+  top: 50%;
+  left: 7px;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  will-change: transform;
+}
+/* Two identical keyframes: the component alternates animation-name to
+   restart the demo whenever a spring preset or parameter changes. */
+@keyframes kf-easing-spring-a {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(96px);
+  }
+}
+@keyframes kf-easing-spring-b {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(96px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .easing-editor__spring-dot {
+    animation: none !important;
+  }
+}
+
 /* ── Track removal ───────────────────────────────────────── */
 .track__remove {
   background: none;

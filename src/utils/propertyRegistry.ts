@@ -90,8 +90,77 @@ export const PROPERTY_REGISTRY: Record<AnimatableProperty, PropertyMeta> = {
     units: ['deg', 'rad', 'turn'],
     defaultValue: '0deg',
     kind: 'interpolable',
-    hint: 'rotate takes angles (deg, rad, turn)',
+    hint: 'rotate takes a bare angle like 90deg — not rotate(90deg)',
   },
+}
+
+const ANGLE_VALUE_RE = /^-?\d*\.?\d+(deg|grad|rad|turn)$/i
+const LENGTH_VALUE_RE = /^-?\d*\.?\d+(px|%|em|rem|vw|vh|cm|mm|q|in|pc|pt|ex|ch)$/i
+const PLAIN_NUMBER_RE = /^-?\d*\.?\d+$/
+
+interface ParsedFn {
+  fn: string
+  args: string[]
+}
+
+function parseFunctionValue(value: string): ParsedFn | null {
+  const m = /^([a-zA-Z][a-zA-Z0-9]*)\(([^()]*)\)$/.exec(value.trim())
+  if (!m) return null
+  return { fn: m[1].toLowerCase(), args: m[2].split(',').map((s) => s.trim()) }
+}
+
+/**
+ * Convert a stored track value into valid syntax for its CSS property.
+ *
+ * Keyforge historically stored spatial-track values in transform-FUNCTION
+ * syntax (`rotate(360deg)`). That is invalid for the individual CSS
+ * transform properties (`rotate:` accepts a bare `<angle>`, optionally
+ * preceded by an axis) — browsers drop such declarations while parsing
+ * @keyframes, silently disabling the whole animation (computed `rotate`
+ * stays `none`). See css-transforms-2 §5.
+ *
+ * This normalizes known function forms to individual-property syntax at
+ * CSS-emission time (preview + export) and at CSS-import time; values that
+ * are already valid pass through untouched, and unrecognized shapes are
+ * returned as-is rather than guessed at (e.g. calc()).
+ */
+export function toCssPropertyValue(property: AnimatableProperty | string, value: string): string {
+  const v = value.trim()
+  const parsed = parseFunctionValue(v)
+  if (!parsed) return v
+  const { fn, args } = parsed
+
+  if (property === 'rotate') {
+    // Individual `rotate`: `[x|y|z|<number>{3}] && <angle>`
+    const [a] = args
+    if (a === undefined || !ANGLE_VALUE_RE.test(a)) return v
+    if (fn === 'rotate' || fn === 'rotatez') return a
+    if (fn === 'rotatex') return `x ${a}`
+    if (fn === 'rotatey') return `y ${a}`
+    return v
+  }
+
+  if (property === 'translate') {
+    // Individual `translate`: `<length-percentage> <length-percentage>? <length>?`
+    if (args.length === 0 || !args.every((s) => LENGTH_VALUE_RE.test(s))) return v
+    if (fn === 'translate' || fn === 'translate3d') return args.join(' ')
+    if (fn === 'translatex') return `${args[0]}`
+    if (fn === 'translatey') return `0px ${args[0]}`
+    if (fn === 'translatez') return `0px 0px ${args[0]}`
+    return v
+  }
+
+  if (property === 'scale') {
+    // Individual `scale`: `<number> <number>? <number>?` (identity = 1)
+    if (args.length === 0 || !args.every((s) => PLAIN_NUMBER_RE.test(s))) return v
+    if (fn === 'scale' || fn === 'scale3d') return args.join(' ')
+    if (fn === 'scalex') return args[0]
+    if (fn === 'scaley') return `1 ${args[0]}`
+    if (fn === 'scalez') return `1 1 ${args[0]}`
+    return v
+  }
+
+  return v
 }
 
 /** Validate a plain number+unit value against the property's registry entry. */

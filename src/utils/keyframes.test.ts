@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildKeyframeBlock } from './keyframes'
+import { buildKeyframeBlock, buildSplitKeyframeBlocks } from './keyframes'
 import type { Layer } from '@/types'
 import { nanoid } from '@/utils/nanoid'
 
@@ -112,5 +112,45 @@ describe('buildKeyframeBlock', () => {
     const zeroLine = keyframeBlock.split('\n').find((l) => l.includes('0.00%'))!
     expect(zeroLine).toContain('opacity:0')
     expect(zeroLine).toContain('transform:translateY(40px)')
+  })
+})
+
+describe('buildSplitKeyframeBlocks — individual-property syntax', () => {
+  it('emits bare-angle values for a rotate track stored in function form', () => {
+    // Regression: rotate tracks historically stored `rotate(360deg)`
+    // (transform-function syntax). Emitted verbatim, `rotate:rotate(360deg)`
+    // is invalid CSS for the individual `rotate` property — browsers drop
+    // every declaration in the rule and the animation silently no-ops.
+    const layer = makeLayer([
+      {
+        id: nanoid(),
+        property: 'rotate',
+        keyframes: [
+          { id: nanoid(), time: 0, value: 'rotate(0deg)', easing: 'linear' },
+          { id: nanoid(), time: 1000, value: 'rotate(180deg)', easing: 'linear' },
+        ],
+      },
+    ])
+    const { blocks } = buildSplitKeyframeBlocks(layer, 1000, 'kf-t')
+    expect(blocks).toHaveLength(1)
+    expect(blocks[0].css).toContain('rotate:0deg;')
+    expect(blocks[0].css).toContain('rotate:180deg;')
+    expect(blocks[0].css).not.toContain('rotate:rotate(')
+  })
+
+  it('leaves transform-track function values untouched', () => {
+    const layer = makeLayer([
+      {
+        id: nanoid(),
+        property: 'transform',
+        keyframes: [
+          { id: nanoid(), time: 0, value: 'translateY(40px)', easing: 'linear' },
+          { id: nanoid(), time: 1000, value: 'translateY(0px)', easing: 'linear' },
+        ],
+      },
+    ])
+    const { blocks } = buildSplitKeyframeBlocks(layer, 1000, 'kf-t')
+    expect(blocks[0].css).toContain('transform:translateY(40px);')
+    expect(blocks[0].css).toContain('transform:translateY(0px);')
   })
 })

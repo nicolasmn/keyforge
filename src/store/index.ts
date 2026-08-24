@@ -134,7 +134,10 @@ export const DEFAULT_FIRST_VALUE: Record<AnimatableProperty, string> = {
   width: '80px',
   height: '80px',
   scale: '1',
-  translate: '0px 0px',
+  translate: 'translate(0px, 0px)',
+  // Bare angle — the individual `rotate` property's own syntax. Function
+  // form (`rotate(0deg)`) is transform-track syntax and emits invalid CSS
+  // on a rotate track (browsers drop the declaration → animation no-ops).
   rotate: '0deg',
 }
 export function addLayer() {
