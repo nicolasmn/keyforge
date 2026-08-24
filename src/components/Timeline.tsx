@@ -18,6 +18,7 @@ import {
 } from '@/store'
 import { savePrefs } from '@/utils/persistence'
 import { snapTime } from '@/utils/snap'
+import { sampleEasingPoints, easingYExtent } from '@/utils/easingCurve'
 import { chooseLabelStep, formatTick, minorStepFor } from '@/utils/rulerScale'
 import {
   HEADER_HEIGHT,
@@ -294,6 +295,46 @@ export default function Timeline() {
         }
         ctx.restore()
       })
+
+      // ── Easing glyphs between adjacent keyframes (DevTools-style): the
+      // LEFT keyframe's easing governs the segment it starts. Overshoot-
+      // aware framing via easingYExtent; skipped when the gap is too tight
+      // or the easing has no honest curve (steps()/unknown).
+      const sortedKfs = [...track.keyframes].sort((a, b) => a.time - b.time)
+      for (let i = 0; i < sortedKfs.length - 1; i++) {
+        const a = sortedKfs[i]
+        const b = sortedKfs[i + 1]
+        const x1 = timeToX(a.time, width / dpr) * dpr
+        const x2 = timeToX(b.time, width / dpr) * dpr
+        const gap = x2 - x1
+        if (gap < 14 * dpr) continue
+        const pts = sampleEasingPoints(a.easing, 16)
+        if (!pts) continue
+        const cy = y + (row.height / 2) * dpr
+        const glyphH = row.height * dpr * 0.5
+        const { lo, hi } = easingYExtent(pts)
+        const span = hi - lo || 1
+        ctx.save()
+        ctx.globalAlpha = 0.55 * ctx.globalAlpha
+        ctx.strokeStyle = colorAccent
+        ctx.lineWidth = 1.5 * dpr
+        ctx.lineCap = 'round'
+        ctx.lineJoin = 'round'
+        ctx.beginPath()
+        let first = true
+        for (const p of pts) {
+          const gx = x1 + 4 * dpr + p.t * (gap - 8 * dpr)
+          const gy = cy + glyphH / 2 - ((p.v - lo) / span) * glyphH
+          if (first) {
+            ctx.moveTo(gx, gy)
+            first = false
+          } else {
+            ctx.lineTo(gx, gy)
+          }
+        }
+        ctx.stroke()
+        ctx.restore()
+      }
       ctx.restore() // hidden-layer dim wrapper
     }
 
