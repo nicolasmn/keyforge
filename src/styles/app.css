@@ -819,7 +819,7 @@
 .row-headers {
   position: absolute;
   inset: 0 auto 0 0;
-  width: var(--header-column-width, 146px);
+  width: clamp(100px, 22%, 200px);
   pointer-events: none;
   z-index: 5;
 }
@@ -906,4 +906,15 @@
 .timeline__headers .row-headers {
   position: absolute;
   inset: 0;
+}
+
+/* Track rows: smaller, non-interactive text entries */
+.row-header--track {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  padding-left: 28px;
+  cursor: default;
+}
+.row-header--track:hover {
+  background: transparent;
 }

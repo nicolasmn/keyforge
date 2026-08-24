@@ -7,7 +7,12 @@ import {
   setLayerVisibility,
   toggleLayerCollapsed,
 } from '@/store'
-import { headerEntries, type RowHeaderEntry, type TimelineRow } from '@/utils/rowModel'
+import {
+  headerEntries,
+  HEADER_HEIGHT,
+  type RowHeaderEntry,
+  type TimelineRow,
+} from '@/utils/rowModel'
 
 /**
  * Real-DOM header column for the timeline (plan §2/§3): one absolutely-
@@ -39,6 +44,9 @@ export default function RowHeaders(props: { rows: readonly TimelineRow[] }) {
 
   return (
     <div class="row-headers" aria-label="Timeline row headers">
+      {/* Ruler-height spacer: canvas draws its ruler above the first row;
+          this keeps DOM entries aligned with their canvas counterparts. */}
+      <div style={{ height: `${HEADER_HEIGHT}px`, 'flex-shrink': '0' }} aria-hidden="true" />
       <For each={headerEntries(props.rows)}>
         {(entry: RowHeaderEntry) =>
           entry.type === 'layer' ? (
