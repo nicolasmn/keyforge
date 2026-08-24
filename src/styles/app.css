@@ -635,3 +635,77 @@
 .code-view__status--fatal {
   color: var(--color-danger);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   DocBar regrouping (branch steward/docbar-regroup · audit F15)
+   Clusters: projects (select + New/Duplicate/Delete) │ name │
+   Import ▾ │ Export ▾, split by hairline dividers. Menus reuse
+   the Inspector stack-picker recipe (.kf-stack-picker surface +
+   border + radius) as anchored popovers with the uniform #48
+   contract: click toggles; outside-click / focus-out / Escape
+   close; Arrow/Home/End rove between items.
+   ═══════════════════════════════════════════════════════════ */
+.doc-bar__divider {
+  flex: none;
+  width: 1px;
+  height: 20px;
+  background: var(--color-border);
+}
+.doc-bar__icon-btn {
+  padding-inline: var(--space-2);
+}
+.doc-bar__icon-btn svg,
+.doc-bar__trigger svg {
+  flex: none;
+}
+.doc-bar__cluster {
+  position: relative;
+  display: inline-flex;
+}
+/* Open-state echo so the active cluster reads while its menu is anchored. */
+.doc-bar__cluster .btn--ghost[aria-expanded='true'] {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+.kf-doc-menu {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0; /* both clusters sit at the bar's right end — drop left-safe */
+  z-index: 60; /* above panels, below the z-100 modal scrim */
+  min-width: 12rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-1, 4px);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  /* Soft lift via the same color-mix overlay recipe as other surfaces (F12). */
+  box-shadow: 0 10px 28px color-mix(in oklch, var(--color-bg) 45%, transparent);
+}
+.kf-doc-menu__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  text-align: left;
+  padding: 5px var(--space-2);
+}
+.kf-doc-menu__item:hover,
+.kf-doc-menu__item:focus-visible {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+.kf-doc-menu__item svg {
+  color: var(--color-text-muted);
+}
+.kf-doc-menu__item:hover svg,
+.kf-doc-menu__item:focus-visible svg {
+  color: var(--color-accent);
+}
