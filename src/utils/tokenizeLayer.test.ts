@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { tokenizeLayer } from './tokenize'
 import type { AnimationDocument, Layer } from '@/types'
 
-function makeLayer(value: string): Layer {
+function makeLayer(
+  value: string,
+  property: Layer['tracks'][number]['property'] = 'transform',
+): Layer {
   return {
     id: 'L1',
     name: 'test layer',
@@ -11,7 +14,7 @@ function makeLayer(value: string): Layer {
     tracks: [
       {
         id: 'T1',
-        property: 'transform',
+        property,
         keyframes: [{ id: 'KF1', time: 0, value, easing: 'linear' }],
       },
     ],
@@ -81,6 +84,49 @@ describe('tokenizeLayer — transform sub-tokens', () => {
     const t = valueTokenOf(makeLayer(value))
     expect(t.subTokens!.map((s) => s.argIndex)).toEqual([0, 1])
     expect(t.subTokens![0].assembler(t.subTokens!)).toBe('translate(40px, 10px)')
+  })
+})
+
+describe('tokenizeLayer — property-first classification (delete-all dead end)', () => {
+  // Regression: deleting every function from a transform track serializes to
+  // the literal value 'none'. Text-based detection misclassified it as
+  // 'string', which hid the Inspector's transform branch (sub-chips +
+  // stack-picker add button) — an unrecoverable UI dead end. Classification
+  // keys off track.property FIRST; the value text is irrelevant for this type.
+  it("types 'none' on a transform track as transform with zero sub-tokens", () => {
+    const t = valueTokenOf(makeLayer('none'))
+    expect(t.type).toBe('transform')
+    expect(t.subTokens).toEqual([])
+    expect(t.value).toBe('none')
+  })
+
+  it('opens the Inspector transform gate for "none" (type is now the whole gate)', () => {
+    // ValueChip renders the picker when token.type === 'transform'; the old
+    // gate additionally required subTokens.length > 0, which this pins open.
+    const t = valueTokenOf(makeLayer('none'))
+    expect(t.type === 'transform').toBe(true)
+  })
+
+  it('tolerates an empty value defensively (store rejects empties, tokenizer must not crash)', () => {
+    const t = valueTokenOf(makeLayer(''))
+    expect(t.type).toBe('transform')
+    expect(t.subTokens).toEqual([])
+  })
+
+  it('leaves non-transform tracks classifying by value text', () => {
+    expect(valueTokenOf(makeLayer('42', 'opacity')).type).toBe('number')
+    expect(valueTokenOf(makeLayer('#ff8800', 'background-color')).type).toBe('color')
+    // Individual-property tracks keep text detection: fn-shaped legacy values
+    // still classify as transform there, bare numbers stay numeric.
+    expect(valueTokenOf(makeLayer('translate(0px, 0px)', 'translate')).type).toBe('transform')
+    expect(valueTokenOf(makeLayer('45deg', 'rotate')).type).toBe('number')
+  })
+
+  it('still types populated stacks on transform tracks normally', () => {
+    const t = valueTokenOf(makeLayer('scale(2)'))
+    expect(t.type).toBe('transform')
+    expect(t.subTokens).toHaveLength(1)
+    expect(t.subTokens![0].assembler(t.subTokens!)).toBe('scale(2)')
   })
 })
 
