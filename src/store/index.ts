@@ -2,57 +2,61 @@ import { createStore, produce, reconcile } from 'solid-js/store'
 import { createSignal } from 'solid-js'
 import type { AnimationDocument, Layer, Track, Keyframe, AnimatableProperty } from '@/types'
 import { nanoid } from '@/utils/nanoid'
-import { serializeDoc, saveToStorage, loadFromStorage } from '@/utils/persistence'
+import {
+  serializeDoc,
+  saveToStorage,
+  loadFromStorage,
+  hasOnboarded,
+  markOnboarded,
+} from '@/utils/persistence'
 import { interpolatedValueAt } from '@/utils/interpolate'
+import { createStarterBoxLayer } from '@/utils/sampleDoc'
 
 // ── Default document ──────────────────────────────────────────────────
-const defaultDoc: AnimationDocument = {
-  id: nanoid(),
-  name: 'Untitled',
-  duration: 2000,
-  layers: [
-    {
-      id: nanoid(),
-      name: 'Box',
-      visible: true,
-      element: {
-        tag: 'div',
-        text: '',
-        initialCss: 'width:80px;height:80px;background-color:hsl(264 80% 68%);border-radius:8px;',
-      },
-      tracks: [
-        {
-          id: nanoid(),
-          property: 'opacity',
-          keyframes: [
-            { id: nanoid(), time: 0, value: '0', easing: 'ease-out' },
-            { id: nanoid(), time: 1000, value: '1', easing: 'ease-out' },
-          ],
-        },
-        {
-          id: nanoid(),
-          property: 'transform',
-          keyframes: [
-            {
-              id: nanoid(),
-              time: 0,
-              value: 'translateY(40px)',
-              easing: 'cubic-bezier(0.34,1.56,0.64,1)',
-            },
-            { id: nanoid(), time: 1000, value: 'translateY(0px)', easing: 'linear' },
-          ],
-        },
-      ],
-    },
-  ],
+/**
+ * A 0-layer "Untitled" document.
+ *
+ * True first run seeds this EMPTY doc so the guided EmptyState card in the
+ * preview actually fires for new users (audit F21). The pre-built Box
+ * layer that used to be seeded here now lives behind "Add your first
+ * layer" → addStarterLayer() — a great result, just not an opening state.
+ *
+ * Returning users with a deliberately emptied doc are restored from their
+ * autosave and gated by the `keyforge:onboarded` flag instead of being
+ * shown welcome copy again.
+ */
+function emptyDefaultDoc(): AnimationDocument {
+  return {
+    id: nanoid(),
+    name: 'Untitled',
+    duration: 2000,
+    layers: [],
+  }
 }
 
 // ── Store ─────────────────────────────────────────────────────────────
 // Restore a previously worked-on document if one was autosaved; otherwise
-// start from the default demo document.
+// start from the empty first-run document (see emptyDefaultDoc above).
 const restoredDoc = loadFromStorage()
-const [doc, setDocRaw] = createStore<AnimationDocument>(restoredDoc ?? defaultDoc)
+const [doc, setDocRaw] = createStore<AnimationDocument>(restoredDoc ?? emptyDefaultDoc())
 export { doc }
+
+// ── Onboarding state ──────────────────────────────────────────────────
+/** True once the user has engaged beyond the first-run empty state. */
+const [onboarded, setOnboarded] = createSignal(hasOnboarded())
+export { onboarded }
+
+/**
+ * Mark onboarding complete once the document has content — every write
+ * path funnels through scheduleSave/replaceDoc, so this single check
+ * covers layer adds, sample loads and imports alike.
+ */
+function syncOnboardingFlag() {
+  if (!onboarded() && doc.layers.length > 0) {
+    markOnboarded()
+    setOnboarded(true)
+  }
+}
 
 // ── Autosave ───────────────────────────────────────────────────────────
 // Every mutation in this module goes through setDoc, so the save hook
@@ -68,6 +72,7 @@ function flushSave() {
 }
 
 function scheduleSave() {
+  syncOnboardingFlag()
   savePending = true
   clearTimeout(saveTimer)
   saveTimer = setTimeout(flushSave, AUTOSAVE_DEBOUNCE_MS)
@@ -76,9 +81,9 @@ function scheduleSave() {
 /** Replace the whole document (import / sample load / reset) and persist now. */
 export function replaceDoc(next: AnimationDocument) {
   setDocRaw(reconcile(next))
+  syncOnboardingFlag()
   flushSave()
 }
-
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', () => {
     if (savePending) flushSave()
@@ -89,10 +94,6 @@ function serializeAndSave(d: AnimationDocument) {
   saveToStorage(serializeDoc(d))
 }
 
-/**
- * The single write path for document mutations. Wraps the raw store setter
- * so autosave scheduling can't be bypassed by any mutation.
- */
 /**
  * The single write path for document mutations. Wraps the raw store setter
  * so autosave scheduling can't be bypassed by any mutation.
@@ -109,9 +110,9 @@ const setDoc = setDocWrapped
 export { setDoc }
 
 // ── Selection ──────────────────────────────────────────────────────────
-export const [selectedLayerId, setSelectedLayerId] = createSignal<string | null>(
-  defaultDoc.layers[0]?.id ?? null,
-)
+// Starts null: the first-run seed document is empty (audit F21), so there
+// is nothing to pre-select.
+export const [selectedLayerId, setSelectedLayerId] = createSignal<string | null>(null)
 export const [selectedKeyframeId, setSelectedKeyframeId] = createSignal<string | null>(null)
 
 // ── Playhead ────────────────────────────────────────────────────────────
@@ -158,6 +159,22 @@ export function addLayer() {
     }),
   )
   setSelectedLayerId(id)
+}
+
+/**
+ * Add the pre-built starter "Box" layer (opacity + transform tracks ready
+ * to scrub) — what "Add your first layer" creates. This is the content the
+ * store used to seed on every fresh visit; it now lives behind this
+ * mutation so true first run can show the guided EmptyState instead (F21).
+ */
+export function addStarterLayer() {
+  const layer = createStarterBoxLayer()
+  setDoc(
+    produce((d) => {
+      d.layers.push(layer)
+    }),
+  )
+  setSelectedLayerId(layer.id)
 }
 
 export function removeLayer(layerId: string) {

@@ -1,8 +1,9 @@
 import { Show } from 'solid-js'
 import {
   doc,
+  onboarded,
   setDoc,
-  addLayer,
+  addStarterLayer,
   setSelectedLayerId,
   setSelectedKeyframeId,
   setPlayhead,
@@ -12,10 +13,16 @@ import { createSampleDoc } from '@/utils/sampleDoc'
 
 /**
  * EmptyState — guided first-run overlay shown in the workspace (preview)
- * area while the document has no layers.
+ * area while the document has no layers and the user hasn't onboarded.
+ *
+ * The card is the *one-time* onboarding moment (audit F21): once the
+ * user engages (adds a layer / loads a sample / imports), the persisted
+ * `keyforge:onboarded` flag keeps it from re-nagging returning users who
+ * later deliberately empty their document. After that, an empty timeline
+ * shows the quieter canvas hint instead (audit F19).
  *
  * Offers two paths out of the empty state:
- *   - "Add your first layer" → existing addLayer() mutation
+ *   - "Add your first layer" → pre-built starter Box layer (addStarterLayer)
  *   - "Load sample animation" → replaces the document with a demo doc
  */
 export default function EmptyState() {
@@ -31,7 +38,7 @@ export default function EmptyState() {
   }
 
   return (
-    <Show when={doc.layers.length === 0}>
+    <Show when={doc.layers.length === 0 && !onboarded()}>
       <div class="empty-state" role="status">
         <div class="empty-state__card">
           <div class="empty-state__art" aria-hidden="true">
@@ -46,7 +53,7 @@ export default function EmptyState() {
           </p>
 
           <div class="empty-state__actions">
-            <button class="btn btn--primary empty-state__cta" onClick={addLayer}>
+            <button class="btn btn--primary empty-state__cta" onClick={addStarterLayer}>
               Add your first layer
             </button>
             <button class="btn btn--ghost" onClick={loadSample}>
