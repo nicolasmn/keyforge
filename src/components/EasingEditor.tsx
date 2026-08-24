@@ -143,8 +143,11 @@ export default function EasingEditor(props: Props) {
     const pad = 12 * dpr
     const inner = W - pad * 2
 
+    // Adaptive vertical scale (see bezierYScale): identity framing while
+    // handles stay in [0,1], expands for anticipation/settle curves.
+    const ys = bezierYScale()
     function toCanvas(x: number, y: number): [number, number] {
-      return [pad + x * inner, pad + (1 - y) * inner]
+      return [pad + x * inner, pad + (1 - (y - ys.lo) / (ys.hi - ys.lo)) * inner]
     }
 
     // Spring preview wins while active (user shaping a spring or an applied
@@ -155,6 +158,22 @@ export default function EasingEditor(props: Props) {
       drawSpringCurve(ctx, sp, { pad, inner, W, dpr, colorPrimary, colorMuted })
     } else if (h) {
       const [x1, y1, x2, y2] = h
+      // Overshoot guides: when the view is zoomed out vertically, mark the
+      // original 0 and 1 value levels (same convention as the spring plot).
+      if (ys.hi > 1 || ys.lo < 0) {
+        ctx.strokeStyle = colorMuted
+        ctx.lineWidth = 1 * dpr
+        ctx.setLineDash([3 * dpr, 3 * dpr])
+        for (const level of [0, 1]) {
+          const [, gy] = toCanvas(0, level)
+          ctx.beginPath()
+          ctx.moveTo(pad, gy)
+          ctx.lineTo(W - pad, gy)
+          ctx.stroke()
+        }
+        ctx.setLineDash([])
+      }
+
       const [hx1, hy1] = toCanvas(x1, y1)
       const [hx2, hy2] = toCanvas(x2, y2)
       const [p0x, p0y] = toCanvas(0, 0)
@@ -267,20 +286,51 @@ export default function EasingEditor(props: Props) {
     ctx.stroke()
   }
 
-  // ── Hit-testing (CSS pixels) ────────────────────────────────────────────
+  // ── Hit-testing / shared geometry ───────────────────────────────────────
+  /**
+   * Vertical mapping for the bezier view. Handles may carry control-point Y
+   * outside [0,1] (anticipation/settle — spec-valid CSS, plan §3.4); when
+   * they do, the view expands vertically (with margin) so those shapes and
+   * handles render fully on-canvas instead of clipping off the edge.
+   * Inside [0,1] the classic unit-box framing is kept untouched.
+   *
+   * Curve Y is bounded by the convex hull of its control points (endpoints
+   * fixed at 0 and 1), so handle Ys alone determine the needed range.
+   * Used by BOTH draw() (device px) and the pointer/keyboard transforms
+   * below (CSS px) so what you see is exactly what you grab.
+   */
+  function bezierYScale(): { lo: number; hi: number } {
+    const h = handles()
+    if (!h) return { lo: 0, hi: 1 }
+    const y1v = h[1]
+    const y2v = h[3]
+    if (y1v >= 0 && y1v <= 1 && y2v >= 0 && y2v <= 1) return { lo: 0, hi: 1 }
+    let lo = Math.min(0, y1v, y2v)
+    let hi = Math.max(1, y1v, y2v)
+    const margin = Math.max(hi - lo, 0.001) * 0.08
+    lo -= margin
+    hi += margin
+    return { lo, hi }
+  }
+
   function cssToHandle(clientX: number, clientY: number): [number, number] {
     const rect = canvas!.getBoundingClientRect()
     const pad = 12
     const inner = CANVAS_CSS - pad * 2
+    const s = bezierYScale()
+    // X stays clamped to [0,1] per the cubic-bezier spec; Y allows the
+    // anticipation/settle range regardless of how far the view is zoomed.
     const x = Math.max(0, Math.min(1, (clientX - rect.left - pad) / inner))
-    const y = Math.max(-0.5, Math.min(1.5, 1 - (clientY - rect.top - pad) / inner))
+    const yRaw = s.lo + (1 - (clientY - rect.top - pad) / inner) * (s.hi - s.lo)
+    const y = Math.max(-0.5, Math.min(1.5, yRaw))
     return [x, y]
   }
 
   function handleToCss(nx: number, ny: number): [number, number] {
     const pad = 12
     const inner = CANVAS_CSS - pad * 2
-    return [pad + nx * inner, pad + (1 - ny) * inner]
+    const s = bezierYScale()
+    return [pad + nx * inner, pad + (1 - (ny - s.lo) / (s.hi - s.lo)) * inner]
   }
 
   // ── Pointer events (mouse / touch / pen) ───────────────────────────────
@@ -460,7 +510,7 @@ export default function EasingEditor(props: Props) {
     if (springPoints())
       return 'Easing curve editor. Spring (linear()) curve preview — shape it with the spring controls below.'
     if (handles())
-      return `Easing curve editor. Arrow keys move handle ${activeHandle()} (press 1 or 2 to switch, Shift for bigger steps).`
+      return `Easing curve editor. Arrow keys move handle ${activeHandle()} (press 1 or 2 to switch, Shift for bigger steps). Handles may move above the top or below the bottom of the unit box for anticipation and overshoot curves.`
     return 'Easing curve editor. Linear curve — paste a cubic-bezier value to edit handles.'
   }
 
