@@ -2,7 +2,7 @@
  * SplitLayout — wires Split.js into the desktop app shell.
  *
  * Two split instances:
- *   1. Horizontal: LayerTree | Preview | Inspector
+ *   1. Horizontal: Preview | Inspector
  *   2. Vertical:   top workspace | Timeline area
  *
  * Split.js mutates element widths/heights directly via inline styles.
@@ -23,7 +23,6 @@ import { onMount, onCleanup, type JSX } from 'solid-js'
 import Split from 'split.js'
 
 interface Props {
-  layerTree: JSX.Element
   preview: JSX.Element
   inspector: JSX.Element
   timelineArea: JSX.Element
@@ -40,10 +39,10 @@ function makeGutter(direction: 'horizontal' | 'vertical'): HTMLElement {
 /** Gutter thickness — keep in sync with the `gutterSize` option below. */
 const GUTTER_PX = 4
 
-// Horizontal split: LayerTree | Preview | Inspector
-const H_DEFAULT_PCT = [18, 56, 26]
-const H_MIN_PX = [160, 300, 220]
-const H_MAX_PX = [320, Infinity, 400]
+// Horizontal split: Preview | Inspector
+const H_DEFAULT_PCT = [68, 32]
+const H_MIN_PX = [300, 220]
+const H_MAX_PX = [Infinity, 400]
 
 // Vertical split: workspace | Timeline
 const V_DEFAULT_PCT = [70, 30]
@@ -135,14 +134,13 @@ function reclampSplit(
 
 export default function SplitLayout(props: Props) {
   let topRowRef!: HTMLDivElement
-  let layerTreeRef!: HTMLDivElement
   let previewRef!: HTMLDivElement
   let inspectorRef!: HTMLDivElement
   let timelineRef!: HTMLDivElement
   let shellRef!: HTMLDivElement
 
   onMount(() => {
-    const hSplit = Split([layerTreeRef, previewRef, inspectorRef], {
+    const hSplit = Split([previewRef, inspectorRef], {
       sizes: H_DEFAULT_PCT,
       minSize: H_MIN_PX,
       maxSize: H_MAX_PX,
@@ -210,9 +208,6 @@ export default function SplitLayout(props: Props) {
   return (
     <div class="split-shell" ref={shellRef}>
       <div class="split-top-row" ref={topRowRef}>
-        <div class="split-panel split-panel--sidebar" ref={layerTreeRef}>
-          {props.layerTree}
-        </div>
         <div class="split-panel split-panel--preview" ref={previewRef}>
           {props.preview}
         </div>

@@ -1,7 +1,6 @@
 import { Show, onMount, onCleanup } from 'solid-js'
 import { createMediaQuery } from '@/utils/mediaQuery'
 import { installGlobalShortcuts } from '@/utils/playbackShortcuts'
-import LayerTree from '@/components/LayerTree'
 import Preview from '@/components/Preview'
 import Inspector from '@/components/Inspector'
 import Timeline from '@/components/Timeline'
@@ -48,7 +47,6 @@ export default function App() {
       {/* Desktop — resizable panels via Split.js */}
       <Show when={!isMobile()}>
         <SplitLayout
-          layerTree={<LayerTree />}
           preview={<PreviewArea />}
           inspector={<Inspector />}
           timelineArea={
@@ -62,11 +60,6 @@ export default function App() {
       {/* Mobile */}
       <Show when={isMobile()}>
         <div class="app__mobile-body">
-          <Show when={activeTab() === 'layers'}>
-            <div class="app__mobile-panel">
-              <LayerTree />
-            </div>
-          </Show>
           <Show when={activeTab() === 'preview'}>
             <div class="app__mobile-panel">
               <PreviewArea />

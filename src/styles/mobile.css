@@ -70,14 +70,6 @@
       min-height: 0;
     }
 
-    .app__mobile-panel .layer-tree {
-      border: none !important;
-      border-radius: 0 !important;
-      flex: 1;
-      overflow-y: auto;
-      grid-area: unset !important;
-    }
-
     .app__mobile-panel .inspector {
       border: none !important;
       border-radius: 0 !important;
@@ -154,14 +146,6 @@
     .input {
       min-height: 40px;
       font-size: max(16px, var(--font-size-sm, 0.875rem));
-    }
-
-    .layer-tree__item:hover {
-      background: transparent;
-    }
-
-    .layer-tree__item--active {
-      background: var(--color-accent-dim);
     }
   }
 
