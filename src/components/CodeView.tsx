@@ -129,6 +129,10 @@ export default function CodeView() {
   /* ── CM instance plumbing ────────────────────────────────────────────── */
   let host!: HTMLDivElement
   let view: EditorView | null = null
+  /** Guards the async mount: a tab switch can dispose THIS instance while
+   *  its CM chunk imports are still in flight — a stale continuation must
+   *  not create a view into a detached host (that orphaned the editor). */
+  let disposed = false
   let applyCmTheme: ((t: ThemeName) => void) | null = null
   let savedTimer: ReturnType<typeof setTimeout> | undefined
   let debounceTimer: ReturnType<typeof setTimeout> | undefined
@@ -138,7 +142,12 @@ export default function CodeView() {
     debounceTimer = setTimeout(() => setDebouncedDraft(text), LIVE_PARSE_DEBOUNCE_MS)
   }
   onCleanup(() => clearTimeout(debounceTimer))
-  onCleanup(() => clearTimeout(savedTimer))
+  onCleanup(() => {
+    clearTimeout(savedTimer)
+    disposed = true
+    view?.destroy()
+    view = null
+  })
   onCleanup(() => view?.destroy())
 
   /**
@@ -312,6 +321,7 @@ export default function CodeView() {
         import('@codemirror/language'),
         import('@lezer/highlight'),
       ])
+      if (disposed || !host.isConnected) return // superseded by a remount mid-await
 
       const themeCompartment = new Compartment()
 
@@ -390,7 +400,15 @@ export default function CodeView() {
         ],
       })
 
+      // imports resolved
+      console.log(
+        '[cm] imports ok, creating view into host:',
+        host.className,
+        'connected:',
+        host.isConnected,
+      )
       view = new EditorView({ state, parent: host })
+      // view created
       applyCmTheme = (t: ThemeName) => {
         void t // palette comes from CSS custom properties, re-read below
         view?.dispatch({ effects: themeCompartment.reconfigure(makeThemeExt()) })
@@ -459,13 +477,25 @@ export default function CodeView() {
         </p>
       </div>
 
-      <Show
-        when={!cmFailed()}
-        fallback={
+      {/* Editor host is STRUCTURALLY PERMANENT — Solid never adds/removes or
+          replaces this node across loading/failure states, so the CodeMirror
+          instance bound to it on mount can never be orphaned. States are
+          overlays (hidden attribute), not conditional siblings. */}
+      <div
+        class="code-view__editor"
+        classList={{ 'code-view__editor--loading': !editorReady() }}
+        ref={(el) => (host = el)}
+        aria-label="CSS editor"
+        aria-busy={!editorReady()}
+      >
+        <div class="code-view__loading-pane" hidden={cmFailed() || editorReady()}>
+          Loading editor…
+        </div>
+        <Show when={cmFailed()}>
           <textarea
             class="input code-view__textarea"
             value={draft()}
-            aria-label="CSS editor"
+            aria-label="CSS editor (fallback)"
             spellcheck={false}
             onInput={(e) => {
               const text = e.currentTarget.value
@@ -478,21 +508,9 @@ export default function CodeView() {
                 applyCommit()
               }
             }}
-            ref={(el) => queueMicrotask(() => el.focus())}
           />
-        }
-      >
-        <div
-          class="code-view__editor"
-          aria-busy={!editorReady()}
-          ref={(el) => (host = el)}
-          aria-label="CSS editor"
-        >
-          <Show when={!editorReady()}>
-            <div class="code-view__loading-pane">Loading editor…</div>
-          </Show>
-        </div>
-      </Show>
+        </Show>
+      </div>
     </div>
   )
 }
