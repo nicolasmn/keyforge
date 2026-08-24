@@ -5,6 +5,7 @@ import Preview from '@/components/Preview'
 import Inspector from '@/components/Inspector'
 import Timeline from '@/components/Timeline'
 import DocBar from '@/components/DocBar'
+import { ContextMenuHost } from '@/components/ContextMenu'
 import MobileTabs, { activeTab } from '@/components/MobileTabs'
 import SplitLayout from '@/components/SplitLayout'
 import EmptyState from '@/components/EmptyState'
@@ -38,6 +39,7 @@ export default function App() {
 
   return (
     <div class="app">
+      <ContextMenuHost />
       {/* Document bar — name + import/export; playback controls live in the
           timeline now. Hidden on mobile (space). */}
       <Show when={!isMobile()}>

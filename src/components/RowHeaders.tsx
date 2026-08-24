@@ -31,9 +31,17 @@ import { headerEntries, type RowHeaderEntry, type TimelineRow } from '@/utils/ro
  * sortable (grip → reorderLayer), carry a hover ✕ (removeLayer), and the
  * column ends with a ghost "+ Add layer" row.
  */
+/** Cross-component rename request (context-menus plan §6.4): the timeline
+ * canvas menu points at this; the header column's own editor consumes it.
+ * Keeps ONE rename editor implementation. */
+export const [renameTargetId, requestLayerRename] = createSignal<string | null>(null)
+
 export default function RowHeaders(props: { rows: readonly TimelineRow[] }) {
   const [editingId, setEditingId] = createSignal<string | null>(null)
   const [draggedId, setDraggedId] = createSignal<string | null>(null)
+  // Context-menu rename bus: an external requestLayerRename(id) opens the
+  // same inline editor as a direct name click (one editor implementation).
+  const effectiveEditingId = () => editingId() ?? renameTargetId()
   /** Name buttons by layer id so rename can hand focus back on commit/cancel. */
   const nameButtons = new Map<string, HTMLButtonElement>()
 
@@ -45,6 +53,7 @@ export default function RowHeaders(props: { rows: readonly TimelineRow[] }) {
     // null = cancel (Esc); store trims + keeps prior name on empty strings.
     if (value !== null) renameLayer(layerId, value)
     setEditingId(null)
+    requestLayerRename(null)
     nameButtons.get(layerId)?.focus()
   }
 
@@ -72,8 +81,8 @@ export default function RowHeaders(props: { rows: readonly TimelineRow[] }) {
               entry.type === 'layer' ? (
                 <LayerHeaderRow
                   entry={entry}
-                  editingId={editingId()}
                   draggedId={draggedId()}
+                  effectiveEditingId={effectiveEditingId()}
                   onStartEdit={startEdit}
                   onFinishEdit={finishEdit}
                   registerNameButton={(el) => nameButtons.set(entry.layerId, el)}
@@ -108,8 +117,8 @@ export default function RowHeaders(props: { rows: readonly TimelineRow[] }) {
 
 function LayerHeaderRow(props: {
   entry: Extract<RowHeaderEntry, { type: 'layer' }>
-  editingId: string | null
   draggedId: string | null
+  effectiveEditingId: string | null
   onStartEdit: (layerId: string) => void
   onFinishEdit: (layerId: string, value: string | null) => void
   registerNameButton: (el: HTMLButtonElement) => void
@@ -119,7 +128,7 @@ function LayerHeaderRow(props: {
   // Reactive lookup — collapse/visibility/name changes re-render this row.
   const layer = () => doc.layers.find((l) => l.id === props.entry.layerId)
   const isSelected = () => selectedLayerId() === props.entry.layerId
-  const isEditing = () => props.editingId === props.entry.layerId
+  const isEditing = () => props.effectiveEditingId === props.entry.layerId
 
   return (
     <div

@@ -894,6 +894,59 @@ export function applyGizmoEdit(
   return { kind: 'create-track-and-kf', trackId, kfId }
 }
 
+/**
+ * Deep-copy a layer (fresh ids for layer/tracks/keyframes) named "<name> copy",
+ * inserted directly after the source, and select the copy. Returns the new id.
+ */
+export function duplicateLayer(layerId: string): string | null {
+  const source = doc.layers.find((l) => l.id === layerId)
+  if (!source) return null
+  const copy: Layer = JSON.parse(JSON.stringify(source))
+  copy.id = nanoid()
+  copy.name = `${source.name} copy`
+  copy.collapsed = false
+  for (const t of copy.tracks) {
+    t.id = nanoid()
+    for (const k of t.keyframes) k.id = nanoid()
+  }
+  setDoc(
+    produce((d) => {
+      const idx = d.layers.findIndex((l) => l.id === layerId)
+      d.layers.splice(idx + 1, 0, copy)
+    }),
+  )
+  setSelectedLayerId(copy.id)
+  return copy.id
+}
+
+/**
+ * Clone one keyframe with a fresh id at `atTime` (default: +50ms clamped into
+ * the duration), keeping value and easing; selects the clone. Returns its id.
+ */
+export function duplicateKeyframe(
+  layerId: string,
+  trackId: string,
+  kfId: string,
+  atTime?: number,
+): string | null {
+  const track = doc.layers.find((l) => l.id === layerId)?.tracks.find((t) => t.id === trackId)
+  const source = track?.keyframes.find((k) => k.id === kfId)
+  if (!track || !source) return null
+  const fallbackTime = Math.min(source.time + 50, doc.duration)
+  const time = Math.max(0, Math.min(Math.round(atTime ?? fallbackTime), doc.duration))
+  const copy: Keyframe = { id: nanoid(), time, value: source.value, easing: source.easing }
+  setDoc(
+    produce((d) => {
+      const t2 = d.layers.find((l) => l.id === layerId)?.tracks.find((t) => t.id === trackId)
+      if (!t2) return
+      t2.keyframes.push(copy)
+      t2.keyframes.sort((a, b) => a.time - b.time)
+    }),
+  )
+  setSelectedKeyframeId(copy.id)
+  return copy.id
+}
+
 export function setDuration(ms: number) {
   setDoc('duration', ms)
 }
