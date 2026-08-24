@@ -11,6 +11,10 @@ import {
   snapIncrement,
   setSnapIncrement,
   theme,
+  canUndo,
+  canRedo,
+  undo as undoHistory,
+  redo as redoHistory,
 } from '@/store'
 import { savePrefs } from '@/utils/persistence'
 import type { SnapIncrement } from '@/utils/snap'
@@ -19,6 +23,9 @@ interface PlaybackProps {
   /** 'compact' trims padding/gap for the strip above the timeline ruler. */
   variant?: 'default' | 'compact'
 }
+
+/** Platform-accurate shortcut hint for tooltips (mac uses ⌘, others Ctrl). */
+const IS_APPLE = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.userAgent)
 
 const SNAP_OPTIONS: readonly { value: SnapIncrement; label: string }[] = [
   { value: 'off', label: 'Off' },
@@ -98,6 +105,26 @@ export default function Playback(props: PlaybackProps = {}) {
         }
       >
         ⟲
+      </button>
+      <button
+        class="btn btn--ghost"
+        disabled={!canUndo()}
+        onClick={() => undoHistory()}
+        aria-label="Undo"
+        aria-keyshortcuts={IS_APPLE ? 'Meta+Z' : 'Control+Z'}
+        title={IS_APPLE ? 'Undo (⌘Z)' : 'Undo (Ctrl+Z)'}
+      >
+        ↶
+      </button>
+      <button
+        class="btn btn--ghost"
+        disabled={!canRedo()}
+        onClick={() => redoHistory()}
+        aria-label="Redo"
+        aria-keyshortcuts={IS_APPLE ? 'Meta+Shift+Z' : 'Control+Shift+Z'}
+        title={IS_APPLE ? 'Redo (⇧⌘Z)' : 'Redo (Ctrl+Shift+Z)'}
+      >
+        ↷
       </button>
       <label
         class="playback__snap"
