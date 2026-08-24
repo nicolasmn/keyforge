@@ -15,10 +15,20 @@
  * e.relatedTarget to see if focus stayed inside the component. Only commit
  * when focus truly left.
  */
-import { createSignal, createMemo, For, Show, onCleanup, type Component } from 'solid-js'
+import {
+  createEffect,
+  createSignal,
+  createMemo,
+  For,
+  Show,
+  onCleanup,
+  type Component,
+} from 'solid-js'
 import { render } from 'solid-js/web'
 import {
   selectedLayerId,
+  selectedKeyframeId,
+  setSelectedKeyframeId,
   getSelectedLayer,
   addTrack,
   addKeyframe,
@@ -41,6 +51,7 @@ import EasingEditor from './EasingEditor'
 import OriginSection from './OriginSection'
 import { RotationDial, NumberUnitField } from './fields'
 import { tokenizeKeyframe, NUMBER_UNIT_RE } from '@/utils/tokenize'
+import { setKeyframeSelectionSource, consumeKeyframeSelectionSource } from '@/utils/selectionSource'
 import { completionsFor, isAngleUnit, toDeg, formatAngle } from '@/utils/cssCompletions'
 import { scrubbedValue, clampToProperty } from '@/utils/scrub'
 import {
@@ -692,10 +703,27 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
   const [editTime, setEditTime] = createSignal(false)
   let timeInputEl: HTMLInputElement | undefined
 
+  // F11: scroll target when this keyframe gets selected from the timeline.
+  let rowEl: HTMLDivElement | undefined
+
   // Per-row token derivation from the store proxy: reactive to this row's
   // fields only, so sibling rows never recompute (or remount) on a commit.
   const valueToken = createMemo(() => tokenizeKeyframe(props.layerId, props.track, props.kf)[0])
   const easingToken = createMemo(() => tokenizeKeyframe(props.layerId, props.track, props.kf)[1])
+
+  // Cross-highlight follow-through (audit F11): when selection ORIGINATES on
+  // the timeline canvas, bring the owning row into view — DevTools-style.
+  // The origin hint (set by Timeline before setSelectedKeyframeId) keeps us
+  // from scroll-jacking clicks that happen inside this very row; only one
+  // row ever matches the id, so it is also the only consumer of the hint.
+  createEffect(() => {
+    if (selectedKeyframeId() !== props.kf.id) return
+    if (consumeKeyframeSelectionSource() !== 'canvas') return
+    rowEl?.scrollIntoView({
+      block: 'nearest',
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    })
+  })
 
   function commitTime() {
     const n = Number(timeInputEl?.value)
@@ -710,7 +738,18 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
   }
 
   return (
-    <div class="kf-row">
+    <div
+      ref={rowEl}
+      class="kf-row"
+      classList={{ 'kf-row--selected': selectedKeyframeId() === props.kf.id }}
+      onClick={() => {
+        // Reverse direction (audit F11): clicking a row lights up its
+        // diamond in the timeline. 'inspector' origin → no auto-scroll,
+        // since the user is already looking right at this row.
+        setKeyframeSelectionSource('inspector')
+        setSelectedKeyframeId(props.kf.id)
+      }}
+    >
       <div class="kf-row__main">
         <Show when={!editTime()}>
           <span
@@ -769,7 +808,12 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
 
         <button
           class="kf-row__delete"
-          onClick={() => removeKeyframe(props.layerId, props.track.id, props.kf.id)}
+          onClick={(e) => {
+            // Don't let removal double as a row-click selection — deleting
+            // must not re-point selectedKeyframeId at the vanishing keyframe.
+            e.stopPropagation()
+            removeKeyframe(props.layerId, props.track.id, props.kf.id)
+          }}
           title="Remove keyframe"
           aria-label="Remove keyframe"
         >

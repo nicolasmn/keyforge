@@ -944,3 +944,21 @@
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
 }
+
+/* ── Selected keyframe cross-highlight (audit F11) ────────── */
+
+/* The row that owns the white timeline diamond: 2px accent inset on the
+   left edge + a faint accent wash — same accent-mix-over-bg formula as
+   .kf-chip--editing, so it resolves correctly in BOTH themes (#73 tokens).
+   Declared after .kf-row__main:hover with equal specificity, so the
+   selected state holds steady while hovered instead of flickering. */
+.kf-row--selected .kf-row__main {
+  background: color-mix(in oklch, var(--color-accent) 10%, var(--color-bg));
+  box-shadow: inset 2px 0 0 0 var(--color-accent);
+}
+
+/* scrollIntoView(block:'nearest') must land rows BELOW the sticky track
+   headers, or the scrolled-to row hides underneath them. */
+.kf-row {
+  scroll-margin-top: calc(var(--track-header-h) + 2px);
+}
