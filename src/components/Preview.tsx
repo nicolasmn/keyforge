@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, onCleanup, untrack } from 'solid-js'
+import { createEffect, createMemo, For, onCleanup, onMount, untrack } from 'solid-js'
 import { doc, playing, setPlaying, playhead, setPlayhead, loop } from '@/store'
 import { generateCss } from '@/utils/css'
 import { slugify } from '@/utils/slugify'
@@ -17,6 +17,7 @@ function parseCssString(css: string): Record<string, string> {
 
 export default function Preview() {
   let styleEl: HTMLStyleElement | undefined
+  let panelRef: HTMLDivElement | undefined
   let rafId = 0
   let lastTs = 0
 
@@ -92,8 +93,26 @@ export default function Preview() {
 
   onCleanup(() => cancelAnimationFrame(rafId))
 
+  // Audit F16: the stage is authored at a fixed 600×400, which clips inside
+  // narrow panels. Track the panel's live box and publish `--preview-scale`
+  // (consumed by .split-shell .preview__canvas in app.css) so the stage
+  // scales down to fit instead of being cropped by overflow:hidden.
+  onMount(() => {
+    if (!panelRef || typeof ResizeObserver === 'undefined') return
+
+    const observer = new ResizeObserver((entries) => {
+      const { width, height } = entries[0]?.contentRect ?? { width: 0, height: 0 }
+      if (!(width > 0) || !(height > 0) || !panelRef) return
+      // Denominators leave breathing room around the 602×402 bordered stage.
+      const scale = Math.min(1, width / 620, height / 420)
+      panelRef.style.setProperty('--preview-scale', String(scale))
+    })
+    observer.observe(panelRef)
+    onCleanup(() => observer.disconnect())
+  })
+
   return (
-    <div class="preview">
+    <div class="preview" ref={panelRef}>
       <style ref={styleEl} />
       <div class="preview__canvas">
         <For each={doc.layers}>
