@@ -39,7 +39,7 @@ import type {
 } from '@/types'
 import EasingEditor from './EasingEditor'
 import { tokenizeKeyframe, NUMBER_UNIT_RE } from '@/utils/tokenize'
-import { completionsFor, UNIT_GROUPS, isAngleUnit, toDeg } from '@/utils/cssCompletions'
+import { completionsFor, UNIT_GROUPS, isAngleUnit, toDeg, fromDeg } from '@/utils/cssCompletions'
 import { PROPERTY_REGISTRY } from '@/utils/propertyRegistry'
 import { scrubbedValue, clampToProperty } from '@/utils/scrub'
 import {
@@ -164,15 +164,90 @@ function mountDatalist(id: string, options: string[]): () => void {
 
 // ── RotationDial ───────────────────────────────────────────────────────────────
 
-function RotationDial(props: { deg: number }) {
+function RotationDial(props: { deg: number; onChange?: (deg: number) => void }) {
   const R = 7
   const cx = 9,
     cy = 9
   const rad = () => ((props.deg - 90) * Math.PI) / 180
   const nx = () => +(cx + R * Math.cos(rad())).toFixed(2)
   const ny = () => +(cy + R * Math.sin(rad())).toFixed(2)
+  const interactive = () => typeof props.onChange === 'function'
+  let svgEl: SVGSVGElement | undefined
+  let dragging = false
+
+  /** Pointer position → dial degrees (0° points up, clockwise positive). */
+  function degFromEvent(e: PointerEvent): number {
+    const rect = svgEl!.getBoundingClientRect()
+    const dx = e.clientX - (rect.left + rect.width / 2)
+    const dy = e.clientY - (rect.top + rect.height / 2)
+    let d = Math.round((Math.atan2(dy, dx) * 180) / Math.PI) + 90
+    if (d < 0) d += 360
+    if (d >= 360) d -= 360
+    return d
+  }
+
+  function onPointerDown(e: PointerEvent) {
+    if (!interactive()) return
+    e.stopPropagation() // keep the owning chip from opening its editor
+    e.preventDefault()
+    dragging = true
+    try {
+      svgEl!.setPointerCapture(e.pointerId)
+    } catch {
+      /* synthetic events may not support capture */
+    }
+    props.onChange!(degFromEvent(e))
+  }
+
+  function onPointerMove(e: PointerEvent) {
+    if (!dragging) return
+    e.preventDefault()
+    props.onChange!(degFromEvent(e))
+  }
+
+  function endDrag() {
+    dragging = false
+  }
+
+  function onKeyDown(e: KeyboardEvent) {
+    if (!interactive()) return
+    const step = e.shiftKey ? 15 : 1
+    let next: number | null = null
+    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') next = props.deg + step
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') next = props.deg - step
+    else return
+    e.preventDefault()
+    e.stopPropagation()
+    props.onChange!(((Math.round(next) % 360) + 360) % 360)
+  }
+
   return (
-    <svg class="kf-rot-dial" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+    <svg
+      ref={(el) => {
+        svgEl = el
+      }}
+      class="kf-rot-dial"
+      width="18"
+      height="18"
+      viewBox="0 0 18 18"
+      aria-hidden={!interactive()}
+      role={interactive() ? 'slider' : undefined}
+      tabindex={interactive() ? 0 : undefined}
+      aria-label={interactive() ? 'Rotation' : undefined}
+      aria-valuemin={interactive() ? 0 : undefined}
+      aria-valuemax={interactive() ? 359 : undefined}
+      aria-valuenow={interactive() ? Math.round(((props.deg % 360) + 360) % 360) : undefined}
+      aria-valuetext={interactive() ? `${Math.round(props.deg)} degrees` : undefined}
+      classList={{ 'kf-rot-dial--live': interactive() }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onLostPointerCapture={endDrag}
+      onKeyDown={onKeyDown}
+      onClick={(e) => {
+        if (interactive()) e.stopPropagation()
+      }}
+    >
       <circle
         cx={cx}
         cy={cy}
@@ -325,11 +400,26 @@ function NumberUnitField(props: NumberUnitFieldProps) {
 
 // ── Color swatch ──────────────────────────────────────────────────────────────
 
+/** Progressive enhancement: Chromium's Screen EyeDropper API. */
+const EYE_DROPPER_SUPPORTED = typeof window !== 'undefined' && 'EyeDropper' in window
+
+type EyeDropperCtor = new () => { open: () => Promise<{ sRGBHex: string }> }
+
+function pickFromScreen(): Promise<string | null> {
+  const Ctor = (window as unknown as { EyeDropper?: EyeDropperCtor }).EyeDropper
+  if (!Ctor) return Promise.resolve(null)
+  return new Ctor()
+    .open()
+    .then((r: { sRGBHex: string }) => r.sRGBHex)
+    .catch(() => null) // user cancelled
+}
+
 function ColorSwatch(props: { token: ValueToken }) {
   return (
     <span
       class="kf-chip__swatch"
       style={{ background: props.token.value }}
+      title="Click to open the color picker"
       onClick={(e) => {
         e.stopPropagation()
         const tmp = document.createElement('div')
@@ -356,6 +446,14 @@ function ColorSwatch(props: { token: ValueToken }) {
 
 function SubScrub(props: { sub: SubToken; parent: ValueToken; property?: AnimatableProperty }) {
   const [editing, setEditing] = createSignal(false)
+
+  // Angle args (rotate/rotateX/…) get a live dial at rest (audit old-F8):
+  // the transform chip previously had no angle affordance at all.
+  const subDeg = () => {
+    const unit = props.sub.unit || ''
+    const n = Number.parseFloat(props.sub.value)
+    return Number.isNaN(n) ? null : isAngleUnit(unit) ? toDeg(n, unit) : null
+  }
 
   function commitSub(num: string, unit: string) {
     const n = parseFloat(num)
@@ -395,6 +493,15 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken; property?: Animata
         >
           {props.sub.value}
           {props.sub.unit}
+          <Show when={subDeg() !== null}>
+            <RotationDial
+              deg={subDeg()!}
+              onChange={(d) => {
+                const unit = props.sub.unit || 'deg'
+                commitSub(String(+fromDeg(d, unit).toFixed(2)), unit)
+              }}
+            />
+          </Show>
         </span>
       }
     >
@@ -762,6 +869,24 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
               autocapitalize="none"
               spellcheck={false}
             />
+            {/* Screen eyedropper (audit old-F11): was available but unused.
+                Shown only where the API exists; cancels silently. */}
+            <Show when={props.token.type === 'color' && EYE_DROPPER_SUPPORTED}>
+              <button
+                class="kf-chip__eyedropper"
+                title="Pick a color from the screen"
+                aria-label="Pick a color from the screen"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const path = props.token.path
+                  void pickFromScreen().then((hex) => {
+                    if (hex) commit(path, hex)
+                  })
+                }}
+              >
+                ◉
+              </button>
+            </Show>
           </Show>
 
           <Show when={!editing()}>

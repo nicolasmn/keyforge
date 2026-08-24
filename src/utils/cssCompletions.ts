@@ -149,6 +149,26 @@ export function toDeg(value: number, unit: string): number {
   }
 }
 
+/**
+ * Inverse of toDeg — express a degree measure in the given angle unit.
+ * Used by the rotation dial to commit drags/nudges back in the authored unit
+ * instead of silently rewriting values to deg.
+ */
+export function fromDeg(deg: number, unit: string): number {
+  switch (unit) {
+    case 'deg':
+      return deg
+    case 'rad':
+      return deg * (Math.PI / 180)
+    case 'turn':
+      return deg / 360
+    case 'grad':
+      return deg / 0.9
+    default:
+      return deg
+  }
+}
+
 /** Build a sorted, unique completion list for a given token type + current value */
 export function completionsFor(type: string, current: string): string[] {
   switch (type) {
