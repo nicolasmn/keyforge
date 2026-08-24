@@ -1,5 +1,8 @@
 import { createEffect, createMemo, onCleanup, onMount } from 'solid-js'
 import {
+  workAreaStart,
+  workAreaEnd,
+  setWorkArea,
   doc,
   playhead,
   setPlayhead,
@@ -13,6 +16,7 @@ import {
   snapIncrement,
   theme,
 } from '@/store'
+import { savePrefs } from '@/utils/persistence'
 import { snapTime } from '@/utils/snap'
 import { chooseLabelStep, formatTick, minorStepFor } from '@/utils/rulerScale'
 import {
@@ -52,6 +56,7 @@ export default function Timeline() {
   let draggingKf: { layerId: string; trackId: string; kfId: string } | null = null
   let scrubbing = false
   let resizingDuration = false
+  let waDrag: 'start' | 'end' | null = null
   /** pointerId of the gesture currently owning the canvas, if any */
   let activePointerId: number | null = null
   let downX = 0
@@ -365,6 +370,33 @@ export default function Timeline() {
       else drawLayerRow(row)
     }
 
+    // Work-area band + bookends: shaded region between the two handles in
+    // the ruler's lower half — the region playback loops within.
+    {
+      const waS = timeToX(Math.min(workAreaStart(), doc.duration), width / dpr) * dpr
+      const waE = timeToX(Math.min(workAreaEnd(), doc.duration), width / dpr) * dpr
+      if (waE - waS > 1) {
+        ctx.save()
+        ctx.globalAlpha = 0.14
+        ctx.fillStyle = colorAccent
+        ctx.fillRect(waS, HEADER_HEIGHT * dpr * 0.55, waE - waS, HEADER_HEIGHT * dpr * 0.45)
+        ctx.restore()
+      }
+      // Bookend handles: small vertical grips at the region edges.
+      ctx.save()
+      ctx.globalAlpha = 0.85
+      ctx.fillStyle = colorAccent
+      for (const hx of [waS, waE]) {
+        ctx.fillRect(
+          hx - 1.5 * dpr,
+          HEADER_HEIGHT * dpr * 0.55,
+          3 * dpr,
+          HEADER_HEIGHT * dpr * 0.45,
+        )
+      }
+      ctx.restore()
+    }
+
     // Playhead (audit F24): triangle head in the ruler, glow while
     // scrubbing, time bubble during drags. The line itself stays a 2px
     // accent hairline.
@@ -619,6 +651,16 @@ export default function Timeline() {
     resizingDuration = false
     draggingKf = null
     scrubbing = false
+    if (waDrag) {
+      // Persist the finished bookend drag (session state, prefs blob).
+      savePrefs({
+        version: 1,
+        snapIncrement: snapIncrement(),
+        theme: theme(),
+        workArea: { start: workAreaStart(), end: workAreaEnd() },
+      })
+    }
+    waDrag = null
     activePointerId = null
     // Ghost chip tracks the cursor; drop it with the gesture so it never
     // lingers where the pointer no longer is.
@@ -643,6 +685,19 @@ export default function Timeline() {
         resizingDuration = true
         setPlaying(false)
         return
+      }
+      // Work-area bookends: grab zones on the ruler's LOWER half only
+      // (upper half stays scrub). Nearest bookend within 6px wins.
+      if (y > HEADER_HEIGHT * 0.55) {
+        const t = xToTime(x, canvas!.offsetWidth)
+        const dS = Math.abs(t - workAreaStart())
+        const dE = Math.abs(t - workAreaEnd())
+        const grabMs = xToTime(6, canvas!.offsetWidth) - xToTime(0, canvas!.offsetWidth)
+        if (Math.min(dS, dE) <= grabMs) {
+          waDrag = dS <= dE ? 'start' : 'end'
+          setPlaying(false)
+          return
+        }
       }
       scrubbing = true
       ghostX = x
@@ -699,6 +754,12 @@ export default function Timeline() {
       movedPastSlop = true
     if (resizingDuration) {
       applyDurationFromX(x)
+      return
+    }
+    if (waDrag) {
+      const raw = xToTime(x, canvas!.offsetWidth)
+      if (waDrag === 'start') setWorkArea(raw, workAreaEnd())
+      else setWorkArea(workAreaStart(), raw)
       return
     }
     if (scrubbing) {

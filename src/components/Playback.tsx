@@ -10,6 +10,8 @@ import {
   setDuration,
   snapIncrement,
   setSnapIncrement,
+  playbackRate,
+  setPlaybackRate,
   theme,
   canUndo,
   canRedo,
@@ -35,6 +37,8 @@ const SNAP_OPTIONS: readonly { value: SnapIncrement; label: string }[] = [
   { value: 500, label: '0.5s' },
   { value: 1000, label: '1s' },
 ]
+
+const RATE_OPTIONS = [0.25, 0.5, 1, 2] as const
 
 export default function Playback(props: PlaybackProps = {}) {
   const [editingDuration, setEditingDuration] = createSignal(false)
@@ -145,6 +149,33 @@ export default function Playback(props: PlaybackProps = {}) {
           <For each={SNAP_OPTIONS}>{(o) => <option value={String(o.value)}>{o.label}</option>}</For>
         </select>
       </label>
+      <label class="playback__rate" title="Playback speed — Shift+, / Shift+. to cycle">
+        <select
+          value={String(playbackRate())}
+          onChange={(e) => {
+            const v = Number((e.currentTarget as HTMLSelectElement).value)
+            setPlaybackRate(RATE_OPTIONS.find((r) => r === v) ?? 1)
+            savePrefs({
+              version: 1,
+              snapIncrement: snapIncrement(),
+              theme: theme(),
+              playbackRate: v,
+            })
+          }}
+        >
+          <For each={RATE_OPTIONS}>{(r) => <option value={String(r)}>{r}×</option>}</For>
+        </select>
+      </label>
+      <button
+        class="btn btn--ghost"
+        classList={{ 'playback__loop--on': loop() }}
+        onClick={() => setLoop(!loop())}
+        aria-pressed={loop()}
+        aria-label="Loop playback"
+        title="Loop playback (wraps inside the work area when set)"
+      >
+        ⟲
+      </button>
       <span class="playback__time">
         {(playhead() / 1000).toFixed(2)}s /{' '}
         <Show

@@ -928,3 +928,16 @@
 .timeline__header-gutter:hover {
   background: var(--color-accent);
 }
+
+/* Playback rate selector + loop toggle */
+.playback__rate select {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  padding: 2px 4px;
+}
+.playback__loop--on {
+  color: var(--color-accent);
+}

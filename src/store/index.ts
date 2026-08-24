@@ -277,6 +277,28 @@ export const [playhead, setPlayhead] = createSignal(0) // ms
 export const [playing, setPlaying] = createSignal(false)
 export const [loop, setLoop] = createSignal(true)
 
+/** Playback speed multiplier applied by Preview's rAF tick (1 = real time). */
+export const [playbackRate, setPlaybackRate] = createSignal(loadPrefs()?.playbackRate ?? 1)
+
+// ── Work area (loop bookends) ───────────────────────────────────────────
+/**
+ * [start, end] in ms — the region playback loops within when loop is on.
+ * Defaults cover the whole document; clamped to [0, duration] with
+ * start < end on every write. Session state (rides in prefs, not the doc).
+ */
+const _prefsWa = loadPrefs()?.workArea
+export const [workAreaStart, setWorkAreaStart] = createSignal(_prefsWa?.start ?? 0)
+export const [workAreaEnd, setWorkAreaEnd] = createSignal(_prefsWa?.end ?? Number.POSITIVE_INFINITY)
+
+/** Clamp-and-write both bookends; keeps start < end (min 50ms span). */
+export function setWorkArea(start: number, end: number): void {
+  const dur = doc.duration
+  const s = Math.max(0, Math.min(start, dur - 50))
+  const e = Math.max(s + 50, Math.min(end, dur))
+  setWorkAreaStart(s)
+  setWorkAreaEnd(e)
+}
+
 // ── Snapping preference ────────────────────────────────────────────────
 /**
  * Increment user-driven gestures (scrub, wheel nudge, keyframe drag)
