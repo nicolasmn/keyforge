@@ -16,6 +16,7 @@ import { serializeDoc, deserializeDoc, validatePersisted } from '@/utils/persist
 import { parseCssToDoc } from '@/utils/cssImport'
 import { exportCssReducedMotion } from '@/utils/export'
 import { generateCss } from '@/utils/css'
+import ThemeToggle from '@/components/ThemeToggle'
 
 /**
  * DocBar — document identity + save state + import/export.
@@ -263,6 +264,9 @@ export default function DocBar() {
       >
         From CSS…
       </button>
+      {/* App-global chrome at the right end of the ghost-button row —
+          same component as the mobile bar's second mount (ThemeToggle). */}
+      <ThemeToggle />
       <input
         ref={(el) => {
           fileInput = el

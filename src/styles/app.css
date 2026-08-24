@@ -233,7 +233,7 @@
     position: relative;
     width: 600px;
     height: 400px;
-    background: hsl(220 12% 10%);
+    background: var(--color-stage);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
     display: flex;

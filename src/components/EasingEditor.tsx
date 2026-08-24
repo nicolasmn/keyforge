@@ -1,6 +1,7 @@
 import { createSignal, createEffect, onMount, onCleanup, For, Show } from 'solid-js'
 import { BUILTIN_PRESETS, parseCubicBezier, evalCubicBezier } from '@/utils/easing-presets'
 import { customEasings, addEasing, removeEasing } from '@/store/easingLibrary'
+import { theme } from '@/store'
 import {
   SPRING_PRESETS,
   perceptualToConfig,
@@ -450,6 +451,7 @@ export default function EasingEditor(props: Props) {
     springLive()
     springDuration()
     springBounce()
+    void theme() // repaint on theme flip — curve colors come from CSS vars
     draw()
   })
 
