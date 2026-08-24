@@ -60,6 +60,13 @@ export default function Timeline() {
   let hoverDisclosureLayerId: string | null = null
   /** Cursor x over the ruler/scrub (CSS px) — drives the ghost time chip (F10c/F23). */
   let ghostX: number | null = null
+  /**
+   * Where the gesture would LAND under snapping, while dragging. The real
+   * playhead/keyframe follows the cursor continuously (owner feedback: hard
+   * mid-drag snapping feels laggy); this ghost shows the destination and the
+   * value snaps there once, on release.
+   */
+  let dragSnapTime: number | null = null
 
   /**
    * Single source of truth for vertical geometry (see utils/rowModel.ts).
@@ -79,11 +86,6 @@ export default function Timeline() {
       0,
       Math.min(doc.duration, ((x - LABEL_WIDTH) / (width - LABEL_WIDTH)) * doc.duration),
     )
-  }
-
-  /** User-gesture time for pointer x, quantized to the snap preference (plan §2). */
-  function snappedXToTime(x: number) {
-    return snapTime(xToTime(x, canvas!.offsetWidth), snapIncrement(), doc.duration)
   }
 
   function applyDurationFromX(x: number) {
@@ -448,6 +450,55 @@ export default function Timeline() {
         colorText,
       )
     }
+    // Snap ghost while dragging (owner model): the real playhead follows the
+    // cursor continuously; a dashed accent line + chip show WHERE it will land
+    // under snapping. Hidden when the snap point sits on the playhead itself.
+    if (scrubbing && dragSnapTime !== null) {
+      const sx = timeToX(dragSnapTime, width / dpr) * dpr
+      if (Math.abs(sx - ph) > 1 * dpr) {
+        ctx.save()
+        ctx.globalAlpha = 0.55
+        ctx.strokeStyle = colorAccent
+        ctx.lineWidth = 2 * dpr
+        ctx.setLineDash([4 * dpr, 4 * dpr])
+        ctx.beginPath()
+        ctx.moveTo(sx, 0)
+        ctx.lineTo(sx, height)
+        ctx.stroke()
+        ctx.restore()
+        drawTimeChip(
+          ctx,
+          sx / dpr,
+          HEADER_HEIGHT + 6,
+          `${(dragSnapTime / 1000).toFixed(2)}s`,
+          width / dpr,
+          dpr,
+          colorBg,
+          colorBorder,
+          colorAccent,
+        )
+      }
+    }
+    // Keyframe-drag snap ghost: outlined diamond at the landing point on the
+    // dragged track's row.
+    if (draggingKf && dragSnapTime !== null && !scrubbing) {
+      const dragged = draggingKf
+      const row = rows().find(
+        (r) => r.type === 'track' && r.layerId === dragged.layerId && r.trackId === dragged.trackId,
+      )
+      if (row) {
+        const gx = timeToX(dragSnapTime, width / dpr) * dpr
+        const gy = (row.y + row.height / 2) * dpr
+        ctx.save()
+        ctx.translate(gx, gy)
+        ctx.rotate(Math.PI / 4)
+        ctx.strokeStyle = colorAccent
+        ctx.lineWidth = 1.5 * dpr
+        const gr = KF_RADIUS * dpr * 1.3
+        ctx.strokeRect(-gr / 2, -gr / 2, gr, gr)
+        ctx.restore()
+      }
+    }
   }
 
   /** Small rounded time label drawn just under the ruler near an x position. */
@@ -587,6 +638,17 @@ export default function Timeline() {
   }
 
   function endDrag() {
+    // Release lands the gesture on its snap point (one deliberate jump —
+    // owner model: fluid follow while dragging, snap where it lands).
+    if (dragSnapTime !== null) {
+      if (draggingKf) {
+        updateKeyframe(draggingKf.layerId, draggingKf.trackId, draggingKf.kfId, {
+          time: Math.round(dragSnapTime),
+        })
+      } else if (scrubbing) {
+        setPlayhead(dragSnapTime)
+      }
+    }
     resizingDuration = false
     draggingKf = null
     scrubbing = false
@@ -594,6 +656,7 @@ export default function Timeline() {
     // Ghost chip tracks the cursor; drop it with the gesture so it never
     // lingers where the pointer no longer is.
     ghostX = null
+    dragSnapTime = null
   }
 
   function onPointerDown(e: PointerEvent) {
@@ -617,7 +680,10 @@ export default function Timeline() {
       scrubbing = true
       ghostX = x
       setPlaying(false)
-      setPlayhead(snappedXToTime(x))
+      // Continuous follow during the drag; snapping lands on release.
+      const raw = xToTime(x, canvas!.offsetWidth)
+      setPlayhead(raw)
+      dragSnapTime = snapTime(raw, snapIncrement(), doc.duration)
       return
     }
     // Disclosure click zones take precedence over every other gesture below
@@ -653,7 +719,9 @@ export default function Timeline() {
       scrubbing = true
       ghostX = x
       setPlaying(false)
-      setPlayhead(snappedXToTime(x))
+      const raw = xToTime(x, canvas!.offsetWidth)
+      setPlayhead(raw)
+      dragSnapTime = snapTime(raw, snapIncrement(), doc.duration)
     }
   }
 
@@ -669,13 +737,15 @@ export default function Timeline() {
     }
     if (scrubbing) {
       ghostX = x
-      setPlayhead(snappedXToTime(x))
+      const raw = xToTime(x, canvas!.offsetWidth)
+      setPlayhead(raw) // every frame, unsnapped — preview stays fluid
+      dragSnapTime = snapTime(raw, snapIncrement(), doc.duration)
     }
     // Touch keeps its small-movement slop so sloppy taps don't nudge keyframes.
     if (draggingKf && (downPointerType !== 'touch' || movedPastSlop)) {
-      updateKeyframe(draggingKf.layerId, draggingKf.trackId, draggingKf.kfId, {
-        time: Math.round(snappedXToTime(x)),
-      })
+      const raw = Math.round(xToTime(x, canvas!.offsetWidth))
+      updateKeyframe(draggingKf.layerId, draggingKf.trackId, draggingKf.kfId, { time: raw })
+      dragSnapTime = snapTime(raw, snapIncrement(), doc.duration)
     }
     if (activePointerId === null) {
       // Hover-only state: zone cursor, hovered diamond/chevron, ghost chip.
