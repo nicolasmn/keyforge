@@ -39,7 +39,15 @@ import type {
 } from '@/types'
 import EasingEditor from './EasingEditor'
 import { tokenizeKeyframe, NUMBER_UNIT_RE } from '@/utils/tokenize'
-import { completionsFor, UNIT_GROUPS, isAngleUnit, toDeg, fromDeg } from '@/utils/cssCompletions'
+import {
+  completionsFor,
+  UNIT_GROUPS,
+  isAngleUnit,
+  toDeg,
+  formatAngle,
+  snapToMultiple,
+} from '@/utils/cssCompletions'
+import { degFromPoint, wrapDeg } from '@/utils/dialGeometry'
 import { PROPERTY_REGISTRY } from '@/utils/propertyRegistry'
 import { scrubbedValue, clampToProperty } from '@/utils/scrub'
 import {
@@ -163,62 +171,96 @@ function mountDatalist(id: string, options: string[]): () => void {
 }
 
 // ── RotationDial ───────────────────────────────────────────────────────────────
+//
+// Commit-on-release drag model (DevTools conventions, adapted to an 18px dial):
+// - Dragging updates a LOCAL dragDeg preview signal only — the hand renders
+//   from it and the store sees ZERO writes mid-drag. This breaks the old
+//   feedback loop where per-move commits quantized the value in non-deg units
+//   (turn@2dp collapses 1° steps) and props.deg snapped away from the pointer.
+// - Exactly ONE commit happens per gesture, on pointerup/lostpointercapture.
+// - Shift+drag snaps to multiples of 15° (DevTools' coarse modifier — there is
+//     no "fine" mode on their dial).
+// - Escape mid-drag cancels: discard the preview, needle returns to props.deg.
+// - Keyboard nudges commit immediately: arrows ±1°, Shift+arrows ±15°.
 
-function RotationDial(props: { deg: number; onChange?: (deg: number) => void }) {
+function RotationDial(props: { deg: number; onCommit?: (deg: number) => void }) {
   const R = 7
   const cx = 9,
     cy = 9
-  const rad = () => ((props.deg - 90) * Math.PI) / 180
+  const [dragDeg, setDragDeg] = createSignal<number | undefined>(undefined)
+  // Mid-drag the local preview wins; at rest we render the authored value.
+  const shownDeg = () => dragDeg() ?? props.deg
+  const rad = () => ((shownDeg() - 90) * Math.PI) / 180
   const nx = () => +(cx + R * Math.cos(rad())).toFixed(2)
   const ny = () => +(cy + R * Math.sin(rad())).toFixed(2)
-  const interactive = () => typeof props.onChange === 'function'
+  const interactive = () => typeof props.onCommit === 'function'
   let svgEl: SVGSVGElement | undefined
   let dragging = false
 
   /** Pointer position → dial degrees (0° points up, clockwise positive). */
   function degFromEvent(e: PointerEvent): number {
     const rect = svgEl!.getBoundingClientRect()
-    const dx = e.clientX - (rect.left + rect.width / 2)
-    const dy = e.clientY - (rect.top + rect.height / 2)
-    let d = Math.round((Math.atan2(dy, dx) * 180) / Math.PI) + 90
-    if (d < 0) d += 360
-    if (d >= 360) d -= 360
-    return d
+    return degFromPoint(
+      rect.left + rect.width / 2,
+      rect.top + rect.height / 2,
+      e.clientX,
+      e.clientY,
+      shownDeg(),
+    )
   }
 
-  function onPointerDown(e: PointerEvent) {
+  function onDragKey(e: KeyboardEvent) {
+    if (e.key === 'Escape') cancelDrag()
+  }
+
+  function startDrag(e: PointerEvent) {
     if (!interactive()) return
     e.stopPropagation() // keep the owning chip from opening its editor
     e.preventDefault()
     dragging = true
+    window.addEventListener('keydown', onDragKey) // Escape mid-drag cancels
     try {
       svgEl!.setPointerCapture(e.pointerId)
     } catch {
       /* synthetic events may not support capture */
     }
-    props.onChange!(degFromEvent(e))
+    setDragDeg(degFromEvent(e)) // preview only — no store write yet
   }
 
   function onPointerMove(e: PointerEvent) {
     if (!dragging) return
     e.preventDefault()
-    props.onChange!(degFromEvent(e))
+    const raw = degFromEvent(e)
+    setDragDeg(e.shiftKey ? snapToMultiple(raw, 15) : raw)
   }
 
-  function endDrag() {
+  function cancelDrag() {
+    if (!dragging) return
     dragging = false
+    window.removeEventListener('keydown', onDragKey)
+    setDragDeg(undefined) // discard preview → needle restores props.deg
+  }
+
+  /** End of gesture. Commits the final previewed angle exactly once. */
+  function endDrag(commit: boolean) {
+    if (!dragging) return
+    dragging = false
+    window.removeEventListener('keydown', onDragKey)
+    const final = dragDeg()
+    setDragDeg(undefined)
+    if (commit && final !== undefined) props.onCommit!(final)
   }
 
   function onKeyDown(e: KeyboardEvent) {
     if (!interactive()) return
     const step = e.shiftKey ? 15 : 1
     let next: number | null = null
-    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') next = props.deg + step
-    else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') next = props.deg - step
+    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') next = shownDeg() + step
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') next = shownDeg() - step
     else return
     e.preventDefault()
     e.stopPropagation()
-    props.onChange!(((Math.round(next) % 360) + 360) % 360)
+    props.onCommit!(wrapDeg(Math.round(next)))
   }
 
   return (
@@ -236,13 +278,13 @@ function RotationDial(props: { deg: number; onChange?: (deg: number) => void }) 
       aria-label={interactive() ? 'Rotation' : undefined}
       aria-valuemin={interactive() ? 0 : undefined}
       aria-valuemax={interactive() ? 359 : undefined}
-      aria-valuenow={interactive() ? Math.round(((props.deg % 360) + 360) % 360) : undefined}
-      aria-valuetext={interactive() ? `${Math.round(props.deg)} degrees` : undefined}
+      aria-valuenow={interactive() ? Math.round(((shownDeg() % 360) + 360) % 360) : undefined}
+      aria-valuetext={interactive() ? `${Math.round(shownDeg())} degrees` : undefined}
       classList={{ 'kf-rot-dial--live': interactive() }}
-      onPointerDown={onPointerDown}
+      onPointerDown={startDrag}
       onPointerMove={onPointerMove}
-      onPointerUp={endDrag}
-      onLostPointerCapture={endDrag}
+      onPointerUp={() => endDrag(true)}
+      onLostPointerCapture={() => endDrag(true)}
       onKeyDown={onKeyDown}
       onClick={(e) => {
         if (interactive()) e.stopPropagation()
@@ -496,9 +538,12 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken; property?: Animata
           <Show when={subDeg() !== null}>
             <RotationDial
               deg={subDeg()!}
-              onChange={(d) => {
+              onCommit={(d) => {
+                // ONE write per gesture/keyboard nudge, formatted with
+                // DevTools per-unit precision (integers for deg/grad,
+                // ≤2dp turn / ≤4dp rad where round-trip allows).
                 const unit = props.sub.unit || 'deg'
-                commitSub(String(+fromDeg(d, unit).toFixed(2)), unit)
+                commitSub(formatAngle(d, unit), unit)
               }}
             />
           </Show>

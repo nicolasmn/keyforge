@@ -169,6 +169,80 @@ export function fromDeg(deg: number, unit: string): number {
   }
 }
 
+// ── Angle formatting (DevTools conventions) ───────────────────────────────────
+//
+// Chrome DevTools' roundAngleByUnit (CSSAngleUtils.ts) writes committed angle
+// strings at a per-unit precision: integers for deg/grad, ≤2dp for turn,
+// ≤4dp for rad. The old uniform `.toFixed(2)`-in-the-authored-unit produced
+// exactly the fractional noise this replaces ("0.02"-style collapse runs in
+// turn, lossy rad values).
+
+/** Decimal places after the point, per authored angle unit (DevTools baseline). */
+export const ANGLE_UNIT_PRECISION: Readonly<Record<string, number>> = {
+  deg: 0,
+  grad: 0,
+  turn: 2,
+  rad: 4,
+}
+
+/**
+ * Round-trip tolerance in degrees: whatever formatAngle emits must convert
+ * back to within this error of the dial's integer-degree value, or the needle
+ * visibly jumps away from the gesture on the next render. (DevTools' own 2dp
+ * turn quantum is 3.6° — max error 1.8° — so we widen precision just past its
+ * baseline when needed; see formatAngle.)
+ */
+const ROUND_TRIP_TOLERANCE_DEG = 0.5
+
+/** Hard cap on emitted decimals (rad's precision — never emit more than this). */
+const MAX_ANGLE_PRECISION = 4
+
+function wrapDeg360(deg: number): number {
+  return ((deg % 360) + 360) % 360
+}
+
+function trimZeros(s: string): string {
+  return s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s
+}
+
+/**
+ * Snap an angle to the nearest multiple of `step` degrees, wrapped to
+ * [0, 360). Used by Shift+drag on the rotation dial (DevTools' coarse
+ * modifier: multiples of 15°). With no/invalid step, passes through unchanged.
+ */
+export function snapToMultiple(deg: number, step?: number): number {
+  if (!step || step <= 0) return deg
+  const snapped = Math.round(deg / step) * step
+  return ((snapped % 360) + 360) % 360
+}
+
+/**
+ * Express an angle in the authored unit as a clean CSS number string,
+ * following DevTools per-unit precision (ANGLE_UNIT_PRECISION) with
+ * trailing zeros trimmed and no float noise (`0.3`, never
+ * `0.30000000000000004`, no scientific notation).
+ *
+ * Precision widens past the baseline only when the baseline would not round-
+ * trip within ROUND_TRIP_TOLERANCE_DEG of the input (e.g. 45° cannot be a
+ * clean 2dp turn — `0.13` is 46.8° — so it becomes `0.125`). Inputs are
+ * wrapped to [0, 360): 360 ≡ 0, −90 ≡ 270.
+ */
+export function formatAngle(deg: number, unit: string): string {
+  const d = wrapDeg360(deg)
+  const base = ANGLE_UNIT_PRECISION[unit] ?? 2
+  let out = trimZeros(fromDeg(d, unit).toFixed(base))
+  // Bump decimals until the committed string reads back as the same angle.
+  for (
+    let p = base;
+    p < MAX_ANGLE_PRECISION &&
+    Math.abs(toDeg(parseFloat(out), unit) - d) > ROUND_TRIP_TOLERANCE_DEG;
+    p++
+  ) {
+    out = trimZeros(fromDeg(d, unit).toFixed(p + 1))
+  }
+  return out === '-0' ? '0' : out
+}
+
 /** Build a sorted, unique completion list for a given token type + current value */
 export function completionsFor(type: string, current: string): string[] {
   switch (type) {
