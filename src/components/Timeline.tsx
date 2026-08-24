@@ -669,6 +669,12 @@ export default function Timeline() {
   }
 
   function onPointerDown(e: PointerEvent) {
+    // Primary-button guard (context-menus plan Step 0): right/middle mouse
+    // presses must never start a gesture. Without this, a right-click begins
+    // scrubbing (ghost chip + playhead jump + pointer capture) before the
+    // `contextmenu` event arrives — visible on every platform. Pen/touch
+    // keep their existing single-button behavior.
+    if (e.pointerType === 'mouse' && e.button !== 0) return
     if (activePointerId !== null) return // a gesture already owns the canvas
     beginDrag(e)
     // Capture the pointer so moves/ups keep streaming to the canvas even when
