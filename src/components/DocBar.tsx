@@ -1,5 +1,17 @@
-import { createMemo, createSignal, Show } from 'solid-js'
-import { doc, setDoc, replaceDoc, setSelectedLayerId } from '@/store'
+import { createMemo, createSignal, For, Show } from 'solid-js'
+import {
+  doc,
+  setDoc,
+  replaceDoc,
+  setSelectedLayerId,
+  listProjects,
+  activeProjectId,
+  openProject,
+  createProject,
+  duplicateProject,
+  deleteProject,
+  renameProject,
+} from '@/store'
 import { serializeDoc, deserializeDoc, validatePersisted } from '@/utils/persistence'
 import { parseCssToDoc } from '@/utils/cssImport'
 import { exportCssReducedMotion } from '@/utils/export'
@@ -82,8 +94,9 @@ export default function DocBar() {
 
   function commitName() {
     setRenaming(false)
-    const name = doc.name.trim()
-    if (!name) setDoc('name', 'Untitled')
+    // Route through the project registry so the index and the live document
+    // stay in lockstep (renameProject also uniquifies against siblings).
+    renameProject(activeProjectId()!, doc.name.trim() || 'Untitled')
   }
 
   /** Live-update the name while typing; Enter/blur just closes the editor. */
@@ -180,6 +193,40 @@ export default function DocBar() {
           autofocus
         />
       </Show>
+
+      {/* Project switcher (plan §5): pick active + lifecycle actions */}
+      <select
+        class="input doc-bar__switcher"
+        value={activeProjectId() ?? ''}
+        aria-label="Active project"
+        onChange={(e) => {
+          void openProject((e.currentTarget as HTMLSelectElement).value)
+        }}
+      >
+        <For each={listProjects()}>{(p) => <option value={p.id}>{p.name}</option>}</For>
+      </select>
+      <button class="btn btn--ghost" onClick={() => createProject()} title="New empty project">
+        + New
+      </button>
+      <button
+        class="btn btn--ghost"
+        onClick={() => duplicateProject(activeProjectId()!)}
+        title="Duplicate this project"
+      >
+        Duplicate
+      </button>
+      <button
+        class="btn btn--ghost"
+        onClick={() => {
+          const meta = listProjects().find((p) => p.id === activeProjectId())
+          if (meta && confirm(`Delete project "${meta.name}"? This cannot be undone.`)) {
+            deleteProject(meta.id)
+          }
+        }}
+        title="Delete this project"
+      >
+        Delete
+      </button>
 
       <button class="btn btn--ghost" onClick={exportJson} title="Export as JSON">
         Export
