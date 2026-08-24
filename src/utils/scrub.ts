@@ -1,8 +1,22 @@
 /**
  * Scrub interaction math — pure functions, unit-testable.
  *
- * Horizontal pointer movement maps to value deltas; Shift = ×10 coarse,
- * Alt = ÷10 fine. Per-unit sensitivity keeps px/ms/deg/% feeling similar.
+ * Horizontal pointer movement maps to value deltas; per-unit sensitivity
+ * keeps px/ms/deg/% feeling similar.
+ *
+ * UNIFIED MODIFIER LADDER (app-wide, applies to chip dragging AND arrow-key
+ * nudging AND the rotation dial):
+ *   default → 1-unit steps (whole numbers)
+ *   Alt     → ÷10 fine steps (0.1)
+ *   Shift   → ×10 coarse steps
+ *
+ * History: this module previously inverted the ladder (Shift = fine ÷10,
+ * Alt = coarse ×10) while every other surface — arrow nudges, dial Shift
+ * snapping, dial keyboard — used Shift = coarse. Unified on Shift = COARSE.
+ *
+ * Fractional-scale properties (`opacity`, standalone `scale`) keep a 0.05
+ * base step so their native [0..1]-ish range stays reachable at the default
+ * modifier; the ladder still scales it (Alt 0.005 / Shift 0.5).
  */
 
 const UNIT_SENSITIVITY: Record<string, number> = {
@@ -25,22 +39,59 @@ export function sensitivityFor(unit: string): number {
   return UNIT_SENSITIVITY[unit] ?? 5
 }
 
+export interface ScrubModifiers {
+  shift?: boolean
+  alt?: boolean
+}
+
+/** Fractional-scale properties whose usable increments are < 1 whole unit. */
+const FRACTIONAL_STEP_PROPERTIES = new Set(['opacity', 'scale'])
+
+/**
+ * Base quantization step (in the value's own unit) BEFORE modifier scaling:
+ * 1 whole unit everywhere except fractional-scale properties (opacity,
+ * scale), which step by 0.05 to stay usable inside their [0, 1] range.
+ */
+export function baseStepFor(property?: string): number {
+  return property !== undefined && FRACTIONAL_STEP_PROPERTIES.has(property) ? 0.05 : 1
+}
+
+/**
+ * Effective step for the active modifiers: Alt = ÷10 (fine), Shift = ×10
+ * (coarse). Both held → Alt wins (fine beats coarse, matches DevTools).
+ */
+export function stepWithModifiers(baseStep: number, modifiers: ScrubModifiers): number {
+  if (modifiers.alt) return baseStep / 10
+  if (modifiers.shift) return baseStep * 10
+  return baseStep
+}
+
 export interface ScrubState {
+  /** Kept for API compatibility with earlier call sites; `dx` is authoritative. */
   startX: number
   startValue: number
   unit: string
+  /** Owning property context → picks the base step via baseStepFor(). */
+  property?: string
+  /** Explicit base-step override; wins over the property/unit lookup when set. */
+  baseStep?: number
 }
 
-/** Value after dragging `dx` CSS pixels from the scrub origin. */
-export function scrubbedValue(
-  state: ScrubState,
-  dx: number,
-  modifiers: { shift?: boolean; alt?: boolean },
-): number {
-  const base = sensitivityFor(state.unit)
-  // Shift = fine (effect ÷10), Alt = coarse (effect ×10)
-  const effective = modifiers.shift ? base * 10 : modifiers.alt ? base / 10 : base
-  return round3(state.startValue + dx / effective)
+/**
+ * Quantized value after dragging `dx` CSS pixels from the scrub origin.
+ *
+ * Snapping is delta-relative (anchored at startValue): an off-grid starting
+ * value never jumps on grab — it only moves once the drag crosses half a
+ * step. Results are rounded to 3dp to strip binary-float noise from ÷10
+ * fine steps.
+ */
+export function scrubbedValue(state: ScrubState, dx: number, modifiers: ScrubModifiers): number {
+  const sensitivity = sensitivityFor(state.unit)
+  const base = state.baseStep ?? baseStepFor(state.property)
+  const step = stepWithModifiers(base, modifiers)
+  const raw = state.startValue + dx / sensitivity
+  const snapped = state.startValue + Math.round((raw - state.startValue) / step) * step
+  return round3(snapped)
 }
 
 function round3(n: number): number {
