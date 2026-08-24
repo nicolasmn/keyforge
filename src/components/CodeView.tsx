@@ -204,6 +204,9 @@ export default function CodeView() {
   onCleanup(() => clearTimeout(savedTimer))
 
   function enterEdit() {
+    // Editing is full-doc in Phase A — switch scopes automatically rather
+    // than leaving the button silently disabled (owner hit exactly that).
+    if (!showAll()) setShowAll(true)
     const snap = canonicalCss()
     setDraft(snap)
     setCommittedText(snap)
@@ -289,8 +292,7 @@ export default function CodeView() {
             <button
               class="btn btn--ghost code-view__btn"
               onClick={enterEdit}
-              disabled={!showAll()}
-              title={showAll() ? 'Edit the generated CSS' : 'Switch to Full doc to edit'}
+              title="Edit the generated CSS (edits apply to the full document)"
             >
               Edit
             </button>
