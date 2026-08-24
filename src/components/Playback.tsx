@@ -47,7 +47,13 @@ export default function Playback() {
       <button class="btn btn--ghost" onClick={stop} title="Stop">
         ⏹
       </button>
-      <button class="btn btn--primary" onClick={toggle}>
+      <button
+        class="btn btn--primary"
+        onClick={toggle}
+        aria-label={playing() ? 'Pause' : 'Play'}
+        aria-keyshortcuts="Space"
+        title={playing() ? 'Pause' : 'Play'}
+      >
         {playing() ? '⏸' : '▶'}
       </button>
       <button
@@ -55,6 +61,15 @@ export default function Playback() {
         classList={{ 'btn--active': loop() }}
         onClick={() => setLoop((v) => !v)}
         title="Loop"
+        aria-pressed={loop()}
+        style={
+          loop()
+            ? {
+                background: 'color-mix(in oklch, var(--color-accent) 14%, transparent)',
+                color: 'var(--color-accent)',
+              }
+            : undefined
+        }
       >
         ⟲
       </button>
@@ -97,6 +112,18 @@ export default function Playback() {
             onBlur={commitDuration}
             autofocus
           />
+          <span
+            class="playback__duration-hint"
+            role="status"
+            aria-live="polite"
+            style={{
+              'font-size': 'var(--font-size-xs)',
+              color: durationInvalid() ? 'var(--color-danger)' : 'var(--color-text-faint)',
+              'white-space': 'nowrap',
+            }}
+          >
+            {durationInvalid() ? 'Invalid — must be 0.1–60s' : '0.1–60s'}
+          </span>
         </Show>
       </span>
     </div>

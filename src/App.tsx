@@ -1,5 +1,6 @@
-import { Show } from 'solid-js'
+import { Show, onMount, onCleanup } from 'solid-js'
 import { createMediaQuery } from '@/utils/mediaQuery'
+import { installGlobalShortcuts } from '@/utils/playbackShortcuts'
 import LayerTree from '@/components/LayerTree'
 import Preview from '@/components/Preview'
 import Inspector from '@/components/Inspector'
@@ -28,6 +29,12 @@ function PreviewArea() {
 
 export default function App() {
   const isMobile = createMediaQuery('(max-width: 768px)')
+
+  // Global keyboard shortcuts (audit F22): Space toggles play/pause.
+  onMount(() => {
+    const disposeShortcuts = installGlobalShortcuts()
+    onCleanup(disposeShortcuts)
+  })
 
   return (
     <div class="app">
