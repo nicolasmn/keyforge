@@ -265,10 +265,13 @@ export default function Timeline() {
       ctx.restore()
       ctx.fillStyle = colorBorder
       ctx.fillRect(0, y + row.height * dpr - 1, width, 1)
-      ctx.fillRect(0, y + (row.height / 2) * dpr, width, 1)
+      // Keyframe baseline near the row's bottom edge (DevTools style):
+      // diamonds ride this line, easing fills rise above it.
+      const baselineY = y + (row.height - 7) * dpr
+      ctx.fillRect(0, baselineY, width, 1)
       track.keyframes.forEach((kf) => {
         const x = timeToX(kf.time, width / dpr) * dpr
-        const cy2 = y + (row.height / 2) * dpr
+        const cy2 = baselineY
         const isSelected = selectedKeyframeId() === kf.id
         const isHovered =
           hoverKf !== null &&
@@ -310,29 +313,23 @@ export default function Timeline() {
         if (gap < 14 * dpr) continue
         const pts = sampleEasingPoints(a.easing, 16)
         if (!pts) continue
-        const cy = y + (row.height / 2) * dpr
-        const glyphH = row.height * dpr * 0.38
+        const glyphH = (row.height - 9) * dpr
         const { lo, hi } = easingYExtent(pts)
         const span = hi - lo || 1
+        // DevTools-style: the easing is a soft FILLED area rising from the
+        // keyframe baseline — restrained fill only, no stroked line.
         ctx.save()
-        ctx.globalAlpha = 0.3 * ctx.globalAlpha
-        ctx.strokeStyle = colorAccent
-        ctx.lineWidth = 1 * dpr
-        ctx.lineCap = 'round'
-        ctx.lineJoin = 'round'
+        ctx.globalAlpha = 0.16 * ctx.globalAlpha
+        ctx.fillStyle = colorAccent
         ctx.beginPath()
-        let first = true
+        ctx.moveTo(x1 + 5 * dpr, baselineY)
         for (const p of pts) {
-          const gx = x1 + 6 * dpr + p.t * (gap - 12 * dpr)
-          const gy = cy + glyphH / 2 - ((p.v - lo) / span) * glyphH
-          if (first) {
-            ctx.moveTo(gx, gy)
-            first = false
-          } else {
-            ctx.lineTo(gx, gy)
-          }
+          const gx = x1 + 5 * dpr + p.t * (gap - 10 * dpr)
+          ctx.lineTo(gx, baselineY - ((p.v - lo) / span) * glyphH)
         }
-        ctx.stroke()
+        ctx.lineTo(x2 - 5 * dpr, baselineY)
+        ctx.closePath()
+        ctx.fill()
         ctx.restore()
       }
       ctx.restore() // hidden-layer dim wrapper
