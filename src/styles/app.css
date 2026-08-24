@@ -244,6 +244,20 @@
   .btn--active {
     color: var(--color-accent) !important;
   }
+  /* ── Snap increment picker ─────────────────────────────── */
+  .playback__snap {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+  .playback__snap select {
+    font-size: var(--font-size-xs);
+    font-family: inherit;
+    padding: 1px 2px;
+  }
 
   /* ── Timeline ────────────────────────────────────────────── */
   .timeline {

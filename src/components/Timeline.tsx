@@ -10,7 +10,10 @@ import {
   setSelectedKeyframeId,
   setSelectedLayerId,
   updateKeyframe,
+  snapIncrement,
 } from '@/store'
+import { snapTime } from '@/utils/snap'
+import { chooseLabelStep, formatTick, minorStepFor } from '@/utils/rulerScale'
 
 const TRACK_HEIGHT = 36
 const HEADER_HEIGHT = 28
@@ -22,8 +25,12 @@ const HANDLE_HIT = 12
 const CONTENT_PAD_BOTTOM = 2
 /** Half-width of the playhead's grabbable column, in CSS px (audit F24). */
 const PLAYHEAD_HIT = 6
-/** Minor tick count across the ruler (audit F23). */
-const MINOR_TICKS = 50
+/** Breathing room required after each ruler label (plan §4). */
+const LABEL_GAP_PX = 12
+/** Ticks closer than this many CSS px read as noise (plan §4). */
+const MIN_TICK_SPACING_PX = 6
+/** Opacity for lane gridlines over track backgrounds (plan §3). */
+const GRIDLINE_ALPHA = 0.35
 
 export default function Timeline() {
   let canvas: HTMLCanvasElement | undefined
@@ -51,6 +58,11 @@ export default function Timeline() {
       0,
       Math.min(doc.duration, ((x - LABEL_WIDTH) / (width - LABEL_WIDTH)) * doc.duration),
     )
+  }
+
+  /** User-gesture time for pointer x, quantized to the snap preference (plan §2). */
+  function snappedXToTime(x: number) {
+    return snapTime(xToTime(x, canvas!.offsetWidth), snapIncrement(), doc.duration)
   }
 
   function applyDurationFromX(x: number) {
@@ -94,17 +106,34 @@ export default function Timeline() {
 
     ctx.font = `${11 * dpr}px monospace`
     ctx.textBaseline = 'middle'
-    // Major ticks with labels — labels clamp inside the lane so the first
-    // isn't glued to the boundary and the last clears the duration handle
-    // (audit F23).
-    const tickCount = 10
-    const laneRight = width / dpr - HANDLE_HIT
-    for (let i = 0; i <= tickCount; i++) {
-      const t = (doc.duration / tickCount) * i
-      const x = timeToX(t, width / dpr)
+    // Adaptive label density: the finest nice (1-2-5) step whose labels
+    // can't collide in the current lane width, floored at duration/10 and
+    // capped at 1 ms. Measured AFTER the ruler font is set so widths match
+    // what's actually drawn (plan §4).
+    const cssWidth = width / dpr
+    const laneRight = cssWidth - HANDLE_HIT
+    const laneWidthCss = cssWidth - LABEL_WIDTH - HANDLE_HIT
+    const pxPerMs = doc.duration / laneWidthCss
+    const measureLabel = (label: string) => ctx.measureText(label).width / dpr
+    const labelStep = chooseLabelStep(
+      doc.duration,
+      laneWidthCss,
+      LABEL_GAP_PX,
+      MIN_TICK_SPACING_PX,
+      measureLabel,
+    )
+    const minorStep = minorStepFor(labelStep, pxPerMs)
+    // Major ticks at multiples of the step from 0 to floor(duration/step)*step.
+    // The last major may land before `duration` for non-divisible steps — the
+    // bold duration readout at the right edge still marks the end (plan §4).
+    const lastMajorIndex = Math.floor(doc.duration / labelStep)
+    const majorTimes: number[] = []
+    for (let i = 0; i <= lastMajorIndex; i++) majorTimes.push(i * labelStep)
+    for (const t of majorTimes) {
+      const x = timeToX(t, cssWidth)
       ctx.fillStyle = colorBorder
       ctx.fillRect(x * dpr, 0, 1, HEADER_HEIGHT * dpr)
-      const label = `${(t / 1000).toFixed(1)}s`
+      const label = formatTick(t, labelStep)
       const labelW = ctx.measureText(label).width / dpr
       let lx = x + 4
       if (lx < LABEL_WIDTH + 2) lx = LABEL_WIDTH + 2
@@ -112,12 +141,16 @@ export default function Timeline() {
       ctx.fillStyle = colorText
       ctx.fillText(label, lx * dpr, (HEADER_HEIGHT / 2) * dpr)
     }
-    // Minor ticks at 1/50 of the duration, 4px tall (audit F23).
-    for (let i = 1; i < MINOR_TICKS; i++) {
-      if (i % (MINOR_TICKS / tickCount) === 0) continue // skip majors
-      const t = (doc.duration / MINOR_TICKS) * i
-      const x = timeToX(t, width / dpr)
-      ctx.fillStyle = colorBorder
+    // Minor ticks between majors — a fifth of the label step, falling back
+    // to a half when that would sit closer than 4px apart (plan §4).
+    const minorRatio = Math.round(labelStep / minorStep) // exactly 5 or 2
+    const minorCount = Math.floor(doc.duration / minorStep)
+    ctx.fillStyle = colorBorder
+    for (let j = 1; j <= minorCount; j++) {
+      if (j % minorRatio === 0) continue // lands on a labeled major
+      const t = j * minorStep
+      if (t >= doc.duration) break
+      const x = timeToX(t, cssWidth)
       ctx.fillRect(x * dpr, 0, 1, 4 * dpr)
     }
 
@@ -163,6 +196,16 @@ export default function Timeline() {
         const y = (HEADER_HEIGHT + row * TRACK_HEIGHT) * dpr
         ctx.fillStyle = selectedLayerId() === layer.id ? 'hsl(220 12% 15%)' : colorBg
         ctx.fillRect(0, y, width, TRACK_HEIGHT * dpr)
+        // Label gridlines through the lanes (plan §3): after the row
+        // background but before diamonds, so full-height lines stay visible
+        // without washing out keyframes.
+        ctx.save()
+        ctx.globalAlpha = GRIDLINE_ALPHA
+        ctx.fillStyle = colorBorder
+        for (const t of majorTimes) {
+          ctx.fillRect(timeToX(t, width / dpr) * dpr, y, 1, TRACK_HEIGHT * dpr)
+        }
+        ctx.restore()
         ctx.fillStyle = colorBorder
         ctx.fillRect(0, y + TRACK_HEIGHT * dpr - 1, width, 1)
         ctx.fillStyle = colorText
@@ -204,8 +247,9 @@ export default function Timeline() {
       })
     })
 
-    // Playhead (audit F24): rounded grabbable cap, glow while scrubbing,
-    // time bubble during drags. The line itself stays a 2px accent hairline.
+    // Playhead (audit F24): triangle head in the ruler, glow while
+    // scrubbing, time bubble during drags. The line itself stays a 2px
+    // accent hairline.
     const ph = timeToX(playhead(), width / dpr) * dpr
     if (scrubbing) {
       ctx.save()
@@ -218,14 +262,18 @@ export default function Timeline() {
       ctx.fillStyle = colorAccent
       ctx.fillRect(ph, 0, 2 * dpr, height)
     }
-    // Rounded head cap sitting in the ruler.
-    const capR = 4 * dpr
-    const capY = Math.min(10 * dpr, (HEADER_HEIGHT / 2) * dpr)
+    // Triangle head pointing into the timeline (owner preference; reverts
+    // #62's dot/cap while keeping glow + time bubble + grab column).
+    // Apex at y=10px like the pre-#62 version, so it stays inside
+    // HEADER_HEIGHT even if that constant shrinks. 1px bg outline keeps it
+    // crisp over the ruler border, same convention as keyframe diamonds.
     ctx.beginPath()
-    ctx.arc(ph, capY, capR, 0, Math.PI * 2)
+    ctx.moveTo(ph - 6 * dpr, 0)
+    ctx.lineTo(ph + 6 * dpr, 0)
+    ctx.lineTo(ph, 10 * dpr)
     ctx.fillStyle = colorAccent
     ctx.fill()
-    ctx.lineWidth = 1.5 * dpr
+    ctx.lineWidth = 1 * dpr
     ctx.strokeStyle = colorBg
     ctx.stroke()
     // Time bubble while scrubbing — eyes stay on the playhead, not the counter.
@@ -418,7 +466,7 @@ export default function Timeline() {
       scrubbing = true
       ghostX = x
       setPlaying(false)
-      setPlayhead(xToTime(x, canvas!.offsetWidth))
+      setPlayhead(snappedXToTime(x))
       return
     }
     const hit = hitTestKeyframe(x, y)
@@ -438,7 +486,7 @@ export default function Timeline() {
       scrubbing = true
       ghostX = x
       setPlaying(false)
-      setPlayhead(xToTime(x, canvas!.offsetWidth))
+      setPlayhead(snappedXToTime(x))
     }
   }
 
@@ -454,12 +502,12 @@ export default function Timeline() {
     }
     if (scrubbing) {
       ghostX = x
-      setPlayhead(xToTime(x, canvas!.offsetWidth))
+      setPlayhead(snappedXToTime(x))
     }
     // Touch keeps its small-movement slop so sloppy taps don't nudge keyframes.
     if (draggingKf && (downPointerType !== 'touch' || movedPastSlop)) {
       updateKeyframe(draggingKf.layerId, draggingKf.trackId, draggingKf.kfId, {
-        time: Math.round(xToTime(x, canvas!.offsetWidth)),
+        time: Math.round(snappedXToTime(x)),
       })
     }
     if (activePointerId === null) {
@@ -504,7 +552,10 @@ export default function Timeline() {
     e.preventDefault()
     setPlaying(false)
     const msPerPx = doc.duration / (canvas!.offsetWidth - LABEL_WIDTH)
-    setPlayhead((prev) => Math.max(0, Math.min(doc.duration, prev + e.deltaX * msPerPx)))
+    setPlayhead((prev) => {
+      const next = Math.max(0, Math.min(doc.duration, prev + e.deltaX * msPerPx))
+      return snapTime(next, snapIncrement(), doc.duration)
+    })
   }
 
   function onDblClick(e: MouseEvent) {
