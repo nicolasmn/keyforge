@@ -3,7 +3,6 @@ import { doc, selectedLayerId, showOrigins, setLayerOrigin } from '@/store'
 import { slugify } from '@/utils/slugify'
 import {
   clampPercent,
-  originFromPointer,
   originPixelPoint,
   snapToPreset,
   type OriginResolveContext,
@@ -119,8 +118,15 @@ export default function OriginOverlay() {
   // edits, viewport resizes affecting vw/vh units) must re-measure even
   // though no store field changed. Panel resizes only change --preview-scale,
   // which offsets are immune to — bumping anyway is cheap and harmless.
+  // Track the mount gates so this re-wires whenever a child overlay actually
+  // appears: the surface/svg ref is our handle on the canvas, and at first
+  // mount neither may exist yet — fall back to the singleton stage node.
   createEffect(() => {
-    const canvas = surfaceEl?.parentElement
+    originPicking()
+    showOrigins()
+    const canvas =
+      surfaceEl?.closest<HTMLDivElement>('.preview__canvas') ??
+      document.querySelector<HTMLDivElement>('.preview__canvas')
     if (!canvas || typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver(() => bumpLayout((v) => v + 1))
     observer.observe(canvas)
@@ -165,12 +171,30 @@ export default function OriginOverlay() {
 
   // ── Gesture (RotationDial contract, plan §3) ───────────────────────────
 
-  /** Pointer → percentages via overlay-rect ratio (scale-invariant). Measures
-   *  the SURFACE rect — never the target element's bounding rect. */
+  /** Pointer → percentages ALONG THE TARGET BOX (scale-invariant).
+   *
+   *  Two consistent-space ratio hops: client px → canvas-layout px via the
+   *  SURFACE rect (numerator and denominator both live in the same scaled
+   *  client space, so the ancestor --preview-scale cancels), then canvas-
+   *  layout px → target-box % via the measured offset box. transform-origin
+   *  percentages resolve against the ELEMENT's own border box, so committing
+   *  canvas-relative numbers would land origins on the wrong spot of any
+   *  non-full-stage layer. The TARGET element's getBoundingClientRect is
+   *  still never used — offsets only, immune to its animated transform. */
   function rawPct(e: PointerEvent): { x: number; y: number } {
-    const rect = surfaceEl!.getBoundingClientRect()
-    const p = originFromPointer(e.clientX, e.clientY, rect)
-    return { x: Number.parseFloat(p.x), y: Number.parseFloat(p.y) }
+    const t = targetBox()
+    if (!t || !surfaceEl) return { x: 50, y: 50 }
+    const rect = surfaceEl.getBoundingClientRect()
+    const w = rect.width > 0 ? rect.width : 1
+    const h = rect.height > 0 ? rect.height : 1
+    // Surface spans the stage inset:0; offsetWidth/Height re-express that
+    // same box in unscaled canvas-layout px.
+    const lx = ((e.clientX - rect.left) / w) * surfaceEl.offsetWidth
+    const ly = ((e.clientY - rect.top) / h) * surfaceEl.offsetHeight
+    return {
+      x: clampPercent(((lx - t.left) / t.width) * 100),
+      y: clampPercent(((ly - t.top) / t.height) * 100),
+    }
   }
 
   function startGesture(e: PointerEvent) {

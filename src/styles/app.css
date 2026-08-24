@@ -709,3 +709,103 @@
 .kf-doc-menu__item:focus-visible svg {
   color: var(--color-accent);
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Transform-origin stage overlay (branch steward/fix-origin-picker)
+
+   #81 regression: PR #81 shipped OriginOverlay.tsx markup whose classes
+   had no rules anywhere, so the debug SVG + pick surface rendered as
+   static, default-sized boxes INSIDE .preview__canvas's flex row —
+   displacing the 600×400 stage ("breaks the preview layout") and
+   measuring pick clicks against a garbage rect.
+
+   Contract: overlays are position:absolute inset:0 — anchored to the
+   canvas padding box, which is exactly the origin of the offsetLeft/Top
+   coordinate space OriginOverlay draws in — so they never participate in
+   stage layout flow. The debug SVG is pointer-events:none ALWAYS; only
+   the pick surface accepts pointers, and it exists solely while pick
+   mode is active. Colors are theme tokens (--color-accent/-ink,
+   --color-text-faint, --color-stage) so dark and light themes both read
+   correctly (transform-origin plan §4 styling note).
+   ═══════════════════════════════════════════════════════════ */
+
+/* Debug SVG: covers the whole stage, drawing ghost outlines + crosshairs
+   in canvas-layout px (no viewBox on purpose: 1 user unit = 1 css px). */
+.kf-origin-debug {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+  /* Inert at all times — markers must never intercept stage input. */
+  pointer-events: none;
+  z-index: 30;
+}
+.kf-origin-debug__ghost {
+  fill: none;
+  stroke: var(--color-border);
+  stroke-dasharray: 4 3;
+}
+.kf-origin-debug__ghost--sel {
+  stroke: var(--color-text-faint);
+}
+.kf-origin-debug__cross {
+  stroke: var(--color-accent);
+}
+.kf-origin-debug__dot {
+  fill: var(--color-accent);
+  /* Stage-colored halo separates the dot from the crosshair lines under it
+     without hardcoding a color — flips with the theme for free. */
+  stroke: var(--color-stage);
+}
+
+/* Pick surface: exists ONLY while pick mode is active; covers the stage
+   inset:0 so its client-rect ratio maps clicks scale-invariantly. */
+.kf-origin-pick {
+  position: absolute;
+  inset: 0;
+  z-index: 31;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+/* Draggable origin handle: inline left/top place it; translate centers the
+   24px hit target on that point (plan §3: 12px glyph inside ≥24px target). */
+.kf-origin-handle {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+  border: none;
+  border-radius: 50%;
+  cursor: grab;
+  touch-action: none;
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--color-stage) 85%, transparent);
+}
+.kf-origin-handle:active {
+  cursor: grabbing;
+}
+.kf-origin-handle__glyph {
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* Screen-reader-only hint text (aria-describedby target). */
+.kf-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
