@@ -311,19 +311,19 @@ export default function Timeline() {
         const pts = sampleEasingPoints(a.easing, 16)
         if (!pts) continue
         const cy = y + (row.height / 2) * dpr
-        const glyphH = row.height * dpr * 0.5
+        const glyphH = row.height * dpr * 0.38
         const { lo, hi } = easingYExtent(pts)
         const span = hi - lo || 1
         ctx.save()
-        ctx.globalAlpha = 0.55 * ctx.globalAlpha
+        ctx.globalAlpha = 0.3 * ctx.globalAlpha
         ctx.strokeStyle = colorAccent
-        ctx.lineWidth = 1.5 * dpr
+        ctx.lineWidth = 1 * dpr
         ctx.lineCap = 'round'
         ctx.lineJoin = 'round'
         ctx.beginPath()
         let first = true
         for (const p of pts) {
-          const gx = x1 + 4 * dpr + p.t * (gap - 8 * dpr)
+          const gx = x1 + 6 * dpr + p.t * (gap - 12 * dpr)
           const gy = cy + glyphH / 2 - ((p.v - lo) / span) * glyphH
           if (first) {
             ctx.moveTo(gx, gy)
