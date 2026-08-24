@@ -1,6 +1,7 @@
 import type { AnimationDocument } from '@/types'
 import type { SnapIncrement } from './snap'
 import { SNAP_VALUES } from './snap'
+import { isValidOrigin } from './originMath'
 
 // ── Document persistence (localStorage) ───────────────────────────────
 // Pure functions, no Solid coupling, so they unit-test in node.
@@ -54,6 +55,17 @@ export function validatePersisted(parsed: unknown): AnimationDocument | null {
     // rejecting — a required field or version bump would wipe every
     // existing save back to emptyDefaultDoc().
     if (typeof layer.collapsed !== 'boolean') layer.collapsed = false
+    // Additive hardening (transform-origin plan §2): a malformed structured
+    // origin is DROPPED rather than rejected — same coercion philosophy as
+    // collapsed above, so hand-edited storage never wipes the whole save.
+    if (
+      layer.element != null &&
+      typeof layer.element === 'object' &&
+      layer.element.origin !== undefined &&
+      !isValidOrigin(layer.element.origin)
+    ) {
+      delete layer.element.origin
+    }
     if (!Array.isArray(layer.tracks)) return null
     for (const track of layer.tracks) {
       if (typeof track?.id !== 'string' || typeof track?.property !== 'string') return null
@@ -152,6 +164,12 @@ export interface PersistedPrefs {
   snapIncrement: SnapIncrement
   /** Additive (v1): absent in pre-theme blobs; deserializePrefs defaults 'dark'. */
   theme?: ThemeName
+  /**
+   * Additive (v1): stage transform-origin markers (debug view). Absent or
+   * garbage → absent (= false); only a literal `true` round-trips, keeping
+   * default blobs clean — same philosophy as theme/snapIncrement coercion.
+   */
+  showOrigins?: boolean
 }
 
 function isSnapIncrement(v: unknown): v is SnapIncrement {
@@ -172,6 +190,7 @@ export function serializePrefs(p: PersistedPrefs): string {
  * `theme` is additive: blobs saved before it existed deserialize to 'dark',
  * and unknown values coerce to 'dark' — same philosophy as snapIncrement,
  * so a corrupt field can never invalidate the rest of the blob.
+ * `showOrigins` is additive the same way: absent/garbage → absent (= false).
  */
 export function deserializePrefs(raw: string | null): PersistedPrefs | null {
   if (!raw) return null
@@ -184,11 +203,15 @@ export function deserializePrefs(raw: string | null): PersistedPrefs | null {
   if (typeof parsed !== 'object' || parsed === null) return null
   const p = parsed as Partial<PersistedPrefs>
   if (p.version !== 1) return null
-  return {
+  const prefs: PersistedPrefs = {
     version: 1,
     snapIncrement: isSnapIncrement(p.snapIncrement) ? p.snapIncrement : 'off',
     theme: p.theme === 'light' ? 'light' : 'dark',
   }
+  // Default false→absent: the key is only written when explicitly true, so
+  // legacy blobs and cleared toggles stay byte-clean (no `"showOrigins":false`).
+  if (p.showOrigins === true) prefs.showOrigins = true
+  return prefs
 }
 
 /** Best-effort read; returns null without localStorage or on failure. */
@@ -205,7 +228,12 @@ export function loadPrefs(): PersistedPrefs | null {
 export function savePrefs(p: PersistedPrefs): void {
   try {
     if (typeof localStorage === 'undefined') return
-    localStorage.setItem(PREFS_KEY, serializePrefs(p))
+    // Merge over the last persisted blob so additive fields written by one
+    // surface (e.g. the stage origins toggle) survive whole-blob rewrites
+    // from another surface (snap picker, theme toggle). Explicit values in
+    // `p` always win, including deliberate false/absent resets.
+    const prev = loadPrefs()
+    localStorage.setItem(PREFS_KEY, serializePrefs({ ...prev, ...p }))
   } catch {
     // storage unavailable/full — the setting just won't survive a reload
   }
