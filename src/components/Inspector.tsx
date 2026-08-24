@@ -25,7 +25,7 @@ import {
   onMount,
   type Component,
 } from 'solid-js'
-import { render } from 'solid-js/web'
+import { render, Portal } from 'solid-js/web'
 import {
   selectedLayerId,
   selectedKeyframeId,
@@ -50,6 +50,17 @@ import type {
   SubToken,
 } from '@/types'
 import EasingEditor from './EasingEditor'
+import { EasingCurveChip } from './EasingCurveChip'
+import {
+  easingTarget,
+  closeEasingPopover,
+  toggleEasingPopover,
+  isEasingPopoverOpenFor,
+  type EasingPopoverAnchor,
+  type EasingPopoverTarget,
+} from './easingPopover'
+import { builtinNameFor } from '@/utils/easingCurve'
+import { parseCubicBezier } from '@/utils/easing-presets'
 import OriginSection from './OriginSection'
 import { RotationDial, NumberUnitField } from './fields'
 import { tokenizeKeyframe, NUMBER_UNIT_RE } from '@/utils/tokenize'
@@ -701,10 +712,46 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
 
 // ── KeyframeRow ────────────────────────────────────────────────────────────────
 
+/** Shortened easing label for the mini-curve chip (plan §3): preset name
+ *  when resolvable, compacted control points for literal beziers, stop
+ *  count for springs, truncated raw otherwise. */
+function shortEasingLabel(value: string): string {
+  const t = value.trim()
+  const named = builtinNameFor(t)
+  if (named) return named
+  const b = parseCubicBezier(t)
+  if (b) return `(${b.map((n) => String(+n.toFixed(2)).replace(/^(-?)0\./, '$1.')).join(', ')})`
+  const lm = t.match(/^linear\s*\(([^)]*)\)/i)
+  if (lm) return `linear(${lm[1].split(',').filter(Boolean).length})`
+  return t.length > 16 ? `${t.slice(0, 15)}…` : t
+}
+
+/** Viewport-space anchor for the popover: the chip's bottom-left corner —
+ *  the popover flips/clamps itself from here (see EasingEditor.reposition). */
+function chipAnchor(chipEl: HTMLElement | undefined): EasingPopoverAnchor {
+  if (!chipEl) return { x: 0, y: 0 }
+  const r = chipEl.getBoundingClientRect()
+  return { x: r.left, y: r.bottom }
+}
+
 function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
-  const [easingOpen, setEasingOpen] = createSignal(false)
+  // The easing editor is now a single app-wide popover (plan §3); this row
+  // only owns its chip + anchor. No inline expansion, no layout shift.
   const [editTime, setEditTime] = createSignal(false)
   let timeInputEl: HTMLInputElement | undefined
+  let chipEl: HTMLSpanElement | undefined
+
+  const toggleEasing = () =>
+    toggleEasingPopover({
+      layerId: props.layerId,
+      trackId: props.track.id,
+      keyframeId: props.kf.id,
+      origin: 'inspector',
+      // #48 focus contract: the editor invokes this exactly once on true
+      // close (not on retarget) so focus lands back on THIS chip.
+      restoreFocus: () => chipEl?.focus(),
+      anchor: () => chipAnchor(chipEl),
+    })
 
   // F11: scroll target when this keyframe gets selected from the timeline.
   let rowEl: HTMLDivElement | undefined
@@ -712,7 +759,6 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
   // Per-row token derivation from the store proxy: reactive to this row's
   // fields only, so sibling rows never recompute (or remount) on a commit.
   const valueToken = createMemo(() => tokenizeKeyframe(props.layerId, props.track, props.kf)[0])
-  const easingToken = createMemo(() => tokenizeKeyframe(props.layerId, props.track, props.kf)[1])
 
   // Cross-highlight follow-through (audit F11): when selection ORIGINATES on
   // the timeline canvas, bring the owning row into view — DevTools-style.
@@ -795,18 +841,25 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
 
         <ValueChip token={valueToken()} property={props.track.property} />
 
+        {/* Mini-curve chip (plan §3): shape thumbnail + shortened label.
+            Opens/toggles THE single app-wide easing popover anchored here;
+            outside-click dismiss ignores chips via [data-easing-chip] so a
+            chip click never closes-then-reopens. */}
         <span
+          ref={chipEl}
           class="kf-chip kf-chip--easing"
-          classList={{ 'kf-chip--easing-open': easingOpen() }}
+          classList={{ 'kf-chip--easing-open': isEasingPopoverOpenFor(props.kf.id) }}
+          data-easing-chip=""
           tabindex={0}
           role="button"
           aria-label={`Edit easing curve ${props.kf.easing}`}
-          aria-expanded={easingOpen()}
-          onClick={() => setEasingOpen((v) => !v)}
-          onKeyDown={(e: KeyboardEvent) => chipKeyDown(e, () => setEasingOpen((v) => !v))}
+          aria-expanded={isEasingPopoverOpenFor(props.kf.id)}
+          onClick={toggleEasing}
+          onKeyDown={(e: KeyboardEvent) => chipKeyDown(e, toggleEasing)}
           title="Edit easing curve"
         >
-          {props.kf.easing}
+          <EasingCurveChip value={props.kf.easing} />
+          <span class="kf-chip__label">{shortEasingLabel(props.kf.easing)}</span>
         </span>
 
         <button
@@ -823,14 +876,6 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
           ✕
         </button>
       </div>
-
-      <Show when={easingOpen()}>
-        <EasingEditor
-          value={props.kf.easing}
-          onChange={(v) => commit(easingToken().path, v)}
-          onClose={() => setEasingOpen(false)}
-        />
-      </Show>
     </div>
   )
 }
@@ -911,6 +956,17 @@ type Tab = 'inspector' | 'css'
 export default function Inspector() {
   const [activeTab, setActiveTab] = createSignal<Tab>('inspector')
   const layer = () => getSelectedLayer()
+
+  // ── Single easing-editor popover (plan §3) ───────────────────────────
+  // Exactly one instance app-wide, body-portaled so it floats above the
+  // panel instead of expanding a row (F1). The mirror memo keeps the LAST
+  // non-null target for props while the <Show> tears down, so EasingEditor's
+  // onCleanup (focus restore) can never read a null target mid-close.
+  const [lastTarget, setLastTarget] = createSignal<EasingPopoverTarget | null>(null)
+  createEffect(() => {
+    const t = easingTarget()
+    if (t) setLastTarget(t)
+  })
 
   // ── Batch easing assistant shortcut (plan §3.2, Phase A) ──────────────
   // F9 = AE's Easy Ease muscle memory: ease EVERY keyframe of the track
@@ -1040,6 +1096,15 @@ export default function Inspector() {
           <CodeViewComponent />
         </Show>
       </Show>
+
+      {/* The easing popover — mounted at the root so it survives tab
+          switches and layer re-selection while open; retargeting (opening
+          another chip or a timeline diamond) swaps the target in place. */}
+      <Portal>
+        <Show when={easingTarget()}>
+          <EasingEditor target={lastTarget()!} onClose={closeEasingPopover} />
+        </Show>
+      </Portal>
     </aside>
   )
 }
