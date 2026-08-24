@@ -11,7 +11,10 @@
   --label-fs: 11px;
   --indent: 20px;
   --track-header-h: 24px;
-  --chip-error: var(--color-error, #e06c6c);
+  /* Resolves to --color-danger (theme-dependent). --color-error never
+     existed, so the old var(--color-error, #e06c6c) always fell back to a
+     hardcoded literal — fixed by referencing the real danger token. */
+  --chip-error: var(--color-danger);
   font-family: var(--mono);
   font-size: var(--label-fs);
   line-height: 1.4;
@@ -292,7 +295,7 @@
   opacity: 1;
 }
 .kf-row__delete:hover {
-  color: #fff;
+  color: var(--color-danger-ink);
   background: var(--chip-error);
 }
 
@@ -312,7 +315,7 @@
   line-height: var(--row-h);
 }
 .kf-time:hover {
-  background: var(--color-surface-2, #2a2a2a);
+  background: var(--color-surface-2);
   color: var(--color-text);
 }
 .kf-time__unit {
@@ -321,7 +324,7 @@
   margin-left: 1px;
 }
 .kf-time--input {
-  background: var(--color-surface-2, #2a2a2a) !important;
+  background: var(--color-surface-2) !important;
   border: 1px solid var(--color-accent) !important;
   color: var(--color-text) !important;
   outline: none !important;

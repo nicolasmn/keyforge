@@ -10,6 +10,7 @@ import {
   setDuration,
   snapIncrement,
   setSnapIncrement,
+  theme,
 } from '@/store'
 import { savePrefs } from '@/utils/persistence'
 import type { SnapIncrement } from '@/utils/snap'
@@ -109,7 +110,9 @@ export default function Playback(props: PlaybackProps = {}) {
             const raw = (e.currentTarget as HTMLSelectElement).value
             const v = SNAP_OPTIONS.find((o) => String(o.value) === raw)?.value ?? 'off'
             setSnapIncrement(v)
-            savePrefs({ version: 1, snapIncrement: v })
+            // Full-blob write: theme rides along so a snap change never
+            // clobbers the persisted theme (prefs blob is version-1 whole).
+            savePrefs({ version: 1, snapIncrement: v, theme: theme() })
           }}
         >
           <For each={SNAP_OPTIONS}>{(o) => <option value={String(o.value)}>{o.label}</option>}</For>

@@ -43,7 +43,7 @@
     box-shadow: var(--shadow-md);
   }
 
-  /* Keyframe-diamond motif (matches .keyframe-dot) */
+  /* Keyframe-diamond motif (mirrors the canvas diamonds) */
   .empty-state__art {
     display: flex;
     align-items: center;

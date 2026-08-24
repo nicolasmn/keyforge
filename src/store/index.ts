@@ -9,8 +9,10 @@ import {
   hasOnboarded,
   markOnboarded,
   loadPrefs,
+  savePrefs,
 } from '@/utils/persistence'
 import type { SnapIncrement } from '@/utils/snap'
+import type { ThemeName } from '@/utils/persistence'
 import { interpolatedValueAt } from '@/utils/interpolate'
 import { createStarterBoxLayer } from '@/utils/sampleDoc'
 
@@ -134,6 +136,30 @@ export const [loop, setLoop] = createSignal(true)
 export const [snapIncrement, setSnapIncrement] = createSignal<SnapIncrement>(
   loadPrefs()?.snapIncrement ?? 'off',
 )
+
+// ── Theme preference ───────────────────────────────────────────────────
+/**
+ * Explicit user theme ('dark' | 'light'). Restored from the same prefs
+ * blob as snapping; index.html's inline pre-paint script has already set
+ * `data-theme` on <html> by the time this module runs — mirror it here so
+ * the DOM attribute and this signal can never diverge (the script and
+ * loadPrefs read the same storage key).
+ */
+const initialTheme: ThemeName = loadPrefs()?.theme ?? 'dark'
+export const [theme, setTheme] = createSignal<ThemeName>(initialTheme)
+if (typeof document !== 'undefined') {
+  document.documentElement.dataset.theme = initialTheme
+}
+
+/** Flip dark ↔ light, update <html data-theme>, persist. */
+export function toggleTheme() {
+  const next: ThemeName = theme() === 'dark' ? 'light' : 'dark'
+  if (typeof document !== 'undefined') {
+    document.documentElement.dataset.theme = next
+  }
+  setTheme(next)
+  savePrefs({ version: 1, snapIncrement: snapIncrement(), theme: next })
+}
 
 // ── Mutations ──────────────────────────────────────────────────────────
 

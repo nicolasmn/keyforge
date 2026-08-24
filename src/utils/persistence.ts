@@ -144,9 +144,14 @@ export function clearOnboarded(): void {
 
 export const PREFS_KEY = 'keyforge:prefs:v1'
 
+/** Explicit user theme choice — no OS auto-detection; schema stays v1. */
+export type ThemeName = 'dark' | 'light'
+
 export interface PersistedPrefs {
   version: 1
   snapIncrement: SnapIncrement
+  /** Additive (v1): absent in pre-theme blobs; deserializePrefs defaults 'dark'. */
+  theme?: ThemeName
 }
 
 function isSnapIncrement(v: unknown): v is SnapIncrement {
@@ -164,6 +169,9 @@ export function serializePrefs(p: PersistedPrefs): string {
  * Returns validated prefs, or null when missing/corrupt.
  * Unknown snap values fall back to 'off' instead of rejecting the payload,
  * so a future rename can't strand the whole prefs blob.
+ * `theme` is additive: blobs saved before it existed deserialize to 'dark',
+ * and unknown values coerce to 'dark' — same philosophy as snapIncrement,
+ * so a corrupt field can never invalidate the rest of the blob.
  */
 export function deserializePrefs(raw: string | null): PersistedPrefs | null {
   if (!raw) return null
@@ -179,6 +187,7 @@ export function deserializePrefs(raw: string | null): PersistedPrefs | null {
   return {
     version: 1,
     snapIncrement: isSnapIncrement(p.snapIncrement) ? p.snapIncrement : 'off',
+    theme: p.theme === 'light' ? 'light' : 'dark',
   }
 }
 

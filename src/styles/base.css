@@ -67,15 +67,31 @@
     --color-text-faint: hsl(220 8% 48%);
     --color-accent: hsl(264 80% 68%);
     --color-accent-dim: hsl(264 50% 30%);
+    /* Semantic accent fills/inks (light-theme plan §1b): components stay
+       theme-blind — the ink ON an accent fill flips between near-black
+       (dark theme) and white (light theme) via --color-accent-ink. */
+    --color-accent-hover: hsl(264 80% 74%);
+    --color-accent-ink: hsl(262 30% 12%);
     --color-success: hsl(145 60% 48%);
     --color-warning: hsl(38 90% 55%);
     --color-danger: hsl(0 72% 58%);
+    /* Ink on danger fills (inspector delete-hover). */
+    --color-danger-ink: hsl(0 0% 100%);
 
     /* Keyframe track colors */
     --color-track-1: hsl(264 80% 68%);
     --color-track-2: hsl(200 80% 60%);
     --color-track-3: hsl(145 60% 48%);
     --color-track-4: hsl(38 90% 55%);
+
+    /* Canvas-painted surfaces — the Timeline reads these via
+       getComputedStyle each draw() (see also --color-row-group below,
+       added after the plan was cut when collapsible layer rows (#71)
+       introduced their own literal). */
+    --color-stage: hsl(220 12% 10%);
+    --color-row-group: hsl(220 10% 11%);
+    --color-row-selected: hsl(220 12% 15%);
+    --color-kf-selected: hsl(0 0% 100%);
 
     /* Typography */
     --font-sans: system-ui, -apple-system, sans-serif;
@@ -130,10 +146,67 @@
     --duration-base: 220ms;
     --duration-slow: 400ms;
   }
+
+  /* ---- LIGHT THEME ----
+     Explicit user preference only (no prefers-color-scheme auto-detect).
+     Same hues as dark where possible; lightness/saturation inverted around
+     the mid point. Every value below is WCAG-checked — see
+     src/utils/contrast.test.ts, which parses BOTH blocks and fails CI on
+     contrast drift or token parity loss. */
+  [data-theme='light'] {
+    --color-bg: hsl(220 20% 98%);
+    --color-surface: hsl(220 17% 95.5%);
+    --color-surface-2: hsl(220 15% 91%);
+    --color-border: hsl(220 13% 84%);
+    --color-text: hsl(225 22% 14%);
+    --color-text-muted: hsl(222 12% 35%);
+    --color-text-faint: hsl(222 10% 42%);
+    --color-accent: hsl(262 72% 49%);
+    --color-accent-hover: hsl(262 74% 42%);
+    --color-accent-dim: hsl(262 60% 90%);
+    --color-accent-ink: hsl(0 0% 100%); /* ink flip: white on the darker light-mode accent */
+    --color-success: hsl(151 62% 30%);
+    --color-warning: hsl(33 95% 32%);
+    --color-danger: hsl(2 70% 43%);
+    --color-danger-ink: hsl(0 0% 100%);
+
+    --color-track-1: hsl(262 72% 49%);
+    --color-track-2: hsl(205 82% 36%);
+    --color-track-3: hsl(152 64% 29%);
+    --color-track-4: hsl(34 92% 34%);
+
+    --color-stage: hsl(220 16% 94%);
+    --color-row-group: hsl(220 16% 93%);
+    --color-row-selected: hsl(220 15% 91%);
+    --color-kf-selected: hsl(225 22% 14%);
+
+    --chip-num: hsl(212 85% 38%);
+    --chip-color: hsl(24 88% 37%);
+    --chip-easing: hsl(286 58% 44%);
+    --chip-fn: hsl(38 92% 27%);
+
+    /* Light shadows: same geometry, low-alpha blue-tinted black instead of
+       dark theme's heavy pure-black. */
+    --shadow-sm: 0 1px 3px hsl(220 30% 20% / 0.08);
+    --shadow-md: 0 4px 12px hsl(220 30% 20% / 0.1);
+    --shadow-lg: 0 8px 32px hsl(220 30% 20% / 0.14);
+  }
 }
 
 /* ---- BASE ---- */
 @layer base {
+  /* Native chrome follows the theme: scrollbars, form controls, and the
+     native selects in .inspector__add-track / .kf-num-field__unit. The
+     pre-paint script in index.html always sets data-theme, but the
+     :not([data-theme]) branch keeps bare-document loads on dark. */
+  html[data-theme='light'] {
+    color-scheme: light;
+  }
+  html[data-theme='dark'],
+  html:not([data-theme]) {
+    color-scheme: dark;
+  }
+
   html,
   body {
     height: 100%;

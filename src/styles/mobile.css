@@ -130,6 +130,17 @@
       letter-spacing: 0.05em;
       text-transform: uppercase;
     }
+
+    /* Theme toggle rides at the bar's end as a fixed-width slot with a
+       separator — it isn't a tab, so no flex growth or active state. */
+    .mobile-tabs .theme-toggle {
+      flex: 0 0 auto;
+      align-self: center;
+      border-left: 1px solid var(--color-border);
+      border-radius: 0;
+      padding-inline: var(--space-3);
+      min-height: 52px;
+    }
   }
 }
 

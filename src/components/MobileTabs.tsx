@@ -1,5 +1,6 @@
 import { createSignal, For } from 'solid-js'
 import type { JSX } from 'solid-js'
+import ThemeToggle from '@/components/ThemeToggle'
 
 export type TabId = 'layers' | 'preview' | 'inspector'
 
@@ -26,6 +27,9 @@ export default function MobileTabs(): JSX.Element {
           </button>
         )}
       </For>
+      {/* DocBar is hidden on mobile — the toggle needs a second mount here
+          so both shells expose it (shared component, shared handler). */}
+      <ThemeToggle />
     </nav>
   )
 }

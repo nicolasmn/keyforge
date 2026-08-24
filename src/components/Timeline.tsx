@@ -12,6 +12,7 @@ import {
   toggleLayerCollapsed,
   updateKeyframe,
   snapIncrement,
+  theme,
 } from '@/store'
 import { snapTime } from '@/utils/snap'
 import { chooseLabelStep, formatTick, minorStepFor } from '@/utils/rulerScale'
@@ -111,7 +112,11 @@ export default function Timeline() {
     const colorText = cssVars.getPropertyValue('--color-text-muted').trim()
     const colorTextStrong = cssVars.getPropertyValue('--color-text').trim()
     const colorAccent = cssVars.getPropertyValue('--color-accent').trim()
-    const colorPrimary = cssVars.getPropertyValue('--color-primary').trim()
+    // Canvas-painted surfaces (theme tokens — never literals here):
+    // group rows, the selected-lane tint, and the selected-diamond fill.
+    const colorRowGroup = cssVars.getPropertyValue('--color-row-group').trim()
+    const colorRowSelected = cssVars.getPropertyValue('--color-row-selected').trim()
+    const colorKfSelected = cssVars.getPropertyValue('--color-kf-selected').trim()
     const trackColors = [
       cssVars.getPropertyValue('--color-track-1').trim(),
       cssVars.getPropertyValue('--color-track-2').trim(),
@@ -177,12 +182,12 @@ export default function Timeline() {
 
     ctx.font = `bold ${10 * dpr}px monospace`
     ctx.textAlign = 'right'
-    ctx.fillStyle = colorPrimary
+    ctx.fillStyle = colorAccent
     ctx.fillText(`${doc.duration}ms`, width - (HANDLE_HIT + 4) * dpr, (HEADER_HEIGHT / 2) * dpr)
     ctx.textAlign = 'left'
 
     const handleX = width - (HANDLE_HIT * dpr) / 2
-    ctx.fillStyle = colorPrimary
+    ctx.fillStyle = colorAccent
     ctx.fillRect(handleX - dpr, 0, 2 * dpr, HEADER_HEIGHT * dpr)
     const cx = handleX
     const cy = (HEADER_HEIGHT / 2) * dpr
@@ -194,7 +199,7 @@ export default function Timeline() {
     ctx.moveTo(cx + aw, cy - aw)
     ctx.lineTo(cx + aw * 2, cy)
     ctx.lineTo(cx + aw, cy + aw)
-    ctx.strokeStyle = colorPrimary
+    ctx.strokeStyle = colorAccent
     ctx.lineWidth = 1.5 * dpr
     ctx.stroke()
 
@@ -232,7 +237,7 @@ export default function Timeline() {
       const track = layer.tracks[ti]
       if (!track) return
       const y = row.y * dpr
-      ctx.fillStyle = selectedLayerId() === row.layerId ? 'hsl(220 12% 15%)' : colorBg
+      ctx.fillStyle = selectedLayerId() === row.layerId ? colorRowSelected : colorBg
       ctx.fillRect(0, y, width, row.height * dpr)
       // Label gridlines through the lanes (plan §3): after the row
       // background but before diamonds, so full-height lines stay visible
@@ -269,7 +274,7 @@ export default function Timeline() {
         // four track colors (F25).
         const r = KF_RADIUS * dpr * (isHovered ? 1.3 : 1)
         const color = trackColors[ti % trackColors.length]
-        ctx.fillStyle = isSelected ? '#fff' : color
+        ctx.fillStyle = isSelected ? colorKfSelected : color
         ctx.fillRect(-r / 2, -r / 2, r, r)
         ctx.lineWidth = 1 * dpr
         ctx.strokeStyle = colorBg
@@ -290,7 +295,7 @@ export default function Timeline() {
       const isSelected = selectedLayerId() === row.layerId
       // Group-header background: slightly darker neutral so summary rows read
       // as groups; the selected-layer tint wins when it applies.
-      ctx.fillStyle = isSelected ? 'hsl(220 12% 15%)' : 'hsl(220 10% 11%)'
+      ctx.fillStyle = isSelected ? colorRowSelected : colorRowGroup
       ctx.fillRect(0, y, width, hD)
       // Full-width top + bottom hairlines separate groups crisply.
       ctx.fillStyle = colorBorder
@@ -749,6 +754,7 @@ export default function Timeline() {
     void playhead()
     void selectedKeyframeId()
     void selectedLayerId()
+    void theme() // repaint on theme flip — canvas colors come from CSS vars
     cancelAnimationFrame(raf)
     raf = requestAnimationFrame(draw)
   })
