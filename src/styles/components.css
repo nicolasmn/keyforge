@@ -17,7 +17,8 @@
 
   .btn--primary {
     background: var(--color-accent);
-    color: hsl(0 0% 100%);
+    /* Near-black ink ≈7:1 on accent — white was 3.56:1, large-text-only (audit F4). */
+    color: hsl(262 30% 12%);
   }
   .btn--primary:hover {
     background: hsl(264 80% 74%);
