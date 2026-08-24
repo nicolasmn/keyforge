@@ -23,6 +23,7 @@ import type { SnapIncrement } from '@/utils/snap'
 import type { ThemeName } from '@/utils/persistence'
 import { interpolatedValueAt } from '@/utils/interpolate'
 import { createStarterBoxLayer } from '@/utils/sampleDoc'
+import { isValidOriginComponent } from '@/utils/originMath'
 
 // ── Default document ──────────────────────────────────────────────────
 /**
@@ -390,6 +391,23 @@ export function toggleTheme() {
   savePrefs({ version: 1, snapIncrement: snapIncrement(), theme: next })
 }
 
+// ── Transform-origin debug view ────────────────────────────────────────
+/**
+ * Stage markers (crosshairs + ghost outlines) visualizing each layer's
+ * transform-origin. Additive pref like snap/theme: absent in older blobs →
+ * false. While pick mode is active the overlay renders regardless.
+ */
+const [showOriginsState, setShowOriginsState] = createSignal<boolean>(
+  loadPrefs()?.showOrigins === true,
+)
+export const showOrigins = showOriginsState
+
+/** Flip marker visibility on the stage and persist it additively. */
+export function setShowOrigins(next: boolean) {
+  setShowOriginsState(next)
+  savePrefs({ version: 1, snapIncrement: snapIncrement(), theme: theme(), showOrigins: next })
+}
+
 // ── Mutations ──────────────────────────────────────────────────────────
 
 /**
@@ -503,6 +521,41 @@ export function setLayerCollapsed(layerId: string, collapsed: boolean) {
 export function toggleLayerCollapsed(layerId: string) {
   const current = doc.layers.find((l) => l.id === layerId)?.collapsed === true
   setLayerCollapsed(layerId, !current)
+}
+
+// ── Transform-origin mutations ─────────────────────────────────────────
+/**
+ * Static transform-origin for a layer's element (structured field on
+ * LayerElement, never mirrored into initialCss). Components are validated
+ * at write time against ORIGIN_COMPONENT_RE and stored verbatim (trimmed);
+ * invalid input is a no-op — the UI reverts instead. Unknown layer ids are
+ * no-ops. Once set, an explicit `50% 50%` stays (WYSIWYG: marker + exported
+ * decl remain visible even at the CSS-default position).
+ */
+export function setLayerOrigin(layerId: string, x: string, y: string) {
+  const nx = x.trim()
+  const ny = y.trim()
+  if (!isValidOriginComponent(nx) || !isValidOriginComponent(ny)) return
+  setDoc(
+    produce((d) => {
+      const layer = d.layers.find((l) => l.id === layerId)
+      if (!layer) return
+      layer.element.origin = { x: nx, y: ny }
+    }),
+  )
+}
+
+/**
+ * Remove the structured origin entirely so persisted JSON stays clean
+ * (absent key = "user never touched it", not "explicitly centered").
+ */
+export function clearLayerOrigin(layerId: string) {
+  setDoc(
+    produce((d) => {
+      const layer = d.layers.find((l) => l.id === layerId)
+      if (layer && layer.element.origin !== undefined) delete layer.element.origin
+    }),
+  )
 }
 
 /**

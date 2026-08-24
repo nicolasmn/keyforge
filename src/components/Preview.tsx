@@ -1,5 +1,6 @@
 import { createEffect, createMemo, For, onCleanup, onMount, untrack } from 'solid-js'
 import { doc, playing, setPlaying, playhead, setPlayhead, loop } from '@/store'
+import OriginOverlay from '@/components/OriginOverlay'
 import { generateCss } from '@/utils/css'
 import { slugify } from '@/utils/slugify'
 
@@ -115,6 +116,7 @@ export default function Preview() {
     <div class="preview" ref={panelRef}>
       <style ref={styleEl} />
       <div class="preview__canvas">
+        <OriginOverlay />
         <For each={doc.layers}>
           {(layer) => (
             <div

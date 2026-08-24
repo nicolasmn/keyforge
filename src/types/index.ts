@@ -33,10 +33,29 @@ export interface Track {
   keyframes: Keyframe[]
 }
 
+/**
+ * One axis of a static transform-origin: a length-percentage string
+ * ('50%', '0px', '2em', …). Keywords (left/top/center) are UI presets that
+ * convert to % before storing — the store keeps the authored unit verbatim,
+ * validated at write time against ORIGIN_COMPONENT_RE (utils/originMath).
+ */
+export interface OriginPoint {
+  x: string
+  y: string
+}
+
 export interface LayerElement {
   tag: string
   text?: string
   initialCss: string
+  /**
+   * Static transform-origin. Absent = CSS default 50% 50%. Two-value form
+   * only in v1 (no z). Stored structured, NEVER mirrored into initialCss —
+   * if hand-edited storage ever carries an origin inside initialCss too, the
+   * structured field wins in the preview merge and is the only one exported.
+   * An explicit 50% 50% stays once set (WYSIWYG; no silent normalization).
+   */
+  origin?: OriginPoint
 }
 
 export interface Layer {
