@@ -73,6 +73,18 @@ describe('sampleTrackValue', () => {
     ])
     expect(sampleTrackValue(o, 250)).toBe('0.25')
   })
+
+  it('holds across none↔fn boundaries instead of lerping (pinned semantics)', () => {
+    // parseTransformStack('none') is empty so lerpStacks returns null → the
+    // previous value holds. Stepped (not interpolated) motion at empty-stack
+    // boundaries is intentional and acceptable; do not "fix" silently.
+    const t = track('transform', [
+      [0, 'none'],
+      [1000, 'translateY(40px)'],
+    ])
+    expect(sampleTrackValue(t, 500)).toBe('none')
+    expect(sampleTrackValue(t, 1500)).toBe('translateY(40px)')
+  })
 })
 
 describe('mergeTransformTracks', () => {
@@ -150,6 +162,46 @@ describe('mergeTransformTracks', () => {
     const b = track('transform', [[0, 'rotate(0deg)']])
     const merged = mergeTransformTracks([a, b], 2000)
     expect(Math.max(...merged.keyframes.map((k) => k.time))).toBeLessThanOrEqual(2000)
+  })
+
+  it("drops literal 'none' samples from merged stacks (#55 regression)", () => {
+    // Track b starts as an empty stack ('none' — e.g. after delete-all in
+    // the Inspector) then gains rotate(). 'none' is truthy, so the old
+    // `.filter(Boolean)` kept it and emitted "… none" — invalid CSS that
+    // makes browsers drop the whole merged declaration.
+    const a = track('transform', [
+      [0, 'translateX(10px)'],
+      [1000, 'translateX(50px)'],
+    ])
+    const b = track('transform', [
+      [0, 'none'],
+      [1000, 'rotate(45deg)'],
+    ])
+    const merged = mergeTransformTracks([a, b], 1000)
+    for (const kf of merged.keyframes) {
+      expect(kf.value.includes('none')).toBe(false)
+      expect(kf.value.trim()).not.toBe('')
+    }
+    const atZero = merged.keyframes.find((k) => k.time === 0)!
+    expect(atZero.value).toBe('translateX(10px)')
+    const atEnd = merged.keyframes.find((k) => k.time === 1000)!
+    expect(atEnd.value).toBe('translateX(50px) rotate(45deg)')
+  })
+
+  it("emits 'none' when every source stack is empty at a stop", () => {
+    const a = track('transform', [
+      [0, 'none'],
+      [500, 'scale(2)'],
+    ])
+    const b = track('transform', [
+      [0, 'none'],
+      [500, 'rotate(10deg)'],
+    ])
+    const merged = mergeTransformTracks([a, b], 1000)
+    expect(merged.keyframes.find((k) => k.time === 0)!.value).toBe('none')
+    // populated stops keep both functions
+    const atMid = merged.keyframes.find((k) => k.time === 500)!
+    expect(atMid.value).toBe('scale(2) rotate(10deg)')
   })
 })
 

@@ -95,10 +95,17 @@ export function tokenizeLayer(layer: Layer, doc: AnimationDocument): ValueToken[
  * Tokenize one keyframe into its value + easing tokens. Operates on the
  * store's stable keyframe proxy so callers can keep component identity
  * across commits (Inspector rows).
+ *
+ * Transform tracks classify by PROPERTY first: a value of `'none'` (the
+ * canonical state after deleting the last function — serialize() emits it
+ * for an empty stack) must still type as `transform` so the Inspector's
+ * transform branch (sub-chips + stack-picker add button) stays reachable.
+ * Value-text detection would misfile `'none'`/`''` as `string`, which used
+ * to dead-end the add flow.
  */
 export function tokenizeKeyframe(
   layerId: string,
-  track: Pick<Track, 'id' | 'keyframes'>,
+  track: Pick<Track, 'id' | 'keyframes' | 'property'>,
   kf: Keyframe,
 ): [ValueToken, ValueToken] {
   const valuePath: TokenPath = {
@@ -107,7 +114,8 @@ export function tokenizeKeyframe(
     keyframeId: kf.id,
     field: 'value',
   }
-  const valueType = detectType(kf.value, 'value')
+  const valueType: TokenType =
+    track.property === 'transform' ? 'transform' : detectType(kf.value, 'value')
   const valueToken: ValueToken = {
     type: valueType,
     value: kf.value,

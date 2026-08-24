@@ -156,15 +156,18 @@ export function mergeTransformTracks(group: Track[], duration: number): Track {
     }
   }
 
-  const keyframes: Keyframe[] = stops.map((time, i) => ({
-    id: `${base.id}-m${i}`,
-    time,
-    value: group
-      .map((t) => sampleTrackValue(t, time))
-      .filter(Boolean)
-      .join(' '),
-    easing: 'linear',
-  }))
+  // Filter literal 'none' samples (empty transform stacks — truthy, so the
+  // old `.filter(Boolean)` kept them) before joining: "translateX(10px) none"
+  // is invalid CSS and makes browsers drop the WHOLE merged declaration.
+  const keyframes: Keyframe[] = stops.map((time, i) => {
+    const fns = group.map((t) => sampleTrackValue(t, time)).filter((v) => v !== '' && v !== 'none')
+    return {
+      id: `${base.id}-m${i}`,
+      time,
+      value: fns.length === 0 ? 'none' : fns.join(' '),
+      easing: 'linear',
+    }
+  })
 
   return { id: base.id, property: 'transform', keyframes }
 }

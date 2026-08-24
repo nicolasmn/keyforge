@@ -518,6 +518,11 @@ function SubScrub(props: { sub: SubToken; parent: ValueToken; property?: Animata
 
 // ── ValueChip ─────────────────────────────────────────────────────────────────
 
+/** Hint shown on an EMPTY transform stack ('none' after deleting all fns).
+ *  Surfaces the existing paste escape hatch alongside the (+) picker. */
+const EMPTY_TRANSFORM_HINT =
+  'No transform functions — click + to add one, or paste e.g. rotate(45deg)'
+
 function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) {
   const [editing, setEditing] = createSignal(false)
   const [invalid, setInvalid] = createSignal(false)
@@ -632,6 +637,11 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
     return groups
   }
 
+  // Empty transform stack ('none' after deleting the last function): the
+  // chip must stay transform-shaped with a reachable (+) picker instead of
+  // falling through to the generic text branch, which dead-ended re-adding.
+  const hasTransformFns = () => (props.token.subTokens?.length ?? 0) > 0
+
   function open() {
     if (props.token.type === 'transform') return
     if (!cleanupDl) {
@@ -704,9 +714,15 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
 
   return (
     <>
-      {/* transform: sub-token chips, grouped per function, stack controls */}
-      <Show when={props.token.type === 'transform' && (props.token.subTokens?.length ?? 0) > 0}>
-        <span class="kf-chip kf-chip--transform">
+      {/* transform: sub-token chips, grouped per function, stack controls.
+          Renders even for an EMPTY stack ('none' after delete-all): the
+          "no functions" hint plus the always-visible (+) picker keep the
+          add flow reachable instead of dead-ending in the text branch. */}
+      <Show when={props.token.type === 'transform'}>
+        <span
+          class="kf-chip kf-chip--transform"
+          title={hasTransformFns() ? undefined : EMPTY_TRANSFORM_HINT}
+        >
           <For each={transformGroups()}>
             {(g, gi) => (
               <>
@@ -753,6 +769,9 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
               </>
             )}
           </For>
+          <Show when={!hasTransformFns()}>
+            <span class="kf-chip__empty">no functions</span>
+          </Show>
           <button
             class="kf-stack-btn kf-stack-btn--add"
             title="Add a transform function"

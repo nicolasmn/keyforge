@@ -60,4 +60,12 @@ describe('detectType', () => {
   it('forces easing field to easing type', () => {
     expect(detectType('whatever', 'easing')).toBe('easing')
   })
+
+  it("pins 'none' and '' as string — intentional; tokenizeKeyframe overrides via track.property", () => {
+    // detectType stays purely text-based. Transform tracks are classified
+    // property-first in tokenizeKeyframe, which is what keeps the Inspector's
+    // add-picker reachable after deleting all functions (value becomes 'none').
+    expect(detectType('none', 'value')).toBe('string')
+    expect(detectType('', 'value')).toBe('string')
+  })
 })
