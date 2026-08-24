@@ -26,6 +26,7 @@ import {
   type TrackRow,
 } from '@/utils/rowModel'
 import Playback from '@/components/Playback'
+import { setKeyframeSelectionSource } from '@/utils/selectionSource'
 
 const LABEL_WIDTH = 120
 const KF_RADIUS = 6
@@ -707,6 +708,10 @@ export default function Timeline() {
       draggingKf = hit
       // Selecting a keyframe also selects its layer so the Inspector,
       // which gates on the layer selection, shows the owning tracks.
+      // F11: record the origin first — the inspector scrolls its owning row
+      // into view only for canvas-initiated selections (its own clicks must
+      // not scroll-jack).
+      setKeyframeSelectionSource('canvas')
       setSelectedKeyframeId(hit.kfId)
       setSelectedLayerId(hit.layerId)
       canvas!.style.cursor = 'grabbing'
