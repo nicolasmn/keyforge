@@ -19,10 +19,6 @@
       grid-template-rows: unset !important;
     }
 
-    .app > .app__header {
-      flex-shrink: 0;
-    }
-
     .app__mobile-body {
       flex: 1;
       display: flex;

@@ -6,16 +6,11 @@
 
 /* ── Shell ─────────────────────────────────────────────────── */
 .inspector {
-  --mono: var(--font-mono, ui-monospace, 'Cascadia Code', 'Fira Code', monospace);
   --row-h: 22px;
   --chip-fs: 11px;
   --label-fs: 11px;
   --indent: 20px;
   --track-header-h: 24px;
-  --chip-num: #61afef;
-  --chip-color: #d19a66;
-  --chip-easing: #c678dd;
-  --chip-fn: #e5c07b;
   --chip-error: var(--color-error, #e06c6c);
   font-family: var(--mono);
   font-size: var(--label-fs);
@@ -600,7 +595,7 @@
 }
 
 .easing-editor__canvas {
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
   display: block;
   /* allow pointer-dragging of handles on touch without scrolling the panel */
@@ -658,7 +653,7 @@
   font-size: var(--chip-fs);
   font-family: var(--mono);
   padding: 2px var(--space-2, 8px);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   border: 1px solid var(--color-border);
   color: var(--color-text-muted);
   background: var(--color-surface-2);
@@ -759,7 +754,7 @@
   font-size: var(--label-fs, 11px);
   color: var(--color-text-faint, var(--color-text-muted));
   background: var(--color-surface-2);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   padding: 3px 6px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -833,7 +828,7 @@
   font-size: var(--chip-fs);
   line-height: 1;
   padding: 2px 4px;
-  border-radius: var(--radius-sm, 3px);
+  border-radius: var(--radius-sm);
   opacity: 0.6;
 }
 .track__remove:hover {
@@ -879,13 +874,13 @@
   padding: var(--space-2, 8px);
   background: var(--color-surface-2);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-sm);
   margin-block-start: var(--space-1, 4px);
 }
 .kf-stack-picker__item {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm, 3px);
+  border-radius: var(--radius-sm);
   color: var(--color-text-muted);
   cursor: pointer;
   font-family: var(--mono);

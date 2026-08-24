@@ -64,7 +64,7 @@
     --color-border: hsl(220 10% 22%);
     --color-text: hsl(220 10% 88%);
     --color-text-muted: hsl(220 8% 52%);
-    --color-text-faint: hsl(220 8% 40%);
+    --color-text-faint: hsl(220 8% 48%);
     --color-accent: hsl(264 80% 68%);
     --color-accent-dim: hsl(264 50% 30%);
     --color-success: hsl(145 60% 48%);
@@ -80,6 +80,14 @@
     /* Typography */
     --font-sans: system-ui, -apple-system, sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Mono', ui-monospace, monospace;
+    /* Hoisted mono stack — components re-declared this locally before (audit F5). */
+    --mono: var(--font-mono);
+    /* Code/syntax palette (audit F2) — inspector chip colors, promoted from
+       One-Dark literals so they participate in the token system. */
+    --chip-num: #61afef;
+    --chip-color: #d19a66;
+    --chip-easing: #c678dd;
+    --chip-fn: #e5c07b;
     --font-size-xs: 0.6875rem;
     --font-size-sm: 0.8125rem;
     --font-size-base: 0.9375rem;
@@ -172,43 +180,5 @@
     height: 100%;
     display: flex;
     flex-direction: column;
-  }
-
-  .app {
-    display: grid;
-    height: 100vh;
-    grid-template-rows: var(--header-height) 1fr;
-    grid-template-columns: var(--panel-sidebar-width) 1fr var(--panel-inspector-width);
-    grid-template-areas:
-      'header  header   header'
-      'sidebar workspace inspector'
-      'sidebar timeline timeline';
-    overflow: hidden;
-  }
-
-  .app__header {
-    grid-area: header;
-    display: flex;
-    align-items: center;
-    padding-inline: var(--space-4);
-    border-bottom: 1px solid var(--color-border);
-    background: var(--color-surface);
-  }
-
-  .app__logo {
-    font-size: var(--font-size-sm);
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--color-accent);
-  }
-
-  .app__workspace {
-    grid-area: workspace;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--color-bg);
-    overflow: hidden;
   }
 }
