@@ -1,5 +1,14 @@
-import { describe, it, expect } from 'vitest'
-import { serializeDoc, deserializeDoc, validatePersisted, STORAGE_KEY } from './persistence'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import {
+  serializeDoc,
+  deserializeDoc,
+  validatePersisted,
+  STORAGE_KEY,
+  ONBOARDING_KEY,
+  hasOnboarded,
+  markOnboarded,
+  clearOnboarded,
+} from './persistence'
 import type { AnimationDocument } from '@/types'
 
 const validDoc: AnimationDocument = {
@@ -102,5 +111,75 @@ describe('deserializeDoc rejects malformed payloads', () => {
   it('accepts an empty layers array (legitimate cleared document)', () => {
     const empty = { ...validDoc, layers: [] }
     expect(validatePersisted({ version: 1, savedAt: 1, doc: empty })).toEqual(empty)
+  })
+})
+
+describe('onboarding flag', () => {
+  // Node's test env has no localStorage — stub a minimal Storage so the
+  // real read/write logic is exercised, and restore afterwards.
+  let backing: Map<string, string> | null = null
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    backing = null
+  })
+
+  function stubStorage() {
+    backing = new Map()
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => (backing as Map<string, string>).get(k) ?? null,
+      setItem: (k: string, v: string) => void (backing as Map<string, string>).set(k, v),
+      removeItem: (k: string) => void (backing as Map<string, string>).delete(k),
+    })
+  }
+
+  it('uses the keyforge:onboarded key', () => {
+    expect(ONBOARDING_KEY).toBe('keyforge:onboarded')
+  })
+
+  it('round-trips mark → has → clear', () => {
+    stubStorage()
+    expect(hasOnboarded()).toBe(false)
+    markOnboarded()
+    expect(hasOnboarded()).toBe(true)
+    clearOnboarded()
+    expect(hasOnboarded()).toBe(false)
+  })
+
+  it('is idempotent', () => {
+    stubStorage()
+    markOnboarded()
+    markOnboarded()
+    expect(hasOnboarded()).toBe(true)
+    expect(backing!.get(ONBOARDING_KEY)).toBe('1')
+  })
+
+  it('treats values other than "1" as not onboarded', () => {
+    stubStorage()
+    localStorage.setItem(ONBOARDING_KEY, 'yes')
+    expect(hasOnboarded()).toBe(false)
+  })
+
+  it('degrades gracefully without localStorage', () => {
+    // No stub: node env has no global localStorage.
+    expect(() => hasOnboarded()).not.toThrow()
+    expect(() => markOnboarded()).not.toThrow()
+    expect(() => clearOnboarded()).not.toThrow()
+    expect(hasOnboarded()).toBe(false)
+  })
+
+  it('swallows storage failures instead of crashing boot/mutations', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('SecurityError')
+      },
+      setItem: () => {
+        throw new Error('QuotaExceededError')
+      },
+      removeItem: () => {
+        throw new Error('SecurityError')
+      },
+    })
+    expect(hasOnboarded()).toBe(false)
+    expect(() => markOnboarded()).not.toThrow()
   })
 })

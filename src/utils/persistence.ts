@@ -91,3 +91,40 @@ export function clearStorage(): void {
     // ignore
   }
 }
+
+// ── Onboarding flag ───────────────────────────────────────────────────
+// Marks that the user has engaged with the app beyond the first-run
+// empty state. While unset, an empty document means "brand-new user" and
+// the guided EmptyState card is shown; once set, an empty document is a
+// deliberate state and returning users aren't re-nagged with welcome copy.
+
+export const ONBOARDING_KEY = 'keyforge:onboarded'
+
+/** True when the onboarding flag has been persisted (best-effort read). */
+export function hasOnboarded(): boolean {
+  try {
+    if (typeof localStorage === 'undefined') return false
+    return localStorage.getItem(ONBOARDING_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** Persist the onboarding flag. Idempotent; storage failures are ignored. */
+export function markOnboarded(): void {
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.setItem(ONBOARDING_KEY, '1')
+  } catch {
+    // storage unavailable/full — onboarding may re-show, which is harmless
+  }
+}
+
+export function clearOnboarded(): void {
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.removeItem(ONBOARDING_KEY)
+  } catch {
+    // ignore
+  }
+}

@@ -113,6 +113,19 @@ export default function Timeline() {
     ctx.lineWidth = 1.5 * dpr
     ctx.stroke()
 
+    // Empty-timeline hint (audit F19): with zero layers the lanes area is
+    // a blank rectangle — echo the EmptyState moment right where tracks
+    // will appear. Styled like the app's muted text.
+    if (doc.layers.length === 0) {
+      const hint = 'No tracks yet — add a layer to start'
+      ctx.font = `${11 * dpr}px monospace`
+      ctx.fillStyle = colorText
+      ctx.textAlign = 'center'
+      const hintY = (HEADER_HEIGHT + (height / dpr - HEADER_HEIGHT) / 2) * dpr
+      ctx.fillText(hint, width / 2, hintY)
+      ctx.textAlign = 'left'
+    }
+
     let row = 0
     doc.layers.forEach((layer) => {
       layer.tracks.forEach((track, ti) => {
