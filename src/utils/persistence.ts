@@ -170,6 +170,16 @@ export interface PersistedPrefs {
    * default blobs clean — same philosophy as theme/snapIncrement coercion.
    */
   showOrigins?: boolean
+  /**
+   * Additive (v1): playback speed multiplier. Absent/garbage → 1.
+   * Only the known ladder values round-trip.
+   */
+  playbackRate?: number
+  /**
+   * Additive (v1): work-area loop bookends (ms). Absent/garbage → absent
+   * (defaults cover the full document at runtime).
+   */
+  workArea?: { start: number; end: number }
 }
 
 function isSnapIncrement(v: unknown): v is SnapIncrement {
@@ -211,6 +221,21 @@ export function deserializePrefs(raw: string | null): PersistedPrefs | null {
   // Default false→absent: the key is only written when explicitly true, so
   // legacy blobs and cleared toggles stay byte-clean (no `"showOrigins":false`).
   if (p.showOrigins === true) prefs.showOrigins = true
+  // playbackRate: only ladder values round-trip; garbage → absent (= 1).
+  if (typeof p.playbackRate === 'number' && [0.25, 0.5, 1, 2].includes(p.playbackRate)) {
+    prefs.playbackRate = p.playbackRate
+  }
+  // workArea: finite, ordered, non-inverted pair only; garbage → absent.
+  const wa = (p.workArea ?? {}) as Partial<{ start: number; end: number }>
+  if (
+    typeof wa.start === 'number' &&
+    Number.isFinite(wa.start) &&
+    typeof wa.end === 'number' &&
+    Number.isFinite(wa.end) &&
+    wa.end > wa.start
+  ) {
+    prefs.workArea = { start: wa.start, end: wa.end }
+  }
   return prefs
 }
 

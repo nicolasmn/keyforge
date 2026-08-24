@@ -1,4 +1,14 @@
-import { playing, setPlaying, playhead, setPlayhead, doc, undo, redo } from '@/store'
+import {
+  playing,
+  setPlaying,
+  playhead,
+  setPlayhead,
+  doc,
+  undo,
+  redo,
+  playbackRate,
+  setPlaybackRate,
+} from '@/store'
 
 /**
  * Toggle playback exactly like the play/pause button: pause while playing,
@@ -11,6 +21,15 @@ export function togglePlayback(): void {
     if (playhead() >= doc.duration) setPlayhead(0)
     setPlaying(true)
   }
+}
+
+const RATE_LADDER = [0.25, 0.5, 1, 2]
+
+/** Cycle playback speed: dir=-1 steps down (slower), dir=1 steps up. */
+export function cyclePlaybackRate(dir: 1 | -1): void {
+  const i = RATE_LADDER.indexOf(playbackRate())
+  const next = RATE_LADDER[Math.min(RATE_LADDER.length - 1, Math.max(0, (i === -1 ? 2 : i) + dir))]
+  setPlaybackRate(next)
 }
 
 /**
@@ -59,6 +78,13 @@ export function installGlobalShortcuts(): () => void {
       if (isTypingTarget(e.target as EventTarget | null)) return
       e.preventDefault()
       redo()
+      return
+    }
+    // Shift+, / Shift+. — playback speed down/up (same guard as Space).
+    if (e.shiftKey && (e.key === ',' || e.key === '.' || e.key === '<' || e.key === '>')) {
+      if (isTypingTarget(e.target as EventTarget | null)) return
+      e.preventDefault()
+      cyclePlaybackRate(e.key === ',' || e.key === '<' ? -1 : 1)
       return
     }
     if (e.code !== 'Space') return

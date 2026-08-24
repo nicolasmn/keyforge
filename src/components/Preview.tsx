@@ -1,5 +1,15 @@
 import { createEffect, createMemo, For, onCleanup, onMount, untrack } from 'solid-js'
-import { doc, playing, setPlaying, playhead, setPlayhead, loop } from '@/store'
+import {
+  doc,
+  playing,
+  setPlaying,
+  playhead,
+  setPlayhead,
+  loop,
+  playbackRate,
+  workAreaStart,
+  workAreaEnd,
+} from '@/store'
 import OriginOverlay from '@/components/OriginOverlay'
 import { generateCss } from '@/utils/css'
 import { slugify } from '@/utils/slugify'
@@ -73,7 +83,10 @@ export default function Preview() {
 
       const duration = untrack(() => doc.duration)
       const isLoop = untrack(loop)
-      let next = untrack(playhead) + dt
+      const rate = untrack(playbackRate)
+      const waStart = untrack(workAreaStart)
+      const waEnd = Math.min(untrack(workAreaEnd), duration)
+      let next = untrack(playhead) + dt * rate
 
       if (next >= duration) {
         if (isLoop) {
@@ -83,6 +96,12 @@ export default function Preview() {
           setPlaying(false)
           return
         }
+      }
+
+      // Work-area bookends: while looping, wrap inside [start, end] instead
+      // of the full document. One-shot playback (loop off) ignores them.
+      if (isLoop && waEnd > waStart && next >= waEnd) {
+        next = waStart + ((next - waStart) % (waEnd - waStart))
       }
 
       setPlayhead(next)
