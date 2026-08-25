@@ -8,7 +8,7 @@
 ## Decision points for Nicolas
 
 1. **Auto-key**: always-on (drag creates/updates keyframes at playhead unconditionally — recommended, matches AE pose-capture philosophy) vs an explicit toggle?
-2. **Composite `transform` tracks**: v1 edits only the *individual* `translate`/`rotate`/`scale` properties and shows a hint on layers whose motion lives in a composite function stack? Or do we map drags onto `translateX/Y` functions inside the stack in v1 already (transformStack surgery — riskier)? **Recommendation: defer composite to Phase 3.**
+2. **Composite `transform` tracks**: v1 edits only the _individual_ `translate`/`rotate`/`scale` properties and shows a hint on layers whose motion lives in a composite function stack? Or do we map drags onto `translateX/Y` functions inside the stack in v1 already (transformStack surgery — riskier)? **Recommendation: defer composite to Phase 3.**
 3. **Handle visibility**: gizmo box always visible on selected layer (Figma-like) vs hover-to-show?
 4. **Spatial snapping** (edges/centers vs other layers + stage center): v1 or Phase 2? Note: **no spatial snap utility exists today** (`snap.ts` is time-only quantization for the timeline) — this is new-module work either way. **Recommendation: Phase 2.**
 5. **Scale affordances**: corners only (uniform) vs corners + edge handles (per-axis)? **Recommendation: corners-only v1.**
@@ -19,13 +19,13 @@
 
 ### 1a. Transform data model — three individual properties + one composite
 
-| Site | Evidence |
-| --- | --- |
-| Property union | `src/types/index.ts:11–22` — `transform` (composite), plus individual `scale`, `translate`, `rotate`. |
-| Registry | `src/utils/propertyRegistry.ts:39–94` — `transform` takes function values (`translateY(40px)`); `scale` bare number (`'1'`); `translate` space-separated lengths (`'0px 0px'`); `rotate` bare angle (`'0deg'`). |
-| Composite stack ops | `src/utils/transformStack.ts` — `addTransformFn/removeTransformFn/moveTransformFn`, serialize emits `'none'` for empty stacks; deliberately NOT applied to individual-property tracks (transform-ux plan §2). |
-| Value normalization | `toCssPropertyValue` (`propertyRegistry.ts:127–164`) normalizes legacy function forms to individual syntax at emission/import. |
-| Interpolation | `interpolatedValueAt` (`interpolate.ts`) — scalar lerp + pair-lerp (per-axis unit match, PR #102); hold semantics otherwise. This is the pose-capture primitive behind "+ KF at playhead". |
+| Site                | Evidence                                                                                                                                                                                                        |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Property union      | `src/types/index.ts:11–22` — `transform` (composite), plus individual `scale`, `translate`, `rotate`.                                                                                                           |
+| Registry            | `src/utils/propertyRegistry.ts:39–94` — `transform` takes function values (`translateY(40px)`); `scale` bare number (`'1'`); `translate` space-separated lengths (`'0px 0px'`); `rotate` bare angle (`'0deg'`). |
+| Composite stack ops | `src/utils/transformStack.ts` — `addTransformFn/removeTransformFn/moveTransformFn`, serialize emits `'none'` for empty stacks; deliberately NOT applied to individual-property tracks (transform-ux plan §2).   |
+| Value normalization | `toCssPropertyValue` (`propertyRegistry.ts:127–164`) normalizes legacy function forms to individual syntax at emission/import.                                                                                  |
+| Interpolation       | `interpolatedValueAt` (`interpolate.ts`) — scalar lerp + pair-lerp (per-axis unit match, PR #102); hold semantics otherwise. This is the pose-capture primitive behind "+ KF at playhead".                      |
 
 **Implication**: drags can write directly into existing individual-property tracks with zero new representation. Composite `transform` stacks are string surgery (parse args, rebuild via assembler) — possible but a different risk class (see Decision 2).
 
@@ -60,11 +60,11 @@ Every existing canvas gesture calls `setPlaying(false)` on grab (ruler scrub, ke
 
 Per-axis mapping:
 
-| Handle/drag | Property written | Value form |
-| --- | --- | --- |
-| Move (body drag) | `translate` | `"Xpx Ypx"` — pair value, pair-lerp interpolates (#102) |
-| Rotate handle | `rotate` | `"Ndeg"` |
-| Corner scale | `scale` | uniform number (distance ratio from origin) |
+| Handle/drag      | Property written | Value form                                              |
+| ---------------- | ---------------- | ------------------------------------------------------- |
+| Move (body drag) | `translate`      | `"Xpx Ypx"` — pair value, pair-lerp interpolates (#102) |
+| Rotate handle    | `rotate`         | `"Ndeg"`                                                |
+| Corner scale     | `scale`          | uniform number (distance ratio from origin)             |
 
 Precedence rules:
 
