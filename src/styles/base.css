@@ -63,8 +63,10 @@
     --color-surface-2: hsl(220 10% 17%);
     --color-border: hsl(220 10% 22%);
     --color-text: hsl(220 10% 88%);
-    --color-text-muted: hsl(220 8% 52%);
-    --color-text-faint: hsl(220 8% 48%);
+    /* Muted/faint raised to clear WCAG AA on both surfaces (was 52%/48%:
+       muted/surface 4.31:1, muted/surface-2 3.70:1 — both below 4.5:1). */
+    --color-text-muted: hsl(220 8% 58%);
+    --color-text-faint: hsl(220 8% 52%);
     --color-accent: hsl(264 80% 68%);
     --color-accent-dim: hsl(264 50% 30%);
     /* Semantic accent fills/inks (light-theme plan §1b): components stay
