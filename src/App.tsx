@@ -14,6 +14,7 @@ import '@/styles/app.css'
 import '@/styles/motion.css'
 import '@/styles/mobile.css'
 import '@/styles/inspector.css'
+import '@/styles/gizmo.css'
 import '@/styles/empty-state.css'
 
 /** Preview canvas plus the empty-state overlay shown when the doc has no layers. */
