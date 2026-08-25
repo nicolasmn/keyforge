@@ -12,6 +12,7 @@ import { parseCubicBezier, evalCubicBezier, BUILTIN_PRESETS } from './easing-pre
  */
 
 const NUM_UNIT_RE = /^(-?[\d.]+)([a-z%]*)$/
+const PAIR_UNIT_RE = /^(-?[\d.]+)([a-z%]*)\s+(-?[\d.]+)([a-z%]*)$/
 
 /** Linear-eased numeric interpolation between two keyframes. */
 function lerpNumeric(a: Keyframe, b: Keyframe, time: number): string | null {
@@ -34,6 +35,34 @@ function lerpNumeric(a: Keyframe, b: Keyframe, time: number): string | null {
   // renders as '25px' and '0.25' keeps its precision ('1' → '1', not '1.000').
   const rounded = Number(n.toFixed(3))
   return `${rounded}${ma[2]}`
+}
+
+/**
+ * Pair-lerp two-component values ('10px 20px' — translate / transform-origin)
+ * with per-axis unit matching: '25% 80%' → '50% 90%' lerps both axes;
+ * mismatched units on either axis have no linear answer → null (hold).
+ * The leaving keyframe's easing shapes the shared segment progress t.
+ */
+function lerpNumericPair(a: Keyframe, b: Keyframe, time: number): string | null {
+  const ma = PAIR_UNIT_RE.exec(a.value)
+  const mb = PAIR_UNIT_RE.exec(b.value)
+  if (!ma || !mb) return null
+  if (ma[2] !== mb[2] || ma[4] !== mb[4]) return null
+  const nax = Number.parseFloat(ma[1])
+  const nay = Number.parseFloat(ma[3])
+  const nbx = Number.parseFloat(mb[1])
+  const nby = Number.parseFloat(mb[3])
+  if (Number.isNaN(nax) || Number.isNaN(nay) || Number.isNaN(nbx) || Number.isNaN(nby)) return null
+
+  const span = b.time - a.time
+  let t = span === 0 ? 0 : (time - a.time) / span
+  t = Math.max(0, Math.min(1, t))
+
+  const eased = applyEasing(t, a.easing)
+  // Round to a clean value first, then trim trailing zeros (same as scalar path).
+  const nx = Number((nax + (nbx - nax) * eased).toFixed(3))
+  const ny = Number((nay + (nby - nay) * eased).toFixed(3))
+  return `${nx}${ma[2]} ${ny}${ma[4]}`
 }
 
 export function applyEasing(t: number, easing: string): number {
@@ -65,5 +94,5 @@ export function interpolatedValueAt(track: Track, time: number): string | null {
   if (nextIdx === 0) return sorted[0].value // before first → hold first
 
   const prev = sorted[nextIdx - 1]
-  return lerpNumeric(prev, next, time) ?? prev.value
+  return lerpNumeric(prev, next, time) ?? lerpNumericPair(prev, next, time) ?? prev.value
 }

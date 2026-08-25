@@ -82,6 +82,6 @@ describe('smart keyframe defaults', () => {
     for (const k of Object.keys(DEFAULT_FIRST_VALUE)) {
       expect(typeof (DEFAULT_FIRST_VALUE as Record<string, string>)[k]).toBe('string')
     }
-    expect(Object.keys(DEFAULT_FIRST_VALUE)).toHaveLength(10)
+    expect(Object.keys(DEFAULT_FIRST_VALUE)).toHaveLength(11)
   })
 })

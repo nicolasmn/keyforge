@@ -92,6 +92,19 @@ describe('parseCssToDoc', () => {
     expect(warnings.some((w) => w.includes('box-shadow'))).toBe(true)
   })
 
+  it('imports transform-origin stops as a track without an unsupported warning', () => {
+    const css = `@keyframes pivot {
+      0% { transform-origin: 25% 80%; }
+      100% { transform-origin: 50% 50%; }
+    }`
+    const { doc, warnings } = parseCssToDoc(css)
+    const layer = doc!.layers[0]
+    expect(layer.tracks.map((t) => t.property)).toContain('transform-origin')
+    const track = layer.tracks.find((t) => t.property === 'transform-origin')!
+    expect(track.keyframes.map((k) => k.value)).toEqual(['25% 80%', '50% 50%'])
+    expect(warnings.some((w) => w.includes('transform-origin'))).toBe(false)
+  })
+
   it('rejects CSS without keyframes with a helpful warning', () => {
     const r1 = parseCssToDoc('.foo { color: red; }')
     expect(r1.doc).toBeNull()

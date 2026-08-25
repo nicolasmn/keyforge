@@ -560,6 +560,7 @@ export const DEFAULT_FIRST_VALUE: Record<AnimatableProperty, string> = {
   // form (`rotate(0deg)`) is transform-track syntax and emits invalid CSS
   // on a rotate track (browsers drop the declaration → animation no-ops).
   rotate: '0deg',
+  'transform-origin': '50% 50%',
 }
 export function addLayer() {
   const id = nanoid()

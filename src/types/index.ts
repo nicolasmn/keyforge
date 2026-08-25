@@ -19,6 +19,7 @@ export type AnimatableProperty =
   | 'scale'
   | 'translate'
   | 'rotate'
+  | 'transform-origin'
 
 export interface Keyframe {
   id: string

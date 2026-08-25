@@ -80,3 +80,42 @@ describe('applyEasing', () => {
     expect(applyEasing(1, 'ease-out')).toBeCloseTo(1, 5)
   })
 })
+
+describe('interpolatedValueAt — two-component values (translate / transform-origin)', () => {
+  it('pair-lerps same-unit pairs per axis', () => {
+    const t = trackOf([0, '10px 20px'], [1000, '30px 60px'])
+    expect(interpolatedValueAt(t, 500)).toBe('20px 40px')
+    expect(interpolatedValueAt(t, 250)).toBe('15px 30px')
+  })
+
+  it('lerps percentage pairs (transform-origin shape)', () => {
+    const t = trackOf([0, '25% 80%'], [1000, '50% 90%'])
+    expect(interpolatedValueAt(t, 500)).toBe('37.5% 85%')
+  })
+
+  it('applies the leaving keyframe easing to the shared progress', () => {
+    // ease-in keeps values low early: midpoint result < linear midpoint.
+    const eased = trackOf([0, '0% 0%', 'ease-in'], [1000, '100% 100%'])
+    const v = interpolatedValueAt(eased, 500)!
+    const [x] = v.split(' ')
+    expect(Number.parseFloat(x)).toBeGreaterThan(0)
+    expect(Number.parseFloat(x)).toBeLessThan(50)
+  })
+
+  it('holds when units mismatch on either axis', () => {
+    const xMismatch = trackOf([0, '10px 20%'], [1000, '30% 40%'])
+    expect(interpolatedValueAt(xMismatch, 500)).toBe('10px 20%')
+    const yMismatch = trackOf([0, '10% 20px'], [1000, '30% 40em'])
+    expect(interpolatedValueAt(yMismatch, 500)).toBe('10% 20px')
+  })
+
+  it('holds when shapes are mixed (scalar vs pair)', () => {
+    const mixed = trackOf([0, '50%'], [1000, '10% 20%'])
+    expect(interpolatedValueAt(mixed, 500)).toBe('50%')
+  })
+
+  it('still scalar-lerps single-component origin values', () => {
+    const t = trackOf([0, '25%'], [1000, '75%'])
+    expect(interpolatedValueAt(t, 500)).toBe('50%')
+  })
+})

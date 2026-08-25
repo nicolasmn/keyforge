@@ -35,6 +35,7 @@ const ANIMATABLE: readonly AnimatableProperty[] = [
   'scale',
   'translate',
   'rotate',
+  'transform-origin',
 ]
 
 function asAnimatable(prop: string): AnimatableProperty | null {

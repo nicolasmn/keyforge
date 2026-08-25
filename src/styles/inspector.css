@@ -1175,3 +1175,14 @@
 .kf-row {
   scroll-margin-top: calc(var(--track-header-h) + 2px);
 }
+
+/* ── Origin section: animated-by-track notice (Phase B) ───── */
+
+/* When a transform-origin track exists, the static controls collapse to
+   this note (track wins under fill-mode:both). Muted text, no controls. */
+.kf-origin-section__locked {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--color-text-muted);
+}
