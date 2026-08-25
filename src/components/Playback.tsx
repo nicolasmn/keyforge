@@ -128,7 +128,7 @@ export default function Playback(props: PlaybackProps = {}) {
             : undefined
         }
       >
-        ⌖
+        <span style={{ 'font-size': '11px', 'letter-spacing': '0.02em' }}>Live</span>
       </button>
       <button
         class="btn btn--ghost"
@@ -186,16 +186,6 @@ export default function Playback(props: PlaybackProps = {}) {
           <For each={RATE_OPTIONS}>{(r) => <option value={String(r)}>{r}×</option>}</For>
         </select>
       </label>
-      <button
-        class="btn btn--ghost"
-        classList={{ 'playback__loop--on': loop() }}
-        onClick={() => setLoop(!loop())}
-        aria-pressed={loop()}
-        aria-label="Loop playback"
-        title="Loop playback (wraps inside the work area when set)"
-      >
-        ⟲
-      </button>
       <span class="playback__time">
         {(playhead() / 1000).toFixed(2)}s /{' '}
         <Show
