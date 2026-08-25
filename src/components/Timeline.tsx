@@ -269,6 +269,21 @@ export default function Timeline() {
       // diamonds ride this line, easing fills rise above it.
       const baselineY = y + (row.height - 7) * dpr
       ctx.fillRect(0, baselineY, width, 1)
+      // DevTools-style span bar: a thin track-colored line connecting the
+      // first and last keyframes — reads as "this property animates here",
+      // and gives the diamonds a shared rail. Diamonds draw on top of it.
+      const sortedKfs = [...track.keyframes].sort((a, b) => a.time - b.time)
+      if (sortedKfs.length > 1) {
+        const bx1 = timeToX(sortedKfs[0].time, width / dpr) * dpr
+        const bx2 = timeToX(sortedKfs[sortedKfs.length - 1].time, width / dpr) * dpr
+        if (bx2 - bx1 > 1) {
+          ctx.save()
+          ctx.globalAlpha = 0.55 * ctx.globalAlpha
+          ctx.fillStyle = trackColors[ti % trackColors.length]
+          ctx.fillRect(bx1, baselineY - dpr, bx2 - bx1, 2 * dpr)
+          ctx.restore()
+        }
+      }
       track.keyframes.forEach((kf) => {
         const x = timeToX(kf.time, width / dpr) * dpr
         const cy2 = baselineY
@@ -303,7 +318,8 @@ export default function Timeline() {
       // LEFT keyframe's easing governs the segment it starts. Overshoot-
       // aware framing via easingYExtent; skipped when the gap is too tight
       // or the easing has no honest curve (steps()/unknown).
-      const sortedKfs = [...track.keyframes].sort((a, b) => a.time - b.time)
+      // Glyph fill uses the OWNING TRACK's color — same hue as its
+      // diamonds (owner feedback), so segment identity reads at a glance.
       for (let i = 0; i < sortedKfs.length - 1; i++) {
         const a = sortedKfs[i]
         const b = sortedKfs[i + 1]
@@ -319,8 +335,8 @@ export default function Timeline() {
         // DevTools-style: the easing is a soft FILLED area rising from the
         // keyframe baseline — restrained fill only, no stroked line.
         ctx.save()
-        ctx.globalAlpha = 0.16 * ctx.globalAlpha
-        ctx.fillStyle = colorAccent
+        ctx.globalAlpha = 0.22 * ctx.globalAlpha
+        ctx.fillStyle = trackColors[ti % trackColors.length]
         ctx.beginPath()
         ctx.moveTo(x1 + 5 * dpr, baselineY)
         for (const p of pts) {
