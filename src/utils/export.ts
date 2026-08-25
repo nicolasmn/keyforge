@@ -1,5 +1,6 @@
 import type { AnimationDocument, Layer } from '@/types'
 import { buildSplitKeyframeBlocks } from './keyframes'
+import { slugify } from './slugify'
 
 /**
  * Export production-ready CSS — finite animation, no preview-only properties.
@@ -14,7 +15,7 @@ import { buildSplitKeyframeBlocks } from './keyframes'
 export function exportCss(doc: AnimationDocument): string {
   const css = doc.layers
     .map((layer) => {
-      const animName = `kf-${layer.id}`
+      const animName = `kf-${slugify(layer.name)}`
       return layerBlock(layer, doc.duration, animName)
     })
     .filter(Boolean)
@@ -45,7 +46,7 @@ function layerBlock(
   const names = blocks.map((b) => b.name).join(', ')
   return [
     ...blocks.map((b) => b.css),
-    `[data-layer-id="${layer.id}"] {`,
+    `[data-layer-id="${slugify(layer.name)}"] {`,
     `  animation-name: ${names};`,
     `  animation-duration: ${duration}ms;`,
     `  animation-timing-function: linear;`,
@@ -70,7 +71,7 @@ export function exportCssReducedMotion(doc: AnimationDocument): string {
   const reducedLayers: string[] = []
 
   for (const layer of doc.layers as Layer[]) {
-    const animName = `kf-${layer.id}`
+    const animName = `kf-${slugify(layer.name)}`
     const full = layerBlock(layer, doc.duration, animName)
     if (!full) continue
 
@@ -84,7 +85,7 @@ export function exportCssReducedMotion(doc: AnimationDocument): string {
         `  from { opacity: 0.25; }`,
         `  to { opacity: 1; }`,
         `}`,
-        `[data-layer-id="${layer.id}"] {`,
+        `[data-layer-id="${slugify(layer.name)}"] {`,
         // Parity with the full variant (plan §6): harmless on the
         // opacity-only fallback, keeps anchoring identical.
         ...(layer.element.origin ? [originDecl(layer)] : []),
