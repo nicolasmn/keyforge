@@ -363,6 +363,10 @@ export default function Timeline() {
           }
         } // closes if (bandH > 0)
       } // closes if (bandCount > 0)
+      // Pop the row's save(): without this, a hidden row's globalAlpha=0.35
+      // leaks onto EVERY later draw call (rows, work-area band, playhead) and
+      // persists across frames — the whole timeline fades out after one hide.
+      ctx.restore()
     }
 
     for (const row of rows()) {
@@ -846,6 +850,12 @@ export default function Timeline() {
     resize()
     const ro = new ResizeObserver(resize)
     ro.observe(canvas!.parentElement!)
+    // The headers column resizes INDEPENDENTLY of its parent when the gutter
+    // drag changes --header-col-w: .timeline__body's own box is unchanged
+    // (it fills the scroll container), so observing it alone never fires and
+    // the canvas keeps its stale width. Observe the split's moving side too.
+    const headersEl = canvas!.parentElement!.querySelector('.timeline__headers')
+    if (headersEl) ro.observe(headersEl)
     onCleanup(() => ro.disconnect())
   })
 

@@ -724,6 +724,12 @@
 .row-header--selected {
   background: color-mix(in oklch, var(--color-accent) 10%, transparent);
 }
+/* Hidden layer: dim the header to match the canvas's 0.35 lane dimming.
+   (The class existed on rows since Phase B but never had a rule — hiding a
+   layer dimmed only the canvas lanes, leaving headers at full strength.) */
+.row-header--hidden {
+  opacity: 0.45;
+}
 .row-header__chevron,
 .row-header__eye {
   flex-shrink: 0;
@@ -888,6 +894,10 @@
   margin-top: 4px;
   cursor: pointer;
   text-align: left;
+  /* Re-opt in: .row-headers is pointer-events:none (so the column never
+     blocks the canvas), and unlike .row-header rows this ghost button has
+     no other rule that re-enables hits — without it, "+ Add layer" is dead. */
+  pointer-events: auto;
 }
 .row-header__add:hover {
   color: var(--color-accent);
