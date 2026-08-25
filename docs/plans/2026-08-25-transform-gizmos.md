@@ -140,3 +140,36 @@ Manual QA matrix: themes × reduced-motion × mobile preview tab × playback gra
 - Undo post-release merge window (≤300ms) may fold a follow-up click into the gesture entry — acceptable, revisit if owner notices.
 - Interaction conflict with future origin PICK mode: defined (pick wins, gizmo suppressed) but needs a visual spec pass.
 - Multi-select deferred — data model (which layer owns the written keyframe?) is the reason; revisit after Phase 1 usage.
+
+---
+
+## Revision 1 (2026-08-25, owner feedback after Phase 1 review)
+
+Owner tested PR #105 and redirected two points:
+
+### R1.1 — Live-edit mode replaces hover gating
+
+- New persisted toggle **"Live-Editing"** in the Playback strip (icon button, aria-pressed, pref `liveEdit?: boolean` following the showOrigins prefs pattern — but WITH a real UI control this time).
+- Mode ON: every visible layer draws its posed outline (faint); the selected layer additionally draws handles + rotation stem. Visibility no longer depends on hover.
+- Mode OFF: no gizmo chrome at rest; an active gesture still pins its own overlay until pointerup/Esc (unchanged).
+
+### R1.2 — Restrained Illustrator-style styling
+
+- Outline: **dashed** (`stroke-dasharray` 4/3), 1px, neutral ink (`--color-text-faint`) — NOT element color, NOT accent. Selected layer may read slightly stronger (opacity step, still neutral).
+- Handles: small squares (~8px) filled `--color-surface` with `--color-border` stroke; rotation stem/circle same neutral family. Value chips keep current style.
+- All gizmo chrome stays behind content z-order rules and pick-mode suppression.
+
+### R1.3 — Unified pixel & axis snapping (promoted from Phase 2)
+
+One shared module (`src/utils/snapSpatial.ts`), one visual language (ghost guide line + chip, matching #77), used by every gizmo gesture:
+
+| Rule              | Behavior                                                                                    |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| Pixel grid        | translate results round to whole layout px (default); Alt temporarily disables              |
+| Axis lock         | first 3px of a move gesture locks the dominant axis unless pointer exceeds 45° cone         |
+| Alignment targets | other layers' left/centerX/right + top/centerY/bottom; stage centerX/centerY + stage edges  |
+| Snap threshold    | 6 layout px; nearest candidate wins; snapped candidates draw their guide lines while active |
+| Rotation          | free by default, Shift = 15° steps (already shipped)                                        |
+| Scale             | corner-uniform; resulting edge lengths round to whole px                                    |
+
+Guide lines span the stage vertically/horizontally at the snapped coordinate, dashed, in the same neutral ink as outlines.
