@@ -24,6 +24,7 @@ import {
 import type { SnapIncrement } from '@/utils/snap'
 import type { ThemeName } from '@/utils/persistence'
 import { interpolatedValueAt } from '@/utils/interpolate'
+import { gizmoWritePolicy, inheritEasingForNewKeyframe } from '@/utils/gizmoMath'
 import { createStarterBoxLayer } from '@/utils/sampleDoc'
 import { isValidOriginComponent } from '@/utils/originMath'
 
@@ -730,7 +731,18 @@ export function removeTrack(layerId: string, trackId: string) {
   )
 }
 
-export function addKeyframe(layerId: string, trackId: string, kf: Omit<Keyframe, 'id'>) {
+/**
+ * Add a keyframe to a track. Returns the new keyframe's id, or null when the
+ * layer/track vanished mid-call (callers that need the id — e.g. gizmo
+ * gesture bookkeeping for Esc-cancel reversal — rely on this).
+ */
+export function addKeyframe(
+  layerId: string,
+  trackId: string,
+  kf: Omit<Keyframe, 'id'>,
+): string | null {
+  const id = nanoid()
+  let created: string | null = null
   setDoc(
     produce((d) => {
       const track = d.layers.find((l) => l.id === layerId)?.tracks.find((t) => t.id === trackId)
@@ -754,10 +766,14 @@ export function addKeyframe(layerId: string, trackId: string, kf: Omit<Keyframe,
           kf.value = prev?.value ?? '0'
         }
       }
-      track.keyframes.push({ ...kf, id: nanoid() })
+      track.keyframes.push({ ...kf, id })
       track.keyframes.sort((a, b) => a.time - b.time)
+      created = id
     }),
   )
+  // The assignment happens inside produce's callback; TS can't see through
+  // setDoc, so re-widen past its initializer-based null narrowing.
+  return created as string | null
 }
 
 export function updateKeyframe(
@@ -791,6 +807,73 @@ export function removeKeyframe(layerId: string, trackId: string, keyframeId: str
       track.keyframes = track.keyframes.filter((k) => k.id !== keyframeId)
     }),
   )
+}
+
+// ── Stage gizmo writes (transform gizmos plan §2/§4) ───────────────────
+/**
+ * What one gizmo gesture frame actually wrote — the overlay collects these
+ * so Esc can reverse the gesture structurally (restore overwritten values,
+ * remove created keyframes/tracks in reverse order) instead of relying on
+ * the undo stack's 300ms burst window.
+ */
+export interface GizmoEditReceipt {
+  kind: 'update-kf' | 'create-kf' | 'create-track-and-kf'
+  trackId: string
+  /** Present for update-kf / create-kf. */
+  kfId?: string
+  /** Pre-write value of an updated keyframe (for cancel restoration). */
+  originalValue?: string
+}
+
+/**
+ * Auto-key write path for stage gizmos: land `newValue` for `property` at
+ * the playhead, deciding WHERE purely via gizmoWritePolicy —
+ *
+ *   playhead on an existing keyframe (±8ms) → rewrite that keyframe's value
+ *   track exists between/outside keys       → insert a keyframe at playhead
+ *   no track yet                            → create track + first keyframe
+ *
+ * New keyframes inherit the leaving neighbor's easing ('ease-out' when none,
+ * matching "+ KF" capture). Everything funnels through setDoc, so autosave
+ * and the 300ms-burst undo coalescing treat a whole drag as one entry.
+ * Returns a receipt for gesture cancel bookkeeping (null = nothing written).
+ */
+export function applyGizmoEdit(
+  layerId: string,
+  property: AnimatableProperty,
+  playheadMs: number,
+  newValue: string,
+): GizmoEditReceipt | null {
+  const layer = doc.layers.find((l) => l.id === layerId)
+  if (!layer || newValue.trim() === '') return null
+  // Defensive clamp: stops beyond 100% are silently dropped by browsers.
+  const time = Math.max(0, Math.min(doc.duration, playheadMs))
+  const existing = layer.tracks.find((t) => t.property === property) ?? null
+
+  const plan = gizmoWritePolicy(existing, time)
+  if (plan.kind === 'update-kf' && existing) {
+    const kf = existing.keyframes.find((k) => k.id === plan.kfId)
+    if (!kf) return null
+    const originalValue = kf.value
+    updateKeyframe(layerId, existing.id, plan.kfId, { value: newValue })
+    return { kind: 'update-kf', trackId: existing.id, kfId: kf.id, originalValue }
+  }
+
+  if (plan.kind === 'create-kf' && existing) {
+    const sorted = [...existing.keyframes].sort((a, b) => a.time - b.time)
+    const easing = inheritEasingForNewKeyframe(sorted, time)
+    const kfId = addKeyframe(layerId, existing.id, { time, value: newValue, easing })
+    if (!kfId) return null
+    return { kind: 'create-kf', trackId: existing.id, kfId }
+  }
+
+  // No individual track yet — auto-key creates it. A brand-new track has no
+  // neighbors to inherit from, so the first keyframe uses the default easing.
+  const trackId = addTrack(layerId, property)
+  if (!trackId) return null
+  const kfId = addKeyframe(layerId, trackId, { time, value: newValue, easing: 'ease-out' })
+  if (!kfId) return null
+  return { kind: 'create-track-and-kf', trackId, kfId }
 }
 
 export function setDuration(ms: number) {
