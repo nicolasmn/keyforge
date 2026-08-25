@@ -6,7 +6,7 @@ import type { Layer } from '@/types'
 // (Timeline draw/hit-test/cursor/resize) multiply by dpr at the edge.
 
 /** Height of one track lane. Moved here from Timeline.tsx so the model owns the geometry constants. */
-export const TRACK_HEIGHT = 36
+export const TRACK_HEIGHT = 24
 /** Ruler height above the first row. */
 export const HEADER_HEIGHT = 28
 /**

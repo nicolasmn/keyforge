@@ -18,6 +18,7 @@ import {
 } from '@/store'
 import { savePrefs } from '@/utils/persistence'
 import { snapTime } from '@/utils/snap'
+import { sampleEasingPoints, easingYExtent } from '@/utils/easingCurve'
 import { chooseLabelStep, formatTick, minorStepFor } from '@/utils/rulerScale'
 import {
   HEADER_HEIGHT,
@@ -264,10 +265,28 @@ export default function Timeline() {
       ctx.restore()
       ctx.fillStyle = colorBorder
       ctx.fillRect(0, y + row.height * dpr - 1, width, 1)
-      ctx.fillRect(0, y + (row.height / 2) * dpr, width, 1)
+      // Keyframe baseline near the row's bottom edge (DevTools style):
+      // diamonds ride this line, easing fills rise above it.
+      const baselineY = y + (row.height - 7) * dpr
+      ctx.fillRect(0, baselineY, width, 1)
+      // DevTools-style span bar: a thin track-colored line connecting the
+      // first and last keyframes — reads as "this property animates here",
+      // and gives the diamonds a shared rail. Diamonds draw on top of it.
+      const sortedKfs = [...track.keyframes].sort((a, b) => a.time - b.time)
+      if (sortedKfs.length > 1) {
+        const bx1 = timeToX(sortedKfs[0].time, width / dpr) * dpr
+        const bx2 = timeToX(sortedKfs[sortedKfs.length - 1].time, width / dpr) * dpr
+        if (bx2 - bx1 > 1) {
+          ctx.save()
+          ctx.globalAlpha = 0.55 * ctx.globalAlpha
+          ctx.fillStyle = trackColors[ti % trackColors.length]
+          ctx.fillRect(bx1, baselineY - dpr, bx2 - bx1, 2 * dpr)
+          ctx.restore()
+        }
+      }
       track.keyframes.forEach((kf) => {
         const x = timeToX(kf.time, width / dpr) * dpr
-        const cy2 = y + (row.height / 2) * dpr
+        const cy2 = baselineY
         const isSelected = selectedKeyframeId() === kf.id
         const isHovered =
           hoverKf !== null &&
@@ -294,6 +313,41 @@ export default function Timeline() {
         }
         ctx.restore()
       })
+
+      // ── Easing glyphs between adjacent keyframes (DevTools-style): the
+      // LEFT keyframe's easing governs the segment it starts. Overshoot-
+      // aware framing via easingYExtent; skipped when the gap is too tight
+      // or the easing has no honest curve (steps()/unknown).
+      // Glyph fill uses the OWNING TRACK's color — same hue as its
+      // diamonds (owner feedback), so segment identity reads at a glance.
+      for (let i = 0; i < sortedKfs.length - 1; i++) {
+        const a = sortedKfs[i]
+        const b = sortedKfs[i + 1]
+        const x1 = timeToX(a.time, width / dpr) * dpr
+        const x2 = timeToX(b.time, width / dpr) * dpr
+        const gap = x2 - x1
+        if (gap < 14 * dpr) continue
+        const pts = sampleEasingPoints(a.easing, 16)
+        if (!pts) continue
+        const glyphH = (row.height - 9) * dpr
+        const { lo, hi } = easingYExtent(pts)
+        const span = hi - lo || 1
+        // DevTools-style: the easing is a soft FILLED area rising from the
+        // keyframe baseline — restrained fill only, no stroked line.
+        ctx.save()
+        ctx.globalAlpha = 0.22 * ctx.globalAlpha
+        ctx.fillStyle = trackColors[ti % trackColors.length]
+        ctx.beginPath()
+        ctx.moveTo(x1 + 5 * dpr, baselineY)
+        for (const p of pts) {
+          const gx = x1 + 5 * dpr + p.t * (gap - 10 * dpr)
+          ctx.lineTo(gx, baselineY - ((p.v - lo) / span) * glyphH)
+        }
+        ctx.lineTo(x2 - 5 * dpr, baselineY)
+        ctx.closePath()
+        ctx.fill()
+        ctx.restore()
+      }
       ctx.restore() // hidden-layer dim wrapper
     }
 
