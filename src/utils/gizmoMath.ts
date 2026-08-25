@@ -427,3 +427,98 @@ export function inheritEasingForNewKeyframe(
   }
   return leaving ? leaving.easing : fallback
 }
+
+// ── Pose composition (owner feedback 2026-08-25) ───────────────────────
+// Handles must sit ON the transformed element, not its reference box: when
+// translate/rotate/scale tracks animate the layer, the gizmo composes the
+// current pose (interpolatedValueAt at playhead) over the offset-box geometry.
+
+/** The animated pose the preview shows for a layer at the playhead. */
+export interface GizmoPose {
+  tx: number
+  ty: number
+  rotDeg: number
+  scale: number
+}
+
+export interface PosedGizmoGeometry {
+  corners: Array<{ part: GizmoPart; x: number; y: number }>
+  /** Top-edge midpoint after transform — stem starts here. */
+  stemBase: Point
+  /** Rotation handle center (stem end, rotated with the box). */
+  rotateCenter: Point
+  /** Transformed outline in draw order (nw → ne → se → sw). */
+  polygon: Point[]
+}
+
+/**
+ * Compose CSS's individual-transform chain over the reference box:
+ * screen(p) = O + t + R(θ)·S·(p − O), where O is the transform-origin
+ * resolved against the UNtransformed border box (css-transforms-2: origin
+ * is fixed before any function applies; translate moves it on screen).
+ */
+export function applyPoseToBox(
+  box: RectLike,
+  pose: GizmoPose,
+  pivotPct: { xPct: number; yPct: number },
+): PosedGizmoGeometry {
+  const O = {
+    x: box.left + (pivotPct.xPct / 100) * box.width,
+    y: box.top + (pivotPct.yPct / 100) * box.height,
+  }
+  const th = (pose.rotDeg * Math.PI) / 180
+  const cos = Math.cos(th)
+  const sin = Math.sin(th)
+  const xf = (px: number, py: number): Point => {
+    const dx = px - O.x
+    const dy = py - O.y
+    return {
+      x: O.x + pose.tx + (dx * cos - dy * sin) * pose.scale,
+      y: O.y + pose.ty + (dx * sin + dy * cos) * pose.scale,
+    }
+  }
+  const corners: Array<{ part: GizmoPart; x: number; y: number }> = [
+    { part: 'nw', ...xf(box.left, box.top) },
+    { part: 'ne', ...xf(box.left + box.width, box.top) },
+    { part: 'se', ...xf(box.left + box.width, box.top + box.height) },
+    { part: 'sw', ...xf(box.left, box.top + box.height) },
+  ]
+  const stemBase = xf(box.left + box.width / 2, box.top)
+  // Up vector after rotation: R(θ)·(0,−1) = (sinθ, −cosθ).
+  const rotateCenter = {
+    x: stemBase.x + STEM_LEN * sin,
+    y: stemBase.y - STEM_LEN * cos,
+  }
+  return {
+    corners,
+    stemBase,
+    rotateCenter,
+    polygon: corners.map((c) => ({ x: c.x, y: c.y })),
+  }
+}
+
+function pointInPolygon(poly: Array<{ x: number; y: number }>, x: number, y: number): boolean {
+  let inside = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x
+    const yi = poly[i].y
+    const xj = poly[j].x
+    const yj = poly[j].y
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside
+  }
+  return inside
+}
+
+/**
+ * Hit-test against POSED geometry: corner targets first, then the rotated
+ * stem tip, then point-in-polygon body. Null = outside everything.
+ */
+export function hitTestGizmoPosed(geo: PosedGizmoGeometry, x: number, y: number): GizmoPart | null {
+  const half = CORNER_HIT_PX / 2
+  for (const c of geo.corners) {
+    if (Math.abs(x - c.x) <= half && Math.abs(y - c.y) <= half) return c.part
+  }
+  if (distance(geo.rotateCenter.x, geo.rotateCenter.y, x, y) <= ROTATE_HIT_R) return 'rotate'
+  if (pointInPolygon(geo.polygon, x, y)) return 'body'
+  return null
+}

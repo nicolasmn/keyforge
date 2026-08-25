@@ -14,29 +14,29 @@ import { originPicking } from './originPickState'
 import { slugify } from '@/utils/slugify'
 import { interpolatedValueAt } from '@/utils/interpolate'
 import {
+  applyPoseToBox,
   clampScale,
   CORNER_HIT_PX,
   cursorForPart,
   formatRotateDeg,
   formatScaleNum,
   formatTranslate,
-  hitTestGizmo,
+  hitTestGizmoPosed,
   moveDelta,
   parseRotateDeg,
   parseScaleNum,
   parseTranslatePair,
   pointerAngleRad,
   resolvePivot,
-  rotateHandleCenter,
   rotationDelta,
   ROTATE_HANDLE_R,
   scaleFactor,
   snapRotationToStep,
-  STEM_LEN,
   toLayoutPoint,
   type GizmoPart,
   type GizmoSpace,
   type Point,
+  type PosedGizmoGeometry,
 } from '@/utils/gizmoMath'
 import type { RectLike } from '@/utils/originMath'
 import type { AnimatableProperty, Track } from '@/types'
@@ -188,6 +188,31 @@ export default function TransformOverlay() {
   const visible = () =>
     !!targetBox() && !originPicking() && (hoverPart() !== null || gestureKind() !== null)
 
+  // ── Animated pose → posed geometry (owner feedback 2026-08-25) ──────
+  // Handles must sit ON the transformed element: compose the current
+  // playhead pose (interpolatedValueAt per property) over the reference
+  // box. Reactive to playhead AND track writes — during a drag the
+  // streamed auto-key writes update this memo, so the overlay follows its
+  // own edits with no extra plumbing.
+  const pose = createMemo(() => {
+    const phMs = Math.round(playhead())
+    const t = parseTranslatePair(poseAt('translate', phMs) ?? '0px 0px')
+    return {
+      tx: t.x,
+      ty: t.y,
+      rotDeg: parseRotateDeg(poseAt('rotate', phMs) ?? '0deg'),
+      scale: parseScaleNum(poseAt('scale', phMs) ?? '1'),
+    }
+  })
+
+  const posedGeo = createMemo<PosedGizmoGeometry | null>(() => {
+    const box = targetBox()
+    if (!box) return null
+    const layer = selectedLayer()
+    const pct = resolvePivot({ element: { origin: layer?.element.origin } }, null, box)
+    return applyPoseToBox(box, pose(), { xPct: pct.xPct, yPct: pct.yPct })
+  })
+
   // Canvas resize / window resize must re-measure offsets even though no
   // store field changed (same trigger set as OriginOverlay's debug view;
   // panel resizes only change --preview-scale, which offsets ignore, but
@@ -287,42 +312,42 @@ export default function TransformOverlay() {
   function onCanvasPointerMove(e: PointerEvent) {
     if (session) return // the window-level move handler owns the gesture
     const space = liveSpace()
-    const box = targetBox()
-    if (!space || !box || originPicking()) {
+    const geo = posedGeo()
+    if (!space || !geo || originPicking()) {
       setHoverPart(null)
       return
     }
     const p = layoutPointFrom(e, space)
-    setHoverPart(hitTestGizmo(box, p.x, p.y))
+    setHoverPart(hitTestGizmoPosed(geo, p.x, p.y))
   }
 
   function onCanvasPointerDown(e: PointerEvent) {
     if (session || e.button !== 0 || originPicking()) return
     const space = liveSpace()
-    const box = targetBox()
-    if (!space || !box || compositeOnly()) return
+    const geo = posedGeo()
+    if (!space || !geo || compositeOnly()) return
     const p = layoutPointFrom(e, space)
-    const part = hitTestGizmo(box, p.x, p.y)
+    const part = hitTestGizmoPosed(geo, p.x, p.y)
     if (!part) return // fall through: stage clicks keep selecting layers
     e.preventDefault()
-    startGesture(e, part, space, box, p)
+    startGesture(e, part, space, p)
   }
 
   // ── Gesture lifecycle (module-scope session) ────────────────────────
 
-  function startGesture(
-    e: PointerEvent,
-    part: GizmoPart,
-    space: GizmoSpace,
-    box: RectLike,
-    startLayout: Point,
-  ) {
+  function startGesture(e: PointerEvent, part: GizmoPart, space: GizmoSpace, startLayout: Point) {
     const layer = selectedLayer()
     if (!layer) return
     const kind: GizmoSession['kind'] =
       part === 'body' ? 'move' : part === 'rotate' ? 'rotate' : 'scale'
     const phMs = Math.round(playhead())
-    const pivot = pivotFor(layer, box)
+    // Rotation/scale pivot in POSED space (origin + animated translate):
+    // the user sees the element swing around the pivot where it renders.
+    const refBox = targetBox()
+    if (!refBox) return
+    const pivotLayout = pivotFor(layer, refBox)
+    const p0 = pose()
+    const pivot: Point = { x: pivotLayout.x + p0.tx, y: pivotLayout.y + p0.ty }
 
     setPlaying(false) // every existing canvas gesture pauses playback (§1e)
 
@@ -334,7 +359,7 @@ export default function TransformOverlay() {
       space,
       startClient: { x: e.clientX, y: e.clientY },
       startLayout,
-      box,
+      box: refBox,
       pivot,
       startTranslate: parseTranslatePair(poseAt('translate', phMs) ?? '0px 0px'),
       startRotDeg: parseRotateDeg(poseAt('rotate', phMs) ?? '0deg'),
@@ -465,10 +490,10 @@ export default function TransformOverlay() {
     // Re-hit-test from the release point: the gizmo stays visible iff the
     // pointer still rests over its geometry (hover takes back over).
     const space = liveSpace()
-    const box = targetBox()
-    if (space && box) {
+    const geo = posedGeo()
+    if (space && geo) {
       const p = toLayoutPoint(space, s.lastClient.x, s.lastClient.y)
-      setHoverPart(hitTestGizmo(box, p.x, p.y))
+      setHoverPart(hitTestGizmoPosed(geo, p.x, p.y))
     } else {
       setHoverPart(null)
     }
@@ -511,13 +536,9 @@ export default function TransformOverlay() {
   // ── Render ──────────────────────────────────────────────────────────
   // Everything draws in canvas-layout px (no viewBox on purpose: 1 user
   // unit = 1 css px pre-scale, same convention as .kf-origin-debug).
-
-  const corners = (box: RectLike): Array<{ part: GizmoPart; x: number; y: number }> => [
-    { part: 'nw', x: box.left, y: box.top },
-    { part: 'ne', x: box.left + box.width, y: box.top },
-    { part: 'sw', x: box.left, y: box.top + box.height },
-    { part: 'se', x: box.left + box.width, y: box.top + box.height },
-  ]
+  // Geometry is POSED: the outline/handles compose the layer's current
+  // playhead pose, so they sit on the element as it renders (owner
+  // feedback) — not on its un-transformed reference box.
 
   const GLYPH = CORNER_HIT_PX / 2 // 12px glyph inside each 24px target
 
@@ -530,34 +551,34 @@ export default function TransformOverlay() {
       classList={{ 'kf-gizmo--readonly': compositeOnly() }}
     >
       <Show when={visible()}>
-        <Show when={targetBox()}>
-          {(box) => (
+        <Show when={posedGeo()}>
+          {(geo) => (
             <>
               <svg class="kf-gizmo__svg" aria-hidden="true">
-                {/* Reference box — un-transformed geometry, accent stroke */}
-                <rect
+                {/* Posed outline — accent stroke, drawn through the four
+                    transformed corners so it hugs the animated element. */}
+                <polygon
                   class="kf-gizmo__box"
-                  x={box().left}
-                  y={box().top}
-                  width={box().width}
-                  height={box().height}
+                  points={geo()
+                    .polygon.map((p) => `${p.x},${p.y}`)
+                    .join(' ')}
                   vector-effect="non-scaling-stroke"
                 />
                 <line
                   class="kf-gizmo__stem"
-                  x1={(box().left + box().width) / 2}
-                  y1={box().top}
-                  x2={(box().left + box().width) / 2}
-                  y2={box().top - STEM_LEN}
+                  x1={geo().stemBase.x}
+                  y1={geo().stemBase.y}
+                  x2={geo().rotateCenter.x}
+                  y2={geo().rotateCenter.y}
                   vector-effect="non-scaling-stroke"
                 />
                 <circle
                   class="kf-gizmo__rotate"
-                  cx={rotateHandleCenter(box()).x}
-                  cy={rotateHandleCenter(box()).y}
+                  cx={geo().rotateCenter.x}
+                  cy={geo().rotateCenter.y}
                   r={ROTATE_HANDLE_R}
                 />
-                <For each={corners(box())}>
+                <For each={geo().corners}>
                   {(c) => (
                     <rect
                       class="kf-gizmo__corner"
@@ -580,7 +601,10 @@ export default function TransformOverlay() {
               <Show when={compositeOnly()}>
                 <div
                   class="kf-gizmo__badge"
-                  style={{ left: `${box().left}px`, top: `${box().top + box().height + 10}px` }}
+                  style={{
+                    left: `${Math.min(...geo().polygon.map((p) => p.x))}px`,
+                    top: `${Math.max(...geo().polygon.map((p) => p.y)) + 10}px`,
+                  }}
                 >
                   composite — edit in inspector
                 </div>
