@@ -2,6 +2,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show }
 import {
   applyGizmoEdit,
   doc,
+  liveEdit,
   playhead,
   removeKeyframe,
   removeTrack,
@@ -14,9 +15,17 @@ import { originPicking } from './originPickState'
 import { slugify } from '@/utils/slugify'
 import { interpolatedValueAt } from '@/utils/interpolate'
 import {
+  alignmentTargets,
+  moverCandidatesFromPolygon,
+  snapScaleToWholeEdges,
+  snapTranslate,
+  type AlignmentTargets,
+  type MoverCandidates,
+} from '@/utils/snapSpatial'
+import {
   applyPoseToBox,
   clampScale,
-  CORNER_HIT_PX,
+  CORNER_GLYPH_PX,
   cursorForPart,
   formatRotateDeg,
   formatScaleNum,
@@ -34,29 +43,41 @@ import {
   snapRotationToStep,
   toLayoutPoint,
   type GizmoPart,
+  type GizmoPose,
   type GizmoSpace,
   type Point,
   type PosedGizmoGeometry,
 } from '@/utils/gizmoMath'
 import type { RectLike } from '@/utils/originMath'
-import type { AnimatableProperty, Track } from '@/types'
+import type { AnimatableProperty, Layer } from '@/types'
 
 /**
- * Stage overlay for transform gizmos (transform gizmos plan §3/§7 Phase 1):
+ * Stage overlay for transform gizmos (transform gizmos plan §3/§7 Phase 1,
+ * as amended by Revision 1):
  *
- * An SVG layer inside .preview__canvas drawing the SELECTED layer's
- * UN-transformed reference box (offsetLeft/Top/Width/Height — immune to
- * --preview-scale AND to the element's own animated WAAPI transform;
- * getBoundingClientRect of the target is never read), plus:
- *   - 4 corner handles → uniform scale (24px targets, 12px glyphs)
+ * An SVG layer inside .preview__canvas drawing POSED geometry (offsetLeft/
+ * Top/Width/Height reference boxes composed with each layer's current
+ * playhead pose — immune to --preview-scale AND to the element's own
+ * animated WAAPI transform; getBoundingClientRect of targets is never
+ * read), plus:
+ *   - 4 corner handles → uniform scale (24px targets)
  *   - rotation handle above the top edge on a stem
  *   - body drag → translate
  *
+ * Visibility contract (Revision 1 §A) — LIVE-EDIT MODE replaces hover
+ * gating:
+ *   ON  → every VISIBLE layer draws its posed outline; the selected layer
+ *         additionally draws handles + stem. Independent of hover, so the
+ *         chrome follows playback/scrubbing.
+ *   OFF → Phase-1 behavior: no chrome at rest; hovering the selected
+ *         layer's posed geometry reveals it, and an ACTIVE GESTURE pins
+ *         the overlay until pointerup/Esc regardless.
+ * Hover/hit-testing survives in BOTH modes — it drives cursor affordances
+ * and grab targeting, never visibility in ON mode.
+ *
  * Owner-approved defaults (2026-08-25):
- *   auto-key always on · individual properties only · HOVER-GATED visibility
- *   (the gizmo shows while the pointer hovers the selected layer's area and
- *   STAYS visible for the duration of an active gesture even if the pointer
- *   briefly leaves; no always-on box) · no spatial snapping · corners only.
+ *   auto-key always on · individual properties only · corners only ·
+ *   unified spatial snapping wired into MOVE (Revision 1 §C).
  *
  * Layers whose motion lives ONLY in a composite `transform` track render the
  * muted "composite — edit in inspector" badge with inert handles (Phase 3
@@ -67,18 +88,20 @@ import type { AnimatableProperty, Track } from '@/types'
  * re-rendering the tree can never strand a running drag. Events are
  * delegated to .preview__canvas itself (the SVG is pointer-events:none so
  * stage clicks keep flowing); pointerdown hit-tests against the same pure
- * geometry that drives hover (utils/gizmoMath.hitTestGizmo). Origin pick
+ * geometry that drives hover (utils/gizmoMath.hitTestGizmoPosed). Origin pick
  * mode wins: while originPicking() is true the gizmo suppresses entirely.
  */
 
 // ── Module-scope reactive state ───────────────────────────────────────
 
-/** Affordance under the pointer at rest (also the hover gate). */
+/** Affordance under the pointer at rest (cursor affordances + grab targeting). */
 const [hoverPart, setHoverPart] = createSignal<GizmoPart | null>(null)
-/** Non-null while a gesture owns visibility + input (survives remounts). */
+/** Non-null while a gesture owns input (survives remounts). */
 const [gestureKind, setGestureKind] = createSignal<'move' | 'rotate' | 'scale' | null>(null)
 /** Value chip following the cursor during gestures (canvas-layout px). */
 const [chip, setChip] = createSignal<{ x: number; y: number; text: string } | null>(null)
+/** Alignment guide lines while a MOVE gesture is snapped (Revision 1 §C). */
+const [guides, setGuides] = createSignal<{ x: number | null; y: number | null } | null>(null)
 
 interface GizmoSession {
   pointerId: number
@@ -103,6 +126,14 @@ interface GizmoSession {
   /** Scale-only: pivot→grab distance. */
   startDist: number
   playheadMs: number
+  /**
+   * Move-only snapping inputs, FROZEN at gesture start (Revision 1 §C):
+   * alignment candidate lines from other layers + stage, and the mover's
+   * own posed edge candidates at zero delta. Recomputing per frame would
+   * let the mover attract itself and fight its own writes.
+   */
+  snapTargets: AlignmentTargets | null
+  moverCandidates: MoverCandidates | null
   /** Latest computed canonical value, applied ≤1× per animation frame. */
   latest: string | null
   raf: number
@@ -149,14 +180,22 @@ export default function TransformOverlay() {
     if (!id) return null
     const layer = doc.layers.find((l) => l.id === id)
     if (!layer || layer.visible === false) return null
+    return measureLayerBox(layer)
+  })
+
+  /**
+   * Defensive DOM measurement shared by the selection box AND the
+   * Live-Editing ghost outlines (plan §9): zero-size elements break %-math
+   * and scale math; position:fixed breaks the offsetParent chain.
+   */
+  function measureLayerBox(layer: Pick<Layer, 'id' | 'name' | 'visible'>): RectLike | null {
+    if (layer.visible === false) return null
     // Selector ids are slugified names; escape defensively (OriginOverlay).
     const sel =
       typeof CSS !== 'undefined' && 'escape' in CSS
         ? CSS.escape(slugify(layer.name))
         : slugify(layer.name)
     const el = document.querySelector<HTMLElement>(`[data-layer-id="${sel}"]`)
-    // Defensive skips (plan §9): zero-size elements break %-math and scale
-    // math; position:fixed breaks the offsetParent chain.
     if (!el || el.offsetWidth === 0 || el.offsetHeight === 0) return null
     try {
       if (getComputedStyle(el).position === 'fixed') return null
@@ -169,6 +208,64 @@ export default function TransformOverlay() {
       width: el.offsetWidth,
       height: el.offsetHeight,
     }
+  }
+
+  /**
+   * Reference boxes for EVERY visible layer — Live-Editing ghost geometry.
+   * Keyed on structure + layout version ONLY (not tracks): track writes
+   * stream every drag frame and offsets ignore transforms, so re-measuring
+   * per frame would force layouts for nothing. Gated on liveEdit() so the
+   * per-layer querySelector sweep only runs while the mode is on.
+   */
+  const layerBoxes = createMemo<Map<string, RectLike>>(() => {
+    layerSignature()
+    layoutVersion()
+    const map = new Map<string, RectLike>()
+    if (!liveEdit() || typeof document === 'undefined') return map
+    for (const layer of doc.layers) {
+      const box = measureLayerBox(layer)
+      if (box) map.set(layer.id, box)
+    }
+    return map
+  })
+
+  /** Pose the preview SHOWS for a LAYER at the playhead (plan §1c). */
+  function poseForLayer(layer: Layer, phMs: number): GizmoPose {
+    const at = (property: AnimatableProperty): string | null => {
+      const t = layer.tracks.find((tr) => tr.property === property)
+      return t ? interpolatedValueAt(t, phMs) : null
+    }
+    const t = parseTranslatePair(at('translate') ?? '0px 0px')
+    return {
+      tx: t.x,
+      ty: t.y,
+      rotDeg: parseRotateDeg(at('rotate') ?? '0deg'),
+      scale: parseScaleNum(at('scale') ?? '1'),
+    }
+  }
+
+  /**
+   * Faint posed outlines for all OTHER visible layers while Live-Editing is
+   * ON (Revision 1 §A). Reactive over playhead() and every layer's own
+   * track values, so outlines follow playback AND each layer's streamed
+   * auto-key edits. The SELECTED layer is excluded — its outline is the
+   * main kf-gizmo__box, drawn at full strength with handles.
+   */
+  const ghostOutlines = createMemo<Array<{ id: string; points: string }>>(() => {
+    const boxes = layerBoxes()
+    if (boxes.size === 0) return []
+    const phMs = Math.round(playhead())
+    const selId = selectedLayerId()
+    const ghosts: Array<{ id: string; points: string }> = []
+    for (const layer of doc.layers) {
+      if (layer.id === selId || layer.visible === false) continue
+      const box = boxes.get(layer.id)
+      if (!box) continue
+      const pct = resolvePivot({ element: { origin: layer.element.origin } }, null, box)
+      const geo = applyPoseToBox(box, poseForLayer(layer, phMs), pct)
+      ghosts.push({ id: layer.id, points: geo.polygon.map((p) => `${p.x},${p.y}`).join(' ') })
+    }
+    return ghosts
   })
 
   const selectedLayer = () => doc.layers.find((l) => l.id === selectedLayerId())
@@ -184,9 +281,15 @@ export default function TransformOverlay() {
     return hasTransform && !hasIndividual
   })
 
-  /** HOVER-GATED visibility; a live gesture pins it until pointerup/Esc. */
+  /**
+   * Visibility (Revision 1 §A): Live-Editing ON → chrome always drawn
+   * (independent of hover). OFF → Phase-1 hover gate; an active gesture
+   * pins the overlay until pointerup/Esc in BOTH modes.
+   */
   const visible = () =>
-    !!targetBox() && !originPicking() && (hoverPart() !== null || gestureKind() !== null)
+    !!targetBox() &&
+    !originPicking() &&
+    (liveEdit() || hoverPart() !== null || gestureKind() !== null)
 
   // ── Animated pose → posed geometry (owner feedback 2026-08-25) ──────
   // Handles must sit ON the transformed element: compose the current
@@ -196,13 +299,8 @@ export default function TransformOverlay() {
   // own edits with no extra plumbing.
   const pose = createMemo(() => {
     const phMs = Math.round(playhead())
-    const t = parseTranslatePair(poseAt('translate', phMs) ?? '0px 0px')
-    return {
-      tx: t.x,
-      ty: t.y,
-      rotDeg: parseRotateDeg(poseAt('rotate', phMs) ?? '0deg'),
-      scale: parseScaleNum(poseAt('scale', phMs) ?? '1'),
-    }
+    const layer = selectedLayer()
+    return layer ? poseForLayer(layer, phMs) : { tx: 0, ty: 0, rotDeg: 0, scale: 1 }
   })
 
   const posedGeo = createMemo<PosedGizmoGeometry | null>(() => {
@@ -264,14 +362,35 @@ export default function TransformOverlay() {
     }
   }
 
-  function trackFor(property: AnimatableProperty): Track | null {
-    return selectedLayer()?.tracks.find((t) => t.property === property) ?? null
-  }
-
-  /** Pose the preview SHOWS at the playhead for a property (plan §1c). */
-  function poseAt(property: AnimatableProperty, phMs: number): string | null {
-    const t = trackFor(property)
-    return t ? interpolatedValueAt(t, phMs) : null
+  /**
+   * Fresh one-shot alignment-target sweep for a MOVE gesture start
+   * (Revision 1 §C): measures every OTHER visible layer directly (NOT via
+   * the liveEdit-gated memo — snapping must work in hover mode too), poses
+   * each at the grab-time playhead, and adds the stage frame. Frozen into
+   * the session so the mover can never attract its own streamed writes.
+   */
+  function collectSnapTargets(excludeLayer: Layer, phMs: number): AlignmentTargets | null {
+    const canvas = canvasRef()
+    if (!canvas || typeof document === 'undefined') return null
+    const stageBox: RectLike = {
+      left: 0,
+      top: 0,
+      width: canvas.offsetWidth,
+      height: canvas.offsetHeight,
+    }
+    const inputs = []
+    for (const layer of doc.layers) {
+      if (layer.id === excludeLayer.id || layer.visible === false) continue
+      const box = measureLayerBox(layer)
+      if (!box) continue
+      inputs.push({
+        id: layer.id,
+        box,
+        pose: poseForLayer(layer, phMs),
+        pivotPct: resolvePivot({ element: { origin: layer.element.origin } }, null, box),
+      })
+    }
+    return alignmentTargets(inputs, stageBox, excludeLayer.id)
   }
 
   // ── Cursor management ───────────────────────────────────────────────
@@ -348,8 +467,17 @@ export default function TransformOverlay() {
     const pivotLayout = pivotFor(layer, refBox)
     const p0 = pose()
     const pivot: Point = { x: pivotLayout.x + p0.tx, y: pivotLayout.y + p0.ty }
+    const geo0 = posedGeo()
 
     setPlaying(false) // every existing canvas gesture pauses playback (§1e)
+
+    // Move gestures freeze their snapping inputs NOW (Revision 1 §C):
+    // alignment lines from other layers/stage + the mover's own posed
+    // edge candidates at grab. Rotation/scale keep nulls (Shift-15° and
+    // whole-edge rounding need no targets).
+    const snapTargets = kind === 'move' ? collectSnapTargets(layer, phMs) : null
+    const moverCandidates =
+      kind === 'move' && geo0 ? moverCandidatesFromPolygon(geo0.polygon) : null
 
     session = {
       pointerId: e.pointerId,
@@ -361,12 +489,14 @@ export default function TransformOverlay() {
       startLayout,
       box: refBox,
       pivot,
-      startTranslate: parseTranslatePair(poseAt('translate', phMs) ?? '0px 0px'),
-      startRotDeg: parseRotateDeg(poseAt('rotate', phMs) ?? '0deg'),
-      startScale: parseScaleNum(poseAt('scale', phMs) ?? '1'),
+      startTranslate: { x: p0.tx, y: p0.ty },
+      startRotDeg: p0.rotDeg,
+      startScale: p0.scale,
       startAngleRad: pointerAngleRad(pivot, startLayout.x, startLayout.y),
       startDist: Math.hypot(startLayout.x - pivot.x, startLayout.y - pivot.y),
       playheadMs: phMs,
+      snapTargets,
+      moverCandidates,
       latest: null,
       raf: 0,
       receipts: [],
@@ -394,7 +524,26 @@ export default function TransformOverlay() {
         e.clientX,
         e.clientY,
       )
-      return formatTranslate(s.startTranslate.x + d.dx, s.startTranslate.y + d.dy)
+      // Unified spatial snapping (Revision 1 §C): axis lock → alignment
+      // targets → pixel grid round; Alt disables ALL of it. Frozen
+      // targets/mover from grab time keep the mover from attracting
+      // itself. The written VALUE stays canonical "Xpx Ypx" either way.
+      if (s.snapTargets && s.moverCandidates) {
+        const r = snapTranslate(d.dx, d.dy, {
+          alt: e.altKey,
+          axisLock: true,
+          targets: s.snapTargets,
+          mover: s.moverCandidates,
+        })
+        setGuides({ x: r.guideX, y: r.guideY })
+        return formatTranslate(s.startTranslate.x + r.dx, s.startTranslate.y + r.dy)
+      }
+      // Defensive fallback (no frozen inputs): still round to the grid.
+      setGuides(null)
+      return formatTranslate(
+        s.startTranslate.x + (e.altKey ? d.dx : Math.round(d.dx)),
+        s.startTranslate.y + (e.altKey ? d.dy : Math.round(d.dy)),
+      )
     }
     if (s.kind === 'rotate') {
       const dRad = rotationDelta(
@@ -410,7 +559,10 @@ export default function TransformOverlay() {
       return formatRotateDeg(deg)
     }
     const factor = scaleFactor(s.pivot, s.startDist, cur.x, cur.y)
-    return formatScaleNum(clampScale(s.startScale * factor))
+    const raw = clampScale(s.startScale * factor)
+    // Scale pixel-snap (Revision 1 §C): pick the scale whose resulting
+    // edge length is whole px on the dimension it fits best.
+    return formatScaleNum(snapScaleToWholeEdges(raw, s.box.width, s.box.height))
   }
 
   function chipText(s: Pick<GizmoSession, 'kind'>, value: string): string {
@@ -486,6 +638,7 @@ export default function TransformOverlay() {
     else reverseReceipts(s.layerId, s.receipts)
 
     setChip(null)
+    setGuides(null)
     setGestureKind(null)
     // Re-hit-test from the release point: the gizmo stays visible iff the
     // pointer still rests over its geometry (hover takes back over).
@@ -536,11 +689,15 @@ export default function TransformOverlay() {
   // ── Render ──────────────────────────────────────────────────────────
   // Everything draws in canvas-layout px (no viewBox on purpose: 1 user
   // unit = 1 css px pre-scale, same convention as .kf-origin-debug).
-  // Geometry is POSED: the outline/handles compose the layer's current
-  // playhead pose, so they sit on the element as it renders (owner
-  // feedback) — not on its un-transformed reference box.
+  // Geometry is POSED: outlines/handles compose each layer's current
+  // playhead pose, so they sit on the elements as they render (owner
+  // feedback) — not on un-transformed reference boxes.
+  //
+  // Revision 1 layering: Live-Editing ghosts first (faint, all other
+  // visible layers), then the selected layer's full-strength gizmo and —
+  // mid-move — the dashed alignment guides.
 
-  const GLYPH = CORNER_HIT_PX / 2 // 12px glyph inside each 24px target
+  const GLYPH = CORNER_GLYPH_PX // 8px visual glyph inside each 24px target (Revision 1 §B)
 
   return (
     <div
@@ -550,13 +707,26 @@ export default function TransformOverlay() {
       class="kf-gizmo"
       classList={{ 'kf-gizmo--readonly': compositeOnly() }}
     >
-      <Show when={visible()}>
-        <Show when={posedGeo()}>
-          {(geo) => (
-            <>
-              <svg class="kf-gizmo__svg" aria-hidden="true">
-                {/* Posed outline — accent stroke, drawn through the four
-                    transformed corners so it hugs the animated element. */}
+      <svg class="kf-gizmo__svg" aria-hidden="true">
+        {/* Live-Editing mode (Revision 1 §A): faint POSED outline per other
+            visible layer — hover-independent, follows playhead + tracks. */}
+        <Show when={liveEdit() && !originPicking()}>
+          <For each={ghostOutlines()}>
+            {(g) => (
+              <polygon
+                class="kf-gizmo__ghost"
+                points={g.points}
+                vector-effect="non-scaling-stroke"
+              />
+            )}
+          </For>
+        </Show>
+        <Show when={visible()}>
+          <Show when={posedGeo()}>
+            {(geo) => (
+              <>
+                {/* Posed outline — drawn through the four transformed corners
+                    so it hugs the animated element. */}
                 <polygon
                   class="kf-gizmo__box"
                   points={geo()
@@ -564,6 +734,35 @@ export default function TransformOverlay() {
                     .join(' ')}
                   vector-effect="non-scaling-stroke"
                 />
+                {/* Alignment guides while a MOVE gesture is snapped (§C):
+                    one dashed line across the stage per active axis. SVG
+                    percentage coords resolve against the canvas viewport. */}
+                <Show when={gestureKind() === 'move' && guides()}>
+                  {(g) => (
+                    <>
+                      <Show when={g().x !== null}>
+                        <line
+                          class="kf-gizmo__guide"
+                          x1={g().x as number}
+                          y1="0%"
+                          x2={g().x as number}
+                          y2="100%"
+                          vector-effect="non-scaling-stroke"
+                        />
+                      </Show>
+                      <Show when={g().y !== null}>
+                        <line
+                          class="kf-gizmo__guide"
+                          x1="0%"
+                          y1={g().y as number}
+                          x2="100%"
+                          y2={g().y as number}
+                          vector-effect="non-scaling-stroke"
+                        />
+                      </Show>
+                    </>
+                  )}
+                </Show>
                 <line
                   class="kf-gizmo__stem"
                   x1={geo().stemBase.x}
@@ -590,7 +789,15 @@ export default function TransformOverlay() {
                     />
                   )}
                 </For>
-              </svg>
+              </>
+            )}
+          </Show>
+        </Show>
+      </svg>
+      <Show when={visible()}>
+        <Show when={posedGeo()}>
+          {(geo) => (
+            <>
               <Show when={chip()}>
                 {(c) => (
                   <div class="kf-gizmo__chip" style={{ left: `${c().x}px`, top: `${c().y}px` }}>

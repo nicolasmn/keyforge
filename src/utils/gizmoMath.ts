@@ -233,8 +233,14 @@ export function resolvePivot(
 /** Which gizmo affordance owns a point (canvas-layout px). */
 export type GizmoPart = 'rotate' | 'nw' | 'ne' | 'sw' | 'se' | 'body'
 
-/** Corner hit-target side (≥24px per UX spec); glyphs stay 12px. */
+/** Corner hit-target side (≥24px per UX spec); glyphs stay small. */
 export const CORNER_HIT_PX = 24
+/**
+ * VISUAL corner glyph side (Revision 1 §B): restrained Illustrator-style
+ * 8px squares inside the ≥24px hit targets. Purely presentational — the
+ * hit-test geometry above never reads this.
+ */
+export const CORNER_GLYPH_PX = 8
 /** Visual rotation-handle radius. */
 export const ROTATE_HANDLE_R = 8
 /** Rotation hit radius (generous target on top of the 12px glyph). */
