@@ -363,6 +363,10 @@ export default function Timeline() {
           }
         } // closes if (bandH > 0)
       } // closes if (bandCount > 0)
+      // Pop the row's save(): without this, a hidden row's globalAlpha=0.35
+      // leaks onto EVERY later draw call (rows, work-area band, playhead) and
+      // persists across frames — the whole timeline fades out after one hide.
+      ctx.restore()
     }
 
     for (const row of rows()) {
@@ -542,16 +546,20 @@ export default function Timeline() {
   function resize() {
     if (!canvas) return
     const dpr = window.devicePixelRatio || 1
-    // Canvas parent is .timeline__body (flex row: headers + canvas).
-    // We need only the CANVAS portion — subtract the headers column width.
+    // Canvas parent is .timeline__body (flex row: headers + gutter + canvas).
+    // We need only the CANVAS portion — subtract the headers column AND the
+    // 4px drag gutter between them, or the row overflows by exactly the
+    // gutter width and a sliver of horizontal scrollbar appears.
     const bodyRect = canvas.parentElement!.getBoundingClientRect()
     const headersEl = canvas.parentElement!.querySelector('.timeline__headers')
     const headersW = headersEl ? headersEl.getBoundingClientRect().width : 0
+    const gutterEl = canvas.parentElement!.querySelector('.timeline__header-gutter')
+    const gutterW = gutterEl ? gutterEl.getBoundingClientRect().width : 0
     const rect = {
-      width: bodyRect.width - headersW,
+      width: bodyRect.width - headersW - gutterW,
       height: bodyRect.height,
       top: bodyRect.top,
-      left: bodyRect.left + headersW,
+      left: bodyRect.left + headersW + gutterW,
     }
     // Grow beyond the visible panel when there are more rows than fit, so the
     // container can scroll vertically instead of clipping tracks. Height comes
@@ -846,6 +854,12 @@ export default function Timeline() {
     resize()
     const ro = new ResizeObserver(resize)
     ro.observe(canvas!.parentElement!)
+    // The headers column resizes INDEPENDENTLY of its parent when the gutter
+    // drag changes --header-col-w: .timeline__body's own box is unchanged
+    // (it fills the scroll container), so observing it alone never fires and
+    // the canvas keeps its stale width. Observe the split's moving side too.
+    const headersEl = canvas!.parentElement!.querySelector('.timeline__headers')
+    if (headersEl) ro.observe(headersEl)
     onCleanup(() => ro.disconnect())
   })
 

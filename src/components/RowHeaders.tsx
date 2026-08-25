@@ -1,28 +1,39 @@
-import { For, createSignal } from 'solid-js'
+import { For, Show, createSignal, untrack } from 'solid-js'
+import {
+  DragDropProvider,
+  DragDropSensors,
+  DragOverlay,
+  SortableProvider,
+  createSortable,
+  closestCenter,
+  type DragEvent,
+} from '@thisbeyond/solid-dnd'
 import {
   doc,
   selectedLayerId,
   setSelectedLayerId,
+  addLayer,
+  removeLayer,
   renameLayer,
+  reorderLayer,
   setLayerVisibility,
   toggleLayerCollapsed,
 } from '@/store'
 import { headerEntries, type RowHeaderEntry, type TimelineRow } from '@/utils/rowModel'
 
 /**
- * Real-DOM header column for the timeline (plan §2/§3): one absolutely-
- * positioned `.row-header` per canvas row, sharing `.timeline__scroll`'s
- * native scroller with the canvas — vertical scroll sync is designed out
- * because both surfaces consume the SAME buildRowModel memo and live in
- * the same scroll container.
+ * Real-DOM header column for the timeline (plan §2/§3): one `.row-header`
+ * per canvas row, sharing `.timeline__scroll`'s native scroller with the
+ * canvas — vertical scroll sync is designed out because both surfaces
+ * consume the SAME buildRowModel memo and live in the same scroll container.
  *
- * Layer bands host [chevron][eye][name] as real buttons/inputs (the AT
- * story the old canvas chevron could never tell); track bands keep their
- * property label as plain text. Reorder stays in LayerTree for Phase A —
- * this component is deliberately presentational about geometry only.
+ * Phase B: this column is the SINGLE layer surface. Layer bands are dnd-
+ * sortable (grip → reorderLayer), carry a hover ✕ (removeLayer), and the
+ * column ends with a ghost "+ Add layer" row.
  */
 export default function RowHeaders(props: { rows: readonly TimelineRow[] }) {
   const [editingId, setEditingId] = createSignal<string | null>(null)
+  const [draggedId, setDraggedId] = createSignal<string | null>(null)
   /** Name buttons by layer id so rename can hand focus back on commit/cancel. */
   const nameButtons = new Map<string, HTMLButtonElement>()
 
@@ -37,23 +48,60 @@ export default function RowHeaders(props: { rows: readonly TimelineRow[] }) {
     nameButtons.get(layerId)?.focus()
   }
 
+  function onDragEnd({ draggable, droppable }: DragEvent) {
+    setDraggedId(null)
+    if (!droppable || draggable.id === droppable.id) return
+    const fromIndex = doc.layers.findIndex((l) => l.id === draggable.id)
+    const toIndex = doc.layers.findIndex((l) => l.id === droppable.id)
+    if (fromIndex !== -1 && toIndex !== -1) reorderLayer(fromIndex, toIndex)
+  }
+
+  const draggedLayer = () => doc.layers.find((l) => l.id === draggedId())
+
   return (
     <div class="row-headers" aria-label="Timeline row headers">
-      <For each={headerEntries(props.rows)}>
-        {(entry: RowHeaderEntry) =>
-          entry.type === 'layer' ? (
-            <LayerHeaderRow
-              entry={entry}
-              editingId={editingId()}
-              onStartEdit={startEdit}
-              onFinishEdit={finishEdit}
-              registerNameButton={(el) => nameButtons.set(entry.layerId, el)}
-            />
-          ) : (
-            <TrackHeaderRow entry={entry} />
-          )
-        }
-      </For>
+      <DragDropProvider
+        onDragEnd={onDragEnd}
+        onDragStart={(e) => setDraggedId(String(e.draggable.id))}
+        collisionDetector={closestCenter}
+      >
+        <DragDropSensors />
+        <SortableProvider ids={doc.layers.map((l) => l.id)}>
+          <For each={headerEntries(props.rows)}>
+            {(entry: RowHeaderEntry) =>
+              entry.type === 'layer' ? (
+                <LayerHeaderRow
+                  entry={entry}
+                  editingId={editingId()}
+                  draggedId={draggedId()}
+                  onStartEdit={startEdit}
+                  onFinishEdit={finishEdit}
+                  registerNameButton={(el) => nameButtons.set(entry.layerId, el)}
+                />
+              ) : (
+                <TrackHeaderRow entry={entry} />
+              )
+            }
+          </For>
+        </SortableProvider>
+        <DragOverlay>
+          {draggedLayer() && (
+            <div class="row-header row-header--layer row-header--drag-ghost">
+              {draggedLayer()!.name}
+            </div>
+          )}
+        </DragOverlay>
+      </DragDropProvider>
+      {/* Ghost add-row: the layer surface's "+" (single layer surface). */}
+      <button
+        type="button"
+        class="row-header__add"
+        onClick={addLayer}
+        title="Add layer"
+        aria-label="Add layer"
+      >
+        + Add layer
+      </button>
     </div>
   )
 }
@@ -61,10 +109,13 @@ export default function RowHeaders(props: { rows: readonly TimelineRow[] }) {
 function LayerHeaderRow(props: {
   entry: Extract<RowHeaderEntry, { type: 'layer' }>
   editingId: string | null
+  draggedId: string | null
   onStartEdit: (layerId: string) => void
   onFinishEdit: (layerId: string, value: string | null) => void
   registerNameButton: (el: HTMLButtonElement) => void
 }) {
+  // Variable MUST be named `sortable` — solid/jsx-no-undef checks the name after `use:`
+  const sortable = createSortable(untrack(() => props.entry.layerId))
   // Reactive lookup — collapse/visibility/name changes re-render this row.
   const layer = () => doc.layers.find((l) => l.id === props.entry.layerId)
   const isSelected = () => selectedLayerId() === props.entry.layerId
@@ -72,14 +123,28 @@ function LayerHeaderRow(props: {
 
   return (
     <div
+      use:sortable={sortable}
       class="row-header row-header--layer"
       classList={{
         'row-header--selected': isSelected(),
         'row-header--hidden': layer()?.visible === false,
+        'row-header--dragging': sortable.isActiveDraggable,
       }}
       style={{ height: `${props.entry.height}px` }}
       onClick={() => setSelectedLayerId(props.entry.layerId)}
     >
+      {/* Reorder grip (Phase B: dnd lives on the header column). */}
+      <span class="row-header__grip" title="Drag to reorder">
+        <svg width="10" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+          <circle cx="4" cy="3" r="1" />
+          <circle cx="8" cy="3" r="1" />
+          <circle cx="4" cy="6" r="1" />
+          <circle cx="8" cy="6" r="1" />
+          <circle cx="4" cy="9" r="1" />
+          <circle cx="8" cy="9" r="1" />
+        </svg>
+      </span>
+
       <button
         type="button"
         class="btn btn--ghost row-header__chevron"
@@ -124,98 +189,124 @@ function LayerHeaderRow(props: {
         }
         aria-pressed={layer()?.visible === false}
       >
-        {layer()?.visible === false ? (
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            aria-hidden="true"
-          >
-            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-            <line x1="1" y1="1" x2="23" y2="23" />
-          </svg>
-        ) : (
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            aria-hidden="true"
-          >
-            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-        )}
+        <ShowEye visible={layer()?.visible !== false} />
       </button>
 
-      {isEditing() ? (
-        <input
-          class="row-header__name-input"
-          classList={{ 'row-header__name-input--hidden-layer': layer()?.visible === false }}
-          value={layer()?.name ?? ''}
-          aria-label={`Rename layer ${layer()?.name}`}
-          ref={(el) => el.focus()}
-          onClick={(e) => e.stopPropagation()}
-          onBlur={(e) => props.onFinishEdit(props.entry.layerId, e.currentTarget.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              props.onFinishEdit(props.entry.layerId, e.currentTarget.value)
-            } else if (e.key === 'Escape') {
-              props.onFinishEdit(props.entry.layerId, null)
-            }
-          }}
-        />
-      ) : (
+      <Show
+        when={!isEditing()}
+        fallback={
+          <NameInput
+            layerId={props.entry.layerId}
+            initial={layer()?.name ?? ''}
+            onFinish={props.onFinishEdit}
+          />
+        }
+      >
         <button
           type="button"
-          class="row-header__name"
           ref={(el) => props.registerNameButton(el)}
-          onClick={() => setSelectedLayerId(props.entry.layerId)}
-          onDblClick={(e) => {
+          class="row-header__name"
+          onClick={(e) => {
             e.stopPropagation()
             props.onStartEdit(props.entry.layerId)
           }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === 'F2') {
-              e.preventDefault()
-              e.stopPropagation()
-              props.onStartEdit(props.entry.layerId)
-            }
-          }}
-          title={`${layer()?.name ?? ''} — double-click or press F2 to rename`}
+          title="Rename layer"
         >
           {layer()?.name}
         </button>
-      )}
+      </Show>
+
+      <button
+        type="button"
+        class="btn btn--ghost row-header__remove"
+        onClick={(e) => {
+          e.stopPropagation()
+          removeLayer(props.entry.layerId)
+        }}
+        title={`Delete layer ${layer()?.name}`}
+        aria-label={`Delete layer ${layer()?.name}`}
+      >
+        ✕
+      </button>
     </div>
   )
 }
 
+/** Inline rename input: Enter/blur commits, Esc cancels. */
+function NameInput(props: {
+  layerId: string
+  initial: string
+  onFinish: (layerId: string, value: string | null) => void
+}) {
+  let inputRef!: HTMLInputElement
+  queueMicrotask(() => {
+    inputRef?.focus()
+    inputRef?.select()
+  })
+  return (
+    <input
+      ref={inputRef}
+      class="row-header__name-input"
+      value={props.initial}
+      aria-label="Layer name"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
+        e.stopPropagation()
+        if (e.key === 'Enter') props.onFinish(props.layerId, e.currentTarget.value)
+        else if (e.key === 'Escape') props.onFinish(props.layerId, null)
+      }}
+      onBlur={(e) => props.onFinish(props.layerId, e.currentTarget.value)}
+    />
+  )
+}
+
+function ShowEye(props: { visible: boolean }) {
+  return (
+    <Show
+      when={props.visible}
+      fallback={
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          aria-hidden="true"
+        >
+          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+          <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+          <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" />
+          <line x1="1" y1="1" x2="23" y2="23" />
+        </svg>
+      }
+    >
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        aria-hidden="true"
+      >
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    </Show>
+  )
+}
+
 function TrackHeaderRow(props: { entry: Extract<RowHeaderEntry, { type: 'track' }> }) {
-  const info = () => {
-    const layer = doc.layers.find((l) => l.id === props.entry.layerId)
-    const track = layer?.tracks.find((t) => t.id === props.entry.trackId)
-    return { layerName: layer?.name ?? '', property: track?.property ?? '' }
-  }
+  const layer = () => doc.layers.find((l) => l.id === props.entry.layerId)
+  const track = () => layer()?.tracks.find((t) => t.id === props.entry.trackId)
   return (
     <div
       class="row-header row-header--track"
-      classList={{
-        'row-header--hidden':
-          doc.layers.find((l) => l.id === props.entry.layerId)?.visible === false,
-        'row-header--selected': selectedLayerId() === props.entry.layerId,
-      }}
+      classList={{ 'row-header--hidden': layer()?.visible === false }}
       style={{ height: `${props.entry.height}px` }}
-      title={info().property}
-      onClick={() => setSelectedLayerId(props.entry.layerId)}
     >
-      {/* Plain-text property label — the canvas no longer draws any label text. */}
-      {info().property}
+      {track()?.property}
     </div>
   )
 }

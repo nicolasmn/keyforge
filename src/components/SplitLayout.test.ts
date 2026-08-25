@@ -54,3 +54,30 @@ describe('clampPanelPixels', () => {
     out.forEach((v) => expect(Number.isFinite(v)).toBe(true))
   })
 })
+
+describe('clampPanelPixels — 2-pane (Phase B: Preview | Inspector)', () => {
+  const min = [300, 220]
+  const max = [Infinity, 400]
+
+  it('splits [68,32] proportions and honors both minimums', () => {
+    const out = clampPanelPixels([680, 320], min, max, 1000)
+    expect(out[0]).toBeGreaterThanOrEqual(min[0])
+    expect(out[1]).toBeGreaterThanOrEqual(min[1])
+    expect(out[1]).toBeLessThanOrEqual(max[1])
+    expect(Math.abs(out.reduce((a, b) => a + b, 0) - 1000)).toBeLessThan(1)
+  })
+
+  it('narrow container shrinks both panels proportionally above minimums', () => {
+    const out = clampPanelPixels([680, 320], min, max, 700)
+    // Proportional shrink: 680/1000*700 ≈ 476, 320/1000*700 = 224.
+    expect(out[0]).toBeGreaterThanOrEqual(min[0])
+    expect(out[1]).toBeGreaterThanOrEqual(min[1])
+    expect(out[1]).toBeLessThanOrEqual(max[1])
+    expect(Math.abs(out.reduce((a, b) => a + b, 0) - 700)).toBeLessThan(1)
+  })
+
+  it('degenerate 2-pane case (available < Σmin) returns both minimums', () => {
+    const out = clampPanelPixels([500, 400], min, max, 500)
+    expect(out).toEqual([...min])
+  })
+})

@@ -75,15 +75,6 @@
     height: 4px !important;
   }
 
-  .layer-tree {
-    border-radius: 0;
-    border-top: none;
-    border-bottom: none;
-    border-left: none;
-    border-right: none;
-    flex: 1;
-    min-height: 0;
-  }
   .preview {
     flex: 1;
   }
@@ -108,115 +99,9 @@
 
 @layer components {
   /* ── Layer Tree ───────────────────────────────────────────── */
-  .layer-tree__list {
-    padding: var(--space-2);
-  }
-  .layer-tree__item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    font-size: var(--font-size-sm);
-    transition: background var(--duration-fast);
-  }
-  .layer-tree__item:hover {
-    background: var(--color-surface-2);
-  }
-  .layer-tree__item--active {
-    background: var(--color-accent-dim);
-    color: var(--color-text);
-  }
-  .layer-tree__item--dragging {
-    opacity: 0.4;
-  }
-  .layer-tree__drag-handle {
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-    color: var(--color-text-muted);
-    cursor: grab;
-    opacity: 0;
-    transition: opacity var(--duration-fast);
-  }
-  .layer-tree__item:hover .layer-tree__drag-handle {
-    opacity: 1;
-  }
-  .layer-tree__drag-handle:active {
-    cursor: grabbing;
-  }
-  .layer-tree__collapse {
-    flex-shrink: 0;
-    padding: 2px;
-  }
-  .layer-tree__collapse svg {
-    transition: transform var(--duration-fast) var(--ease-out-expo);
-  }
-  .layer-tree__collapse--open svg {
-    transform: rotate(90deg);
-  }
   @media (prefers-reduced-motion: reduce) {
-    .layer-tree__collapse svg {
-      transition: none;
-    }
-  }
-  .layer-tree__visibility {
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-    padding: 2px;
-    color: var(--color-text-muted);
-  }
-  .layer-tree__item--hidden .layer-tree__visibility {
-    opacity: 0.4;
-  }
-  .layer-tree__name {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   /* rename affordance: pencil icon appears on hover/focus next to the name */
-  .layer-tree__rename-hint {
-    opacity: 0;
-    margin-left: var(--space-1);
-    flex-shrink: 0;
-    color: var(--color-text-muted);
-    transition: opacity var(--duration-fast, 120ms);
-  }
-  .layer-tree__item:hover .layer-tree__rename-hint,
-  .layer-tree__name:focus-visible .layer-tree__rename-hint {
-    opacity: 1;
-  }
-  .layer-tree__name-input {
-    flex: 1;
-    min-width: 0;
-    background: var(--color-surface-2);
-    border: 1px solid var(--color-accent);
-    border-radius: var(--radius-sm);
-    color: var(--color-text);
-    font-size: var(--font-size-sm);
-    font-family: inherit;
-    padding: 1px var(--space-1);
-    outline: none;
-  }
-  .layer-tree__remove {
-    opacity: 0;
-    font-size: var(--font-size-xs);
-    padding: 2px 4px;
-    flex-shrink: 0;
-    margin-left: auto;
-  }
-  .layer-tree__item:hover .layer-tree__remove {
-    opacity: 1;
-  }
-  .layer-tree__drag-ghost {
-    height: 36px;
-    border-radius: var(--radius-md);
-    background: var(--color-accent-dim);
-    border: 1px dashed var(--color-accent);
-  }
 
   /* ── Preview ─────────────────────────────────────────────── */
   .preview {
@@ -839,6 +724,12 @@
 .row-header--selected {
   background: color-mix(in oklch, var(--color-accent) 10%, transparent);
 }
+/* Hidden layer: dim the header to match the canvas's 0.35 lane dimming.
+   (The class existed on rows since Phase B but never had a rule — hiding a
+   layer dimmed only the canvas lanes, leaving headers at full strength.) */
+.row-header--hidden {
+  opacity: 0.45;
+}
 .row-header__chevron,
 .row-header__eye {
   flex-shrink: 0;
@@ -937,4 +828,78 @@
 }
 .playback__loop--on {
   color: var(--color-accent);
+}
+
+/* Row header grip + remove + add-row (Phase B: single layer surface) */
+.row-header__grip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  color: var(--color-text-muted);
+  opacity: 0;
+  cursor: grab;
+  transition: opacity var(--duration-fast) var(--ease-out-expo);
+}
+.row-header--layer:hover .row-header__grip,
+.row-header--dragging .row-header__grip {
+  opacity: 0.7;
+}
+.row-header__grip:active {
+  cursor: grabbing;
+}
+.row-header__remove {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  opacity: 0;
+  padding: 0;
+  transition: opacity var(--duration-fast) var(--ease-out-expo);
+}
+.row-header--layer:hover .row-header__remove {
+  opacity: 0.7;
+}
+.row-header__remove:hover {
+  color: var(--color-danger, #e5484d);
+  opacity: 1;
+}
+.row-header--dragging {
+  opacity: 0.4;
+}
+.row-header--drag-ghost {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text);
+  box-shadow: var(--shadow-md);
+  width: auto !important;
+}
+.row-header__add {
+  display: block;
+  width: 100%;
+  border: 1px dashed var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  padding: 6px 8px;
+  margin-top: 4px;
+  cursor: pointer;
+  text-align: left;
+  /* Re-opt in: .row-headers is pointer-events:none (so the column never
+     blocks the canvas), and unlike .row-header rows this ghost button has
+     no other rule that re-enables hits — without it, "+ Add layer" is dead. */
+  pointer-events: auto;
+}
+.row-header__add:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
 }

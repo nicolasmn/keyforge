@@ -2,10 +2,9 @@ import { createSignal, For } from 'solid-js'
 import type { JSX } from 'solid-js'
 import ThemeToggle from '@/components/ThemeToggle'
 
-export type TabId = 'layers' | 'preview' | 'inspector'
+export type TabId = 'preview' | 'inspector'
 
 const TABS: { id: TabId; label: string; icon: string }[] = [
-  { id: 'layers', label: 'Layers', icon: '▣' },
   { id: 'preview', label: 'Preview', icon: '▶' },
   { id: 'inspector', label: 'Inspector', icon: '⋮' },
 ]
