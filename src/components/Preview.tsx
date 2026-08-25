@@ -13,18 +13,7 @@ import {
 import OriginOverlay from '@/components/OriginOverlay'
 import { generateCss } from '@/utils/css'
 import { slugify } from '@/utils/slugify'
-
-function parseCssString(css: string): Record<string, string> {
-  const result: Record<string, string> = {}
-  for (const decl of css.split(';')) {
-    const colon = decl.indexOf(':')
-    if (colon === -1) continue
-    const prop = decl.slice(0, colon).trim()
-    const value = decl.slice(colon + 1).trim()
-    if (prop && value) result[prop] = value
-  }
-  return result
-}
+import { mergeInitialCss } from '@/utils/originMath'
 
 export default function Preview() {
   let styleEl: HTMLStyleElement | undefined
@@ -140,7 +129,7 @@ export default function Preview() {
             <div
               data-layer-id={slugify(layer.name)}
               style={{
-                ...parseCssString(layer.element.initialCss),
+                ...mergeInitialCss(layer.element),
                 ...(layer.visible === false ? { visibility: 'hidden' } : {}),
               }}
             >
