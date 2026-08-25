@@ -3,6 +3,11 @@ import {
   workAreaStart,
   workAreaEnd,
   setWorkArea,
+  removeTrack,
+  removeKeyframe,
+  addKeyframe,
+  duplicateLayer,
+  duplicateKeyframe,
   doc,
   playhead,
   setPlayhead,
@@ -13,6 +18,8 @@ import {
   setSelectedKeyframeId,
   setSelectedLayerId,
   updateKeyframe,
+  removeLayer,
+  toggleLayerCollapsed,
   snapIncrement,
   theme,
 } from '@/store'
@@ -29,8 +36,10 @@ import {
   type TrackRow,
 } from '@/utils/rowModel'
 import Playback from '@/components/Playback'
-import RowHeaders from '@/components/RowHeaders'
+import RowHeaders, { requestLayerRename } from '@/components/RowHeaders'
+import { contextMenu, type MenuItem } from '@/components/ContextMenu'
 import { setKeyframeSelectionSource } from '@/utils/selectionSource'
+import { EASY_EASE_EASING } from '@/utils/easingAssistant'
 import { createMediaQuery } from '@/utils/mediaQuery'
 
 /** Coarse pointers get 44px row targets (plan §3.1). */
@@ -890,6 +899,123 @@ export default function Timeline() {
     })
   }
 
+  // ── Right-click context menus (context-menus plan §6.4) ────────────────
+  // Right-click SELECTS what's under the cursor (NLE convention) so the
+  // Inspector cross-highlight (#82) follows for free, then opens the menu.
+  // The unified header column owns label-strip interactions; the canvas
+  // menu covers keyframes, lanes and layer summary rows.
+
+  function kfMenuItems(layerId: string, trackId: string, kfId: string): MenuItem[] {
+    return [
+      {
+        type: 'item',
+        label: 'Duplicate keyframe',
+        onSelect: () => duplicateKeyframe(layerId, trackId, kfId),
+      },
+      {
+        type: 'item',
+        label: 'Easy-ease key',
+        onSelect: () => updateKeyframe(layerId, trackId, kfId, { easing: EASY_EASE_EASING }),
+      },
+      {
+        type: 'item',
+        label: 'Set hold',
+        hint: 'steps(1, end)',
+        onSelect: () => updateKeyframe(layerId, trackId, kfId, { easing: 'steps(1, end)' }),
+      },
+      { type: 'separator' },
+      {
+        type: 'item',
+        label: 'Delete keyframe',
+        danger: true,
+        onSelect: () => removeKeyframe(layerId, trackId, kfId),
+      },
+    ]
+  }
+
+  function laneMenuItems(layerId: string, trackId: string, x: number): MenuItem[] {
+    const time = Math.round(
+      snapTime(xToTime(x, canvas!.offsetWidth), snapIncrement(), doc.duration),
+    )
+    const track = doc.layers.find((l) => l.id === layerId)?.tracks.find((t) => t.id === trackId)
+    return [
+      {
+        type: 'item',
+        label: `Add keyframe at ${(time / 1000).toFixed(2)}s`,
+        onSelect: () =>
+          addKeyframe(layerId, trackId, { time, value: '', easing: EASY_EASE_EASING }),
+      },
+      {
+        type: 'item',
+        label: 'Easy-ease track',
+        disabled: !track || track.keyframes.length === 0,
+        onSelect: () => {
+          if (!track) return
+          for (const k of [...track.keyframes]) {
+            updateKeyframe(layerId, trackId, k.id, { easing: EASY_EASE_EASING })
+          }
+        },
+      },
+      {
+        type: 'item',
+        label: 'Clear track',
+        danger: true,
+        disabled: !track || track.keyframes.length === 0,
+        onSelect: () => removeTrack(layerId, trackId),
+      },
+    ]
+  }
+
+  function layerMenuItems(layerId: string): MenuItem[] {
+    const layer = doc.layers.find((l) => l.id === layerId)
+    if (!layer) return []
+    return [
+      {
+        type: 'item',
+        label: layer.collapsed ? 'Expand layer' : 'Collapse layer',
+        onSelect: () => toggleLayerCollapsed(layerId),
+      },
+      { type: 'item', label: 'Rename…', onSelect: () => requestLayerRename(layerId) },
+      { type: 'item', label: 'Duplicate layer', onSelect: () => void duplicateLayer(layerId) },
+      { type: 'separator' },
+      { type: 'item', label: 'Delete layer', danger: true, onSelect: () => removeLayer(layerId) },
+    ]
+  }
+
+  function onContextMenu(e: MouseEvent & { currentTarget: HTMLCanvasElement }) {
+    if (activePointerId !== null) return // never mid-gesture
+    endDrag() // belt: clear residual gesture state
+    const x = cssX(e)
+    const y = cssY(e)
+    if (y < HEADER_HEIGHT) return // ruler keeps the native menu
+    e.preventDefault()
+
+    const hit = hitTestKeyframe(x, y)
+    if (hit) {
+      setSelectedKeyframeId(hit.kfId)
+      setSelectedLayerId(hit.layerId)
+      setKeyframeSelectionSource('canvas')
+      contextMenu.open(e.clientX, e.clientY, kfMenuItems(hit.layerId, hit.trackId, hit.kfId), {
+        ariaLabel: 'Keyframe actions',
+      })
+      return
+    }
+
+    const idx = rowIndexAt(rows(), y)
+    const row = idx !== null ? rows()[idx] : null
+    if (!row) return // below last row — native menu preserved
+    setSelectedLayerId(row.layerId)
+    if (row.type === 'track') {
+      contextMenu.open(e.clientX, e.clientY, laneMenuItems(row.layerId, row.trackId, x), {
+        ariaLabel: 'Track actions',
+      })
+      return
+    }
+    contextMenu.open(e.clientX, e.clientY, layerMenuItems(row.layerId), {
+      ariaLabel: 'Layer actions',
+    })
+  }
+
   function onDblClick(e: MouseEvent) {
     const x = cssX(e)
     const y = cssY(e)
@@ -975,6 +1101,7 @@ export default function Timeline() {
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerLeave={onPointerLeave}
+            onContextMenu={onContextMenu}
             onLostPointerCapture={onLostPointerCapture}
             onWheel={onWheel}
             onDblClick={onDblClick}

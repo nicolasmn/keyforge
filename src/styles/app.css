@@ -903,3 +903,56 @@
   color: var(--color-accent);
   border-color: var(--color-accent);
 }
+
+/* ── Context menu (context-menus plan §3/D2) ─────────────────────── */
+.kf-ctx-menu {
+  min-width: 180px;
+  max-height: min(420px, calc(100vh - 16px));
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+  padding: 4px;
+}
+.kf-ctx-menu__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3, 12px);
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--chip-fs);
+  padding: 5px 10px;
+  border-radius: calc(var(--radius-sm) - 1px);
+  cursor: pointer;
+  text-align: left;
+}
+.kf-ctx-menu__item:hover:not(:disabled),
+.kf-ctx-menu__item:focus-visible {
+  background: color-mix(in oklch, var(--color-accent) 14%, transparent);
+  outline: none;
+}
+.kf-ctx-menu__item:disabled {
+  color: var(--color-text-muted);
+  opacity: 0.5;
+  cursor: default;
+}
+.kf-ctx-menu__item--danger {
+  color: var(--color-danger, #e5484d);
+}
+.kf-ctx-menu__item--danger:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--color-danger, #e5484d) 12%, transparent);
+}
+.kf-ctx-menu__hint {
+  font-size: var(--label-fs);
+  font-family: var(--mono);
+  color: var(--color-text-muted);
+}
+.kf-ctx-menu__sep {
+  border: none;
+  border-top: 1px solid var(--color-border);
+  margin: 4px 6px;
+}
