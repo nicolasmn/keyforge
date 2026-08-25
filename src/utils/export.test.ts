@@ -78,8 +78,8 @@ describe('exportCssReducedMotion', () => {
   it('provides an opacity-only reduced fallback at half duration', () => {
     const out = exportCssReducedMotion(rmDoc)
     expect(out).toContain('@media (prefers-reduced-motion: reduce)')
-    expect(out).toContain('kf-L1-reduced')
-    expect(out).toContain('animation: kf-L1-reduced 400ms ease-out both;')
+    expect(out).toContain('kf-box-reduced')
+    expect(out).toContain('animation: kf-box-reduced 400ms ease-out both;')
     // reduced variant must not contain movement
     const reduceBlock = out.split('(prefers-reduced-motion: reduce)')[1]
     expect(reduceBlock).not.toContain('translateY')
