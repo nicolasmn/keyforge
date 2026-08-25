@@ -13,6 +13,8 @@ import {
   playbackRate,
   setPlaybackRate,
   theme,
+  liveEdit,
+  setLiveEdit,
   canUndo,
   canRedo,
   undo as undoHistory,
@@ -112,6 +114,24 @@ export default function Playback(props: PlaybackProps = {}) {
       </button>
       <button
         class="btn btn--ghost"
+        classList={{ 'btn--active': liveEdit() }}
+        onClick={() => setLiveEdit(!liveEdit())}
+        aria-label="Toggle stage Live-Editing"
+        aria-pressed={liveEdit()}
+        title="Live-Editing: Outlines & Handles immer anzeigen"
+        style={
+          liveEdit()
+            ? {
+                background: 'color-mix(in oklch, var(--color-accent) 14%, transparent)',
+                color: 'var(--color-accent)',
+              }
+            : undefined
+        }
+      >
+        <span style={{ 'font-size': '11px', 'letter-spacing': '0.02em' }}>Live</span>
+      </button>
+      <button
+        class="btn btn--ghost"
         disabled={!canUndo()}
         onClick={() => undoHistory()}
         aria-label="Undo"
@@ -166,16 +186,6 @@ export default function Playback(props: PlaybackProps = {}) {
           <For each={RATE_OPTIONS}>{(r) => <option value={String(r)}>{r}×</option>}</For>
         </select>
       </label>
-      <button
-        class="btn btn--ghost"
-        classList={{ 'playback__loop--on': loop() }}
-        onClick={() => setLoop(!loop())}
-        aria-pressed={loop()}
-        aria-label="Loop playback"
-        title="Loop playback (wraps inside the work area when set)"
-      >
-        ⟲
-      </button>
       <span class="playback__time">
         {(playhead() / 1000).toFixed(2)}s /{' '}
         <Show

@@ -1,0 +1,157 @@
+/* ═══════════════════════════════════════════════════════════
+   Transform gizmos — on-canvas move/rotate/scale (Phase 1,
+   restyled by Revision 1 §B)
+
+   Companion overlay to .kf-origin-debug/.kf-origin-pick (same
+   contract, transform gizmos plan §3): position:absolute inset:0
+   inside .preview__canvas so it never joins the stage flex flow,
+   and pointer-events:none EVERYWHERE — the component delegates
+   all interaction through listeners on .preview__canvas itself,
+   hit-testing against the same pure geometry it draws
+   (utils/gizmoMath.hitTestGizmoPosed). That keeps stage clicks
+   flowing to layer divs (click-to-select) while the handles stay
+   inert.
+
+   z-order sits BELOW the origin overlay content (.kf-origin-debug
+   z-30 / .kf-origin-pick z-31): origin pick mode wins when active
+   — the gizmo also suppresses itself entirely in that mode.
+
+   Revision 1 styling — restrained Illustrator/Figma ink, NOT the
+   accent: outlines/handles/guides share one neutral family
+   (--color-text-faint lines, --color-surface fills, --color-border
+   handle strokes) with a single dashed stroke language (4/3; the
+   selected layer's own outline runs a stronger 5/3 at full
+   opacity). Element colors and accents stay out of the chrome so
+   the stage content keeps its identity. The live value chip keeps
+   its accent (it is transient feedback, not chrome).
+
+   Colors are theme tokens only; no color literals. All selectors
+   scoped under .preview__canvas / .kf-gizmo-*.
+   ═══════════════════════════════════════════════════════════ */
+
+.preview__canvas .kf-gizmo {
+  position: absolute;
+  inset: 0;
+  /* Never intercepts input itself; canvas delegation owns everything. */
+  pointer-events: none;
+  z-index: 25;
+}
+
+/* While a gizmo is interactable, drags starting on the stage must feed
+   pointer events instead of scrolling/pinch-zooming. Scoped to the live
+   state so mobile.css's pinch-zoom stays untouched when no selection or
+   gesture exists. */
+.preview__canvas.kf-gizmo--live {
+  touch-action: none;
+}
+/* Mid-gesture: block text selection from fast drags across layers. */
+.preview__canvas.kf-gizmo--gesturing {
+  user-select: none;
+}
+
+.preview__canvas .kf-gizmo__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* Rotation stems extend above layers near the stage's top edge. */
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* ── Outlines ────────────────────────────────────────────────────────
+   One neutral dashed language for every outline. Ghosts (Live-Editing
+   mode, all other visible layers): 4/3 dash at 0.8 opacity. The SELECTED
+   layer's own outline: same neutral ink but full opacity and a slightly
+   stronger 5/3 dash — emphasis through density, never through accent. */
+
+.preview__canvas .kf-gizmo__ghost {
+  fill: none;
+  stroke: var(--color-text-faint);
+  stroke-width: 1px;
+  stroke-dasharray: 4 3;
+  opacity: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+
+.preview__canvas .kf-gizmo__box {
+  fill: none;
+  stroke: var(--color-text-faint);
+  stroke-width: 1px;
+  stroke-dasharray: 5 3;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Stems speak the ghost dialect (4/3), keeping the rotation handle
+   visually attached to the box without adding a second ink. */
+.preview__canvas .kf-gizmo__stem {
+  stroke: var(--color-text-faint);
+  stroke-width: 1px;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Corner glyphs: 8px surface squares with hairline border strokes —
+  Illustrator-ish quiet handles. The ≥24px targets live entirely in
+  gizmoMath's hit-test geometry. */
+.preview__canvas .kf-gizmo__corner {
+  fill: var(--color-surface);
+  stroke: var(--color-border);
+  stroke-width: 1px;
+}
+
+/* Rotation handle: same family as the corners (surface fill + border
+  ring); the opaque fill separates it from the dashed stem underneath. */
+.preview__canvas .kf-gizmo__rotate {
+  fill: var(--color-surface);
+  stroke: var(--color-border);
+  stroke-width: 1px;
+}
+
+/* Alignment guides (Revision 1 §C): one dashed line across the stage per
+  snapped axis, in the ghost dialect so they read as construction lines,
+  not content. */
+.preview__canvas .kf-gizmo__guide {
+  stroke: var(--color-text-faint);
+  stroke-width: 1px;
+  stroke-dasharray: 4 3;
+  opacity: 0.8;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Composite-only layers: handles render muted + inert; the badge explains
+  where editing lives (owner default #2). */
+.preview__canvas .kf-gizmo--readonly .kf-gizmo__corner,
+.preview__canvas .kf-gizmo--readonly .kf-gizmo__rotate {
+  opacity: 0.35;
+}
+
+/* Composite badge: neutral by construction — faint text over a translucent
+  background with a hairline border, matching the chrome family. */
+.preview__canvas .kf-gizmo__badge {
+  position: absolute;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in oklch, var(--color-border) 60%, transparent);
+  background: color-mix(in oklch, var(--color-bg) 85%, transparent);
+  color: var(--color-text-faint);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Live value chip following the cursor during gestures — mirrors the
+  ruler's ghost time chip visual language (accent fill + ink). Transient
+  feedback keeps the accent even though static chrome went neutral. */
+.preview__canvas .kf-gizmo__chip {
+  position: absolute;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+  pointer-events: none;
+}

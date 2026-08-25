@@ -9,8 +9,11 @@ import {
   playbackRate,
   workAreaStart,
   workAreaEnd,
+  selectedLayerId,
+  setSelectedLayerId,
 } from '@/store'
 import OriginOverlay from '@/components/OriginOverlay'
+import TransformOverlay from '@/components/TransformOverlay'
 import { generateCss } from '@/utils/css'
 import { slugify } from '@/utils/slugify'
 import { mergeInitialCss } from '@/utils/originMath'
@@ -132,6 +135,12 @@ export default function Preview() {
                 ...mergeInitialCss(layer.element),
                 ...(layer.visible === false ? { visibility: 'hidden' } : {}),
               }}
+              onClick={() => {
+                // Stage→selection link (gizmo UX spec §3): clicking a layer
+                // selects it, mirroring the timeline header rows. Hidden
+                // layers can't receive pointer events, so no guard needed.
+                if (selectedLayerId() !== layer.id) setSelectedLayerId(layer.id)
+              }}
             >
               {layer.element.text}
             </div>
@@ -141,6 +150,10 @@ export default function Preview() {
             layers (plan §3): the overlay is position:absolute inset:0, so
             it never joins the canvas flex flow and only stacks above it. */}
         <OriginOverlay />
+        {/* Transform gizmos (move/rotate/scale) — mounted AFTER OriginOverlay
+            so pick mode wins; the component suppresses itself entirely while
+            originPicking() is true and paints below origin overlay z-index. */}
+        <TransformOverlay />
       </div>
     </div>
   )
