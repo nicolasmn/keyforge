@@ -541,6 +541,24 @@ export function setShowOrigins(next: boolean) {
   savePrefs({ version: 1, snapIncrement: snapIncrement(), theme: theme(), showOrigins: next })
 }
 
+// ── Stage Live-Editing (transform gizmos plan Revision 1 §A) ───────────
+/**
+ * When ON, every visible layer draws its POSED outline on the stage and the
+ * selected layer additionally shows handles + stem — independent of hover,
+ * so gizmo affordances stay visible while scrubbing/playing. When OFF the
+ * Phase-1 hover-gated behavior applies (nothing at rest; an active gesture
+ * still pins its overlay until pointerup/Esc). Additive pref exactly like
+ * `showOrigins`: absent/garbage in persisted blobs → false.
+ */
+const [liveEditState, setLiveEditState] = createSignal<boolean>(loadPrefs()?.liveEdit === true)
+export const liveEdit = liveEditState
+
+/** Flip Live-Editing on the stage and persist it additively. */
+export function setLiveEdit(next: boolean) {
+  setLiveEditState(next)
+  savePrefs({ version: 1, snapIncrement: snapIncrement(), theme: theme(), liveEdit: next })
+}
+
 // ── Mutations ──────────────────────────────────────────────────────────
 
 /**

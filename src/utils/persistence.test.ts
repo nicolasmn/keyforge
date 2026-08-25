@@ -286,6 +286,47 @@ describe('prefs (keyforge:prefs:v1)', () => {
     }
   })
 
+  // ── liveEdit (transform gizmos Revision 1 §A) — additive like showOrigins ──
+
+  it('liveEdit: absent in legacy blobs → absent (= false at runtime)', () => {
+    const prefs = deserializePrefs(JSON.stringify({ version: 1, snapIncrement: 'off' }))
+    expect(prefs).toEqual({ version: 1, snapIncrement: 'off', theme: 'dark' })
+    expect(prefs && 'liveEdit' in prefs).toBe(false)
+  })
+
+  it('liveEdit: only a literal true round-trips', () => {
+    const on = deserializePrefs(
+      JSON.stringify({ version: 1, snapIncrement: 'off', liveEdit: true }),
+    )
+    expect(on?.liveEdit).toBe(true)
+    const off = deserializePrefs(
+      JSON.stringify({ version: 1, snapIncrement: 'off', liveEdit: false }),
+    )
+    expect(off && 'liveEdit' in off).toBe(false) // default false stays byte-clean
+  })
+
+  it('liveEdit: garbage coerces to absent instead of rejecting the blob', () => {
+    for (const bad of ['yes', 1, null, {}]) {
+      const prefs = deserializePrefs(
+        JSON.stringify({ version: 1, snapIncrement: 'off', liveEdit: bad }),
+      )
+      // The REST of the payload survives — a corrupt field can't strand prefs.
+      expect(prefs).toEqual({ version: 1, snapIncrement: 'off', theme: 'dark' })
+    }
+  })
+
+  it('liveEdit: survives whole-blob rewrites from other surfaces via savePrefs merge', () => {
+    stubStorage()
+    savePrefs({ version: 1, snapIncrement: 10, theme: 'dark', liveEdit: true })
+    savePrefs({ version: 1, snapIncrement: 100, theme: 'light' }) // e.g. theme toggle
+    expect(loadPrefs()).toEqual({
+      version: 1,
+      snapIncrement: 100,
+      theme: 'light',
+      liveEdit: true,
+    })
+  })
+
   it('stamps version 1 in serialized output', () => {
     const parsed = JSON.parse(serializePrefs({ version: 1, snapIncrement: 100 }))
     expect(parsed.version).toBe(1)

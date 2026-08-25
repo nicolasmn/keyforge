@@ -180,6 +180,13 @@ export interface PersistedPrefs {
    * (defaults cover the full document at runtime).
    */
   workArea?: { start: number; end: number }
+  /**
+   * Additive (v1): stage Live-Editing mode — always-on transform-gizmo
+   * outlines/handles. Absent or garbage → absent (= false); only a literal
+   * `true` round-trips, keeping default blobs clean — same philosophy as
+   * showOrigins coercion.
+   */
+  liveEdit?: boolean
 }
 
 function isSnapIncrement(v: unknown): v is SnapIncrement {
@@ -201,6 +208,7 @@ export function serializePrefs(p: PersistedPrefs): string {
  * and unknown values coerce to 'dark' — same philosophy as snapIncrement,
  * so a corrupt field can never invalidate the rest of the blob.
  * `showOrigins` is additive the same way: absent/garbage → absent (= false).
+ * `liveEdit` (stage Live-Editing, Revision 1) follows that exact pattern too.
  */
 export function deserializePrefs(raw: string | null): PersistedPrefs | null {
   if (!raw) return null
@@ -221,6 +229,8 @@ export function deserializePrefs(raw: string | null): PersistedPrefs | null {
   // Default false→absent: the key is only written when explicitly true, so
   // legacy blobs and cleared toggles stay byte-clean (no `"showOrigins":false`).
   if (p.showOrigins === true) prefs.showOrigins = true
+  // Same additive coercion for Live-Editing: garbage → absent (= false).
+  if (p.liveEdit === true) prefs.liveEdit = true
   // playbackRate: only ladder values round-trip; garbage → absent (= 1).
   if (typeof p.playbackRate === 'number' && [0.25, 0.5, 1, 2].includes(p.playbackRate)) {
     prefs.playbackRate = p.playbackRate

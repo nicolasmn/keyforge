@@ -13,6 +13,8 @@ import {
   playbackRate,
   setPlaybackRate,
   theme,
+  liveEdit,
+  setLiveEdit,
   canUndo,
   canRedo,
   undo as undoHistory,
@@ -109,6 +111,24 @@ export default function Playback(props: PlaybackProps = {}) {
         }
       >
         ⟲
+      </button>
+      <button
+        class="btn btn--ghost"
+        classList={{ 'btn--active': liveEdit() }}
+        onClick={() => setLiveEdit(!liveEdit())}
+        aria-label="Toggle stage Live-Editing"
+        aria-pressed={liveEdit()}
+        title="Live-Editing: Outlines & Handles immer anzeigen"
+        style={
+          liveEdit()
+            ? {
+                background: 'color-mix(in oklch, var(--color-accent) 14%, transparent)',
+                color: 'var(--color-accent)',
+              }
+            : undefined
+        }
+      >
+        ⌖
       </button>
       <button
         class="btn btn--ghost"
