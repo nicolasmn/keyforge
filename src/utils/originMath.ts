@@ -40,6 +40,20 @@ export function isValidOrigin(o: unknown): o is OriginPoint {
 }
 
 /**
+ * Track-value form of transform-origin: one or two space-separated
+ * length-percentage components ('50%', '25% 80%'). CSS accepts a single
+ * value (applies to both axes) and a third z-component — the z axis is out
+ * of scope for v1 (plan open Q3), so it does not validate here.
+ */
+export const ORIGIN_TRACK_VALUE_RE =
+  /^-?\d*\.?\d+(%|px|em|rem|vw|vh)(\s+-?\d*\.?\d+(%|px|em|rem|vw|vh))?$/
+
+/** Validate a transform-origin TRACK keyframe value (1–2 components). */
+export function isValidOriginTrackValue(value: string): boolean {
+  return ORIGIN_TRACK_VALUE_RE.test(value.trim())
+}
+
+/**
  * Clamp to [0,100] and round to one decimal — the plan §3 precision for
  * pointer-derived percentages.
  */

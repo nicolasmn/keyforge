@@ -26,6 +26,12 @@ type Axis = 'x' | 'y'
 export default function OriginSection() {
   const layer = () => getSelectedLayer()
   const origin = () => layer()?.element.origin
+  // One-track-per-property symmetry (plan §2 Phase B note): an animated
+  // transform-origin track wins everywhere under animation-fill-mode:both,
+  // so the static controls collapse to a notice. The static decl stays the
+  // export base rule; the track animates above it.
+  const hasOriginTrack = () =>
+    layer()?.tracks.some((t) => t.property === 'transform-origin') ?? false
 
   const [editingAxis, setEditingAxis] = createSignal<Axis | null>(null)
   const [gridOpen, setGridOpen] = createSignal(false)
@@ -87,101 +93,110 @@ export default function OriginSection() {
         </span>
       </div>
 
-      <div class="kf-origin-section__row">
-        {/* Pick entry: aria-pressed toggle; focus returns here on exit. */}
-        <button
-          ref={(el) => {
-            pickBtn = el
-          }}
-          type="button"
-          class="btn btn--ghost kf-origin-pick-btn"
-          classList={{ 'btn--active': originPicking() }}
-          aria-pressed={originPicking()}
-          onClick={togglePick}
-          title="Pick the transform origin on the preview stage (Esc cancels)"
-          aria-label="Pick on stage"
-        >
-          Pick on stage
-        </button>
+      <Show
+        when={!hasOriginTrack()}
+        fallback={
+          <p class="kf-origin-section__locked" role="note">
+            Animated by a transform-origin track — the track wins in the preview.
+          </p>
+        }
+      >
+        <div class="kf-origin-section__row">
+          {/* Pick entry: aria-pressed toggle; focus returns here on exit. */}
+          <button
+            ref={(el) => {
+              pickBtn = el
+            }}
+            type="button"
+            class="btn btn--ghost kf-origin-pick-btn"
+            classList={{ 'btn--active': originPicking() }}
+            aria-pressed={originPicking()}
+            onClick={togglePick}
+            title="Pick the transform origin on the preview stage (Esc cancels)"
+            aria-label="Pick on stage"
+          >
+            Pick on stage
+          </button>
 
-        {/* Preset grid popover */}
-        <button
-          type="button"
-          class="btn btn--ghost kf-origin-grid-btn"
-          aria-expanded={gridOpen()}
-          aria-haspopup="true"
-          onClick={() => setGridOpen((v) => !v)}
-          title="9-point preset grid"
-          aria-label="Preset grid"
-        >
-          ⊞ Grid
-        </button>
+          {/* Preset grid popover */}
+          <button
+            type="button"
+            class="btn btn--ghost kf-origin-grid-btn"
+            aria-expanded={gridOpen()}
+            aria-haspopup="true"
+            onClick={() => setGridOpen((v) => !v)}
+            title="9-point preset grid"
+            aria-label="Preset grid"
+          >
+            ⊞ Grid
+          </button>
 
-        <button
-          type="button"
-          class="btn btn--ghost kf-origin-reset-btn"
-          disabled={!origin()}
-          onClick={reset}
-          title="Reset to CSS default and remove the stored origin"
-          aria-label="Reset transform origin to default"
-        >
-          Reset
-        </button>
-      </div>
+          <button
+            type="button"
+            class="btn btn--ghost kf-origin-reset-btn"
+            disabled={!origin()}
+            onClick={reset}
+            title="Reset to CSS default and remove the stored origin"
+            aria-label="Reset transform origin to default"
+          >
+            Reset
+          </button>
+        </div>
 
-      <Show when={gridOpen()}>
-        <div class="kf-origin-grid" role="group" aria-label="Transform origin presets">
-          <For each={ORIGIN_PRESETS}>
-            {(p) => (
-              <button
-                type="button"
-                title={p.aria}
-                aria-label={`${p.aria} (${p.x}%, ${p.y}%)`}
-                onClick={() => {
-                  applyPreset(p.x, p.y, p.aria)
-                  setGridOpen(false)
-                }}
-              >
-                {p.label}
-              </button>
+        <Show when={gridOpen()}>
+          <div class="kf-origin-grid" role="group" aria-label="Transform origin presets">
+            <For each={ORIGIN_PRESETS}>
+              {(p) => (
+                <button
+                  type="button"
+                  title={p.aria}
+                  aria-label={`${p.aria} (${p.x}%, ${p.y}%)`}
+                  onClick={() => {
+                    applyPreset(p.x, p.y, p.aria)
+                    setGridOpen(false)
+                  }}
+                >
+                  {p.label}
+                </button>
+              )}
+            </For>
+          </div>
+        </Show>
+
+        <div class="kf-origin-section__axes">
+          <For each={['x', 'y'] as const}>
+            {(axis) => (
+              <div class="kf-origin-axis">
+                <span class="kf-origin-axis__label">{axis.toUpperCase()}</span>
+                <Show
+                  when={editingAxis() === axis}
+                  fallback={
+                    <button
+                      type="button"
+                      class="kf-chip kf-chip--number kf-origin-axis__chip"
+                      aria-label={`Edit origin ${axis === 'x' ? 'horizontal' : 'vertical'} position, currently ${
+                        axis === 'x' ? (origin()?.x ?? '50%') : (origin()?.y ?? '50%')
+                      }`}
+                      title="Click to edit"
+                      onClick={() => setEditingAxis(axis)}
+                    >
+                      {axis === 'x' ? (origin()?.x ?? '50%') : (origin()?.y ?? '50%')}
+                    </button>
+                  }
+                >
+                  <NumberUnitField
+                    numStr={parsedComponent(axis).num}
+                    unit={parsedComponent(axis).unit}
+                    allowedUnitsOverride={ORIGIN_UNITS}
+                    onCommit={(num, unit) => commitComponent(axis, num, unit)}
+                    onCancel={() => setEditingAxis(null)}
+                  />
+                </Show>
+              </div>
             )}
           </For>
         </div>
       </Show>
-
-      <div class="kf-origin-section__axes">
-        <For each={['x', 'y'] as const}>
-          {(axis) => (
-            <div class="kf-origin-axis">
-              <span class="kf-origin-axis__label">{axis.toUpperCase()}</span>
-              <Show
-                when={editingAxis() === axis}
-                fallback={
-                  <button
-                    type="button"
-                    class="kf-chip kf-chip--number kf-origin-axis__chip"
-                    aria-label={`Edit origin ${axis === 'x' ? 'horizontal' : 'vertical'} position, currently ${
-                      axis === 'x' ? (origin()?.x ?? '50%') : (origin()?.y ?? '50%')
-                    }`}
-                    title="Click to edit"
-                    onClick={() => setEditingAxis(axis)}
-                  >
-                    {axis === 'x' ? (origin()?.x ?? '50%') : (origin()?.y ?? '50%')}
-                  </button>
-                }
-              >
-                <NumberUnitField
-                  numStr={parsedComponent(axis).num}
-                  unit={parsedComponent(axis).unit}
-                  allowedUnitsOverride={ORIGIN_UNITS}
-                  onCommit={(num, unit) => commitComponent(axis, num, unit)}
-                  onCancel={() => setEditingAxis(null)}
-                />
-              </Show>
-            </div>
-          )}
-        </For>
-      </div>
 
       {/* Polite announcements mirror CodeView's statusbar pattern (plan §3). */}
       <span class="kf-origin-status" role="status" aria-live="polite">

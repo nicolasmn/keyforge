@@ -13,6 +13,7 @@ const ALL: AnimatableProperty[] = [
   'scale',
   'translate',
   'rotate',
+  'transform-origin',
 ]
 
 describe('property registry', () => {
@@ -45,6 +46,13 @@ describe('property registry', () => {
     expect(isValidNumberForProperty('rotate', '45', 'deg')).toBe(true)
     expect(isValidNumberForProperty('rotate', '1', 'turn')).toBe(true)
     expect(isValidNumberForProperty('rotate', '45', 'px')).toBe(false)
+  })
+
+  it('transform-origin accepts length units and defaults to center', () => {
+    expect(isValidNumberForProperty('transform-origin', '25', '%')).toBe(true)
+    expect(isValidNumberForProperty('transform-origin', '-10', 'px')).toBe(true)
+    expect(isValidNumberForProperty('transform-origin', '90', 'deg')).toBe(false)
+    expect(PROPERTY_REGISTRY['transform-origin'].defaultValue).toBe('50% 50%')
   })
 
   it('color properties take no numeric units', () => {

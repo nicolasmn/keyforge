@@ -67,6 +67,7 @@ import {
 import { builtinNameFor } from '@/utils/easingCurve'
 import { parseCubicBezier } from '@/utils/easing-presets'
 import OriginSection from './OriginSection'
+import { isValidOriginTrackValue } from '@/utils/originMath'
 import { RotationDial, NumberUnitField } from './fields'
 import { tokenizeKeyframe, NUMBER_UNIT_RE } from '@/utils/tokenize'
 import { setKeyframeSelectionSource, consumeKeyframeSelectionSource } from '@/utils/selectionSource'
@@ -97,6 +98,7 @@ const PROPERTIES: AnimatableProperty[] = [
   'scale',
   'translate',
   'rotate',
+  'transform-origin',
 ]
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -111,7 +113,7 @@ function commit(path: ValueToken['path'], value: string) {
   }
 }
 
-function validate(type: ValueToken['type'], value: string): boolean {
+function validate(type: ValueToken['type'], value: string, property?: AnimatableProperty): boolean {
   if (type === 'color') return CSS.supports('color', value)
   if (type === 'number') return NUMBER_UNIT_RE.test(value) || value === '' || !isNaN(Number(value))
   if (type === 'easing')
@@ -121,6 +123,9 @@ function validate(type: ValueToken['type'], value: string): boolean {
       /^steps\(/.test(value) ||
       /^linear\(/.test(value)
     )
+  // Two-component properties type as 'string' (NUMBER_UNIT_RE is single-value);
+  // transform-origin track values get real validation: 1–2 length components.
+  if (property === 'transform-origin') return isValidOriginTrackValue(value)
   return value.length > 0
 }
 
@@ -598,7 +603,7 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
         setEditing(false)
         return
       }
-      if (validate(props.token.type, raw)) {
+      if (validate(props.token.type, raw, props.property)) {
         commit(props.token.path, raw)
         setInvalid(false)
       } else {
@@ -641,7 +646,7 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
 
   function onInputChange(e: Event) {
     const v = (e.currentTarget as HTMLInputElement).value
-    setInvalid(!validate(props.token.type, v))
+    setInvalid(!validate(props.token.type, v, props.property))
   }
 
   return (

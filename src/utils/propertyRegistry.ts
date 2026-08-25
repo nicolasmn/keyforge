@@ -92,6 +92,12 @@ export const PROPERTY_REGISTRY: Record<AnimatableProperty, PropertyMeta> = {
     kind: 'interpolable',
     hint: 'rotate takes a bare angle like 90deg — not rotate(90deg)',
   },
+  'transform-origin': {
+    units: LENGTH_UNITS,
+    defaultValue: '50% 50%',
+    kind: 'interpolable',
+    hint: 'transform-origin takes one or two space-separated lengths like "25% 80%"',
+  },
 }
 
 const ANGLE_VALUE_RE = /^-?\d*\.?\d+(deg|grad|rad|turn)$/i
