@@ -14,7 +14,16 @@ import {
 import { originPicking } from './originPickState'
 import { slugify } from '@/utils/slugify'
 import { interpolatedValueAt } from '@/utils/interpolate'
-import { AXIS_LOCK_THRESHOLD_PX, axisLockDelta, snapScaleToWholeEdges } from '@/utils/snapSpatial'
+import {
+  alignmentTargets,
+  AXIS_LOCK_THRESHOLD_PX,
+  axisLockDelta,
+  moverCandidatesFromPolygon,
+  snapScaleToWholeEdges,
+  snapTranslate,
+  type AlignmentTargets,
+  type MoverCandidates,
+} from '@/utils/snapSpatial'
 import {
   applyPoseToBox,
   clampScale,
@@ -125,6 +134,8 @@ interface GizmoSession {
    * own posed edge candidates at zero delta. Recomputing per frame would
    * let the mover attract itself and fight its own writes.
    */
+  snapTargets: AlignmentTargets | null
+  moverCandidates: MoverCandidates | null
   /** Latest computed canonical value, applied ≤1× per animation frame. */
   latest: string | null
   raf: number
@@ -260,6 +271,37 @@ export default function TransformOverlay() {
   })
 
   const selectedLayer = () => doc.layers.find((l) => l.id === selectedLayerId())
+
+  /**
+   * Fresh one-shot alignment-target sweep for a MOVE gesture start
+   * (Revision 1 §C, kept per owner feedback): measures every OTHER visible
+   * layer directly (NOT via the liveEdit-gated memo), poses each at the
+   * grab-time playhead, and adds the stage frame. Frozen into the session
+   * so the mover can never attract its own streamed writes.
+   */
+  function collectSnapTargets(excludeLayer: Layer, phMs: number): AlignmentTargets | null {
+    const canvas = canvasRef()
+    if (!canvas || typeof document === 'undefined') return null
+    const stageBox: RectLike = {
+      left: 0,
+      top: 0,
+      width: canvas.offsetWidth,
+      height: canvas.offsetHeight,
+    }
+    const inputs = []
+    for (const layer of doc.layers) {
+      if (layer.id === excludeLayer.id || layer.visible === false) continue
+      const box = measureLayerBox(layer)
+      if (!box) continue
+      inputs.push({
+        id: layer.id,
+        box,
+        pose: poseForLayer(layer, phMs),
+        pivotPct: resolvePivot({ element: { origin: layer.element.origin } }, null, box),
+      })
+    }
+    return alignmentTargets(inputs, stageBox, excludeLayer.id)
+  }
 
   /** Composite-only layers: badge + inert handles (plan §2 precedence). */
   const compositeOnly = createMemo(() => {
@@ -429,6 +471,14 @@ export default function TransformOverlay() {
     const pivot: Point = { x: pivotLayout.x + p0.tx, y: pivotLayout.y + p0.ty }
     setPlaying(false) // every existing canvas gesture pauses playback (§1e)
 
+    // Move gestures freeze their snapping inputs NOW (Revision 1 §C, kept
+    // per owner feedback): alignment lines from other layers/stage + the
+    // mover's own posed edge candidates at grab.
+    const geo0 = posedGeo()
+    const snapTargets = kind === 'move' ? collectSnapTargets(layer, phMs) : null
+    const moverCandidates =
+      kind === 'move' && geo0 ? moverCandidatesFromPolygon(geo0.polygon) : null
+
     session = {
       pointerId: e.pointerId,
       kind,
@@ -445,6 +495,8 @@ export default function TransformOverlay() {
       startAngleRad: pointerAngleRad(pivot, startLayout.x, startLayout.y),
       startDist: Math.hypot(startLayout.x - pivot.x, startLayout.y - pivot.y),
       playheadMs: phMs,
+      snapTargets,
+      moverCandidates,
       latest: null,
       raf: 0,
       receipts: [],
@@ -472,12 +524,28 @@ export default function TransformOverlay() {
         e.clientX,
         e.clientY,
       )
-      // Revision 1.1 (owner): free move by default; ALT = axis lock.
+      // Revision 1.2 (owner refinement): alignment targets to other layers
+      // stay ACTIVE by default (guides appear when crossing their
+      // edges/centers); ALT switches to pure axis lock instead.
       if (e.altKey) {
         const locked = axisLockDelta(d.dx, d.dy)
         setGuides(guidesForAxisLock(locked))
         return formatTranslate(s.startTranslate.x + locked.dx, s.startTranslate.y + locked.dy)
       }
+      if (s.snapTargets && s.moverCandidates) {
+        const r = snapTranslate(d.dx, d.dy, {
+          alt: false,
+          axisLock: false,
+          targets: s.snapTargets,
+          mover: s.moverCandidates,
+        })
+        setGuides({ x: r.guideX, y: r.guideY })
+        return formatTranslate(
+          s.startTranslate.x + Math.round(r.dx),
+          s.startTranslate.y + Math.round(r.dy),
+        )
+      }
+      // Defensive fallback (no frozen inputs): still round to the grid.
       setGuides(null)
       return formatTranslate(
         s.startTranslate.x + Math.round(d.dx),
