@@ -607,19 +607,34 @@ function angleArgToDeg(arg: string): number | null {
   }
 }
 
+/** Minimal box measurement needed to resolve %-unit translations. */
+export type BoxDimsLike = Pick<RectLike, 'width' | 'height'>
+
 /**
- * Length argument → px. Only px resolves here (the parser is pure and
- * dimension-free); percentages and other linear units share
- * parseTranslatePair's documented Phase-1 limitation — they contribute 0
- * instead of poisoning the whole chain. Bare numbers are invalid CSS for
- * lengths unless zero.
+ * Length argument → px. px resolves directly; percentages resolve against
+ * the caller-provided box dims when available (CSS semantics: translateX→
+ * width, translateY→height; % on Z has no dimension semantics in the 2D
+ * model and stays 0). Without dims, percentages contribute 0 instead of
+ * poisoning the chain (parseTranslatePair's documented Phase-1 fallback).
+ * Bare numbers are invalid CSS for lengths unless zero; other linear units
+ * (em, rem, vw, …) are unresolvable without font/viewport context → 0.
  */
-function lengthArgToPx(arg: string): number | null {
+function lengthArgToPx(
+  arg: string,
+  axis: 'x' | 'y' | 'z',
+  dims?: BoxDimsLike | null,
+): number | null {
   const p = parseNumberUnit(arg)
   if (!p) return null
   if (p.unit === '') return p.n === 0 ? 0 : null
-  if (p.unit.toLowerCase() === 'px') return p.n
-  return 0 // '%', em, rem, vw, … — unresolvable without box/font context
+  const unit = p.unit.toLowerCase()
+  if (unit === 'px') return p.n
+  if (unit === '%' && dims) {
+    if (axis === 'x') return (p.n / 100) * dims.width
+    if (axis === 'y') return (p.n / 100) * dims.height
+    return 0 // % on Z
+  }
+  return 0 // '%'-without-dims, em, rem, vw, …
 }
 
 /** Scale factors are unitless numbers, full stop. */
@@ -642,12 +657,18 @@ function scaleArgToNum(arg: string): number | null {
  * Out of scope BY CONTRACT (return null so callers fall back to identity):
  * skew/skewX/skewY, matrix/matrix3d, and every unrecognized function — a
  * 2D affine pose cannot represent them. Empty/'none'/junk → null too.
- * Percent translations contribute 0 rather than nulling the chain (same
- * Phase-1 limitation as parseTranslatePair).
+ *
+ * When `dims` is provided, percent translations resolve against the box at
+ * pose time (translateX→width, translateY→height). Without dims they
+ * contribute 0 rather than nulling the chain (same Phase-1 limitation as
+ * parseTranslatePair).
  *
  * Never throws; total over arbitrary strings.
  */
-export function parseCompositeTransform(value: string): GizmoPose | null {
+export function parseCompositeTransform(
+  value: string,
+  dims?: BoxDimsLike | null,
+): GizmoPose | null {
   const v = value.trim()
   if (!v || v.toLowerCase() === 'none') return null
 
@@ -674,9 +695,9 @@ export function parseCompositeTransform(value: string): GizmoPose | null {
     switch (fn) {
       case 'translate': {
         if (args.length < 1 || args.length > 2) return null
-        const x = lengthArgToPx(first())
+        const x = lengthArgToPx(first(), 'x', dims)
         if (x === null) return null
-        const y = args.length === 2 ? lengthArgToPx(args[1]) : 0
+        const y = args.length === 2 ? lengthArgToPx(args[1], 'y', dims) : 0
         if (y === null) return null
         tx += x
         ty += y
@@ -684,14 +705,14 @@ export function parseCompositeTransform(value: string): GizmoPose | null {
       }
       case 'translatex': {
         if (args.length !== 1) return null
-        const x = lengthArgToPx(first())
+        const x = lengthArgToPx(first(), 'x', dims)
         if (x === null) return null
         tx += x
         break
       }
       case 'translatey': {
         if (args.length !== 1) return null
-        const y = lengthArgToPx(first())
+        const y = lengthArgToPx(first(), 'y', dims)
         if (y === null) return null
         ty += y
         break
@@ -699,7 +720,7 @@ export function parseCompositeTransform(value: string): GizmoPose | null {
       case 'translatez': {
         // Z projects away in the gizmo's 2D model — validate, then drop.
         if (args.length !== 1) return null
-        if (lengthArgToPx(first()) === null) return null
+        if (lengthArgToPx(first(), 'z', dims) === null) return null
         break
       }
       case 'rotate': {

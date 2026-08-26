@@ -486,6 +486,56 @@ describe('parseCompositeTransform', () => {
     expect(parseCompositeTransform('translateX(50%) translateY(8px)')).toEqual(pose(0, 8, 0, 1))
   })
 
+  describe('with box dims (%-translation resolution)', () => {
+    const dims = { width: 200, height: 100 }
+
+    it('resolves translateX against width and translateY against height', () => {
+      expect(parseCompositeTransform('translateX(50%)', dims)).toEqual(pose(100, 0, 0, 1))
+      expect(parseCompositeTransform('translateY(50%)', dims)).toEqual(pose(0, 50, 0, 1))
+      // CSS semantics: X→width, Y→height — NOT symmetric.
+      expect(parseCompositeTransform('translateX(10%) translateY(10%)', dims)).toEqual(
+        pose(20, 10, 0, 1),
+      )
+    })
+
+    it('resolves two-argument translate() per axis', () => {
+      expect(parseCompositeTransform('translate(50%, -25%)', dims)).toEqual(pose(100, -25, 0, 1))
+      // Single-arg translate() = X only; missing Y stays 0.
+      expect(parseCompositeTransform('translate(25%)', dims)).toEqual(pose(50, 0, 0, 1))
+    })
+
+    it('mixes percent and px in one chain', () => {
+      expect(parseCompositeTransform('translateY(50%) rotate(90deg) scale(2)', dims)).toEqual(
+        pose(0, 50, 90, 2),
+      )
+      expect(parseCompositeTransform('translate(10px, 50%) translateX(-60px)', dims)).toEqual(
+        pose(-50, 50, 0, 1),
+      )
+    })
+
+    it('handles negative and >100% values', () => {
+      expect(parseCompositeTransform('translateX(-150%)', dims)).toEqual(pose(-300, 0, 0, 1))
+      expect(parseCompositeTransform('translateY(120.5%)', dims)).toEqual(pose(0, 120.5, 0, 1))
+    })
+
+    it('% on translateZ has no dimension semantics → still contributes 0', () => {
+      expect(parseCompositeTransform('translateZ(50%)', dims)).toEqual(pose(0, 0, 0, 1))
+      // But a px Z argument still validates fine alongside resolved axes.
+      expect(parseCompositeTransform('translateX(50%) translateZ(30px)', dims)).toEqual(
+        pose(100, 0, 0, 1),
+      )
+    })
+
+    it('other linear units stay 0 even when dims are provided', () => {
+      expect(parseCompositeTransform('translateX(2em)', dims)).toEqual(pose(0, 0, 0, 1))
+      expect(parseCompositeTransform('translateY(10vw)', dims)).toEqual(pose(0, 0, 0, 1))
+    })
+
+    it('explicit null dims behaves like the no-dims Phase-1 fallback', () => {
+      expect(parseCompositeTransform('translateX(50%)', null)).toEqual(pose(0, 0, 0, 1))
+    })
+  })
+
   it('is case-insensitive on function names and units', () => {
     expect(parseCompositeTransform('TRANSLATEY(40PX) ROTATE(45DEG)')).toEqual(pose(0, 40, 45, 1))
     expect(parseCompositeTransform('Scale(2) ScaleX(1.5)')?.scale).toBeCloseTo(Math.sqrt(6), 6)
