@@ -528,3 +528,229 @@ export function hitTestGizmoPosed(geo: PosedGizmoGeometry, x: number, y: number)
   if (pointInPolygon(geo.polygon, x, y)) return 'body'
   return null
 }
+
+// ── Composite `transform` track parsing (read-only geometry) ──────────
+// Composite transform TRACK values ("translateY(40px)", "translateY(40px)
+// rotate(45deg)") were invisible to the gizmos: outlines/handles/hit-tests
+// sat on the reference box while the element rendered elsewhere (owner bug
+// report). These helpers PARSE such values into a GizmoPose so every pose
+// consumer draws composed geometry. Read-only by design — writes stay on
+// individual-property tracks; mapping gestures onto transformStack
+// functions remains Phase 3.
+
+/**
+ * The no-op pose. Missing/unparseable inputs contribute nothing: combining
+ * any pose with this one is an exact identity (see combineGizmoPoses).
+ */
+export const IDENTITY_GIZMO_POSE: Readonly<GizmoPose> = Object.freeze({
+  tx: 0,
+  ty: 0,
+  rotDeg: 0,
+  scale: 1,
+})
+
+/**
+ * Combine two poses the way CSS stacks transform SOURCES:
+ * translations and rotations SUM; scales MULTIPLY; identity is neutral on
+ * all four channels.
+ *
+ * Documented simplification: css-transforms-2 orders sources as
+ * translate · rotate · scale · <transform-property>, and INSIDE the
+ * transform property the function list applies left-to-right, so
+ * "rotate(90deg) translateX(10px)" ≠ "translateX(10px) rotate(90deg)".
+ * Summing/multiplying deliberately ignores that order — exact for
+ * kind-pure chains (only translates, only rotations, only scales), a
+ * close approximation otherwise. Good enough for gizmo chrome; never
+ * used to produce written values.
+ */
+export function combineGizmoPoses(base: GizmoPose, extra: GizmoPose): GizmoPose {
+  return {
+    tx: base.tx + extra.tx,
+    ty: base.ty + extra.ty,
+    rotDeg: base.rotDeg + extra.rotDeg,
+    scale: base.scale * extra.scale,
+  }
+}
+
+/** One `fn(args)` span inside a composite transform value. */
+const COMPOSITE_FN_RE = /([a-zA-Z][a-zA-Z0-9]*)\(([^()]*)\)/g
+
+/** `<number><unit>` token ('40px', '-1.5turn', '2', '50%'). */
+const NUMBER_UNIT_RE = /^(-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)([a-zA-Z%]*)$/
+
+function parseNumberUnit(arg: string): { n: number; unit: string } | null {
+  const m = NUMBER_UNIT_RE.exec(arg.trim())
+  if (!m || m[1] === undefined || m[2] === undefined) return null
+  const n = Number.parseFloat(m[1])
+  if (!Number.isFinite(n)) return null
+  return { n, unit: m[2] }
+}
+
+/**
+ * Angle argument → degrees. Accepts deg/grad/rad/turn (case-insensitive);
+ * anything else is unparseable.
+ */
+function angleArgToDeg(arg: string): number | null {
+  const p = parseNumberUnit(arg)
+  if (!p) return null
+  switch (p.unit.toLowerCase()) {
+    case 'deg':
+      return p.n
+    case 'grad':
+      return (p.n * 360) / 400
+    case 'rad':
+      return (p.n * 180) / Math.PI
+    case 'turn':
+      return p.n * 360
+    default:
+      return null
+  }
+}
+
+/**
+ * Length argument → px. Only px resolves here (the parser is pure and
+ * dimension-free); percentages and other linear units share
+ * parseTranslatePair's documented Phase-1 limitation — they contribute 0
+ * instead of poisoning the whole chain. Bare numbers are invalid CSS for
+ * lengths unless zero.
+ */
+function lengthArgToPx(arg: string): number | null {
+  const p = parseNumberUnit(arg)
+  if (!p) return null
+  if (p.unit === '') return p.n === 0 ? 0 : null
+  if (p.unit.toLowerCase() === 'px') return p.n
+  return 0 // '%', em, rem, vw, … — unresolvable without box/font context
+}
+
+/** Scale factors are unitless numbers, full stop. */
+function scaleArgToNum(arg: string): number | null {
+  const p = parseNumberUnit(arg)
+  if (!p || p.unit !== '') return null
+  return p.n
+}
+
+/**
+ * Parse an interpolated composite `transform` track value into a GizmoPose.
+ *
+ * Known functions compose additively/multiplicatively regardless of order:
+ *   - translateX/Y/Z, translate → px translations that SUM (Z validated
+ *     then dropped — it projects away in 2D)
+ *   - rotate → degrees that SUM (deg/grad/rad/turn)
+ *   - scale/scaleX/scaleY → per-axis factors that MULTIPLY, collapsed to
+ *     the uniform scale the pose model carries
+ *
+ * Out of scope BY CONTRACT (return null so callers fall back to identity):
+ * skew/skewX/skewY, matrix/matrix3d, and every unrecognized function — a
+ * 2D affine pose cannot represent them. Empty/'none'/junk → null too.
+ * Percent translations contribute 0 rather than nulling the chain (same
+ * Phase-1 limitation as parseTranslatePair).
+ *
+ * Never throws; total over arbitrary strings.
+ */
+export function parseCompositeTransform(value: string): GizmoPose | null {
+  const v = value.trim()
+  if (!v || v.toLowerCase() === 'none') return null
+
+  let tx = 0
+  let ty = 0
+  let rotDeg = 0
+  let sx = 1
+  let sy = 1
+  let cursor = 0 // end of the last matched fn(args) span
+  let seen = 0 // matched functions so far
+
+  COMPOSITE_FN_RE.lastIndex = 0
+  for (let m = COMPOSITE_FN_RE.exec(v); m !== null; m = COMPOSITE_FN_RE.exec(v)) {
+    // Text between recognized functions must be whitespace only — stray
+    // tokens make the whole value untrustworthy.
+    if (v.slice(cursor, m.index).trim() !== '') return null
+    cursor = m.index + m[0].length
+    seen++
+    const fn = (m[1] ?? '').toLowerCase()
+    const rawArgs = (m[2] ?? '').trim()
+    const args = rawArgs === '' ? [] : rawArgs.split(',').map((a) => a.trim())
+    const first = (): string => args[0] ?? ''
+
+    switch (fn) {
+      case 'translate': {
+        if (args.length < 1 || args.length > 2) return null
+        const x = lengthArgToPx(first())
+        if (x === null) return null
+        const y = args.length === 2 ? lengthArgToPx(args[1]) : 0
+        if (y === null) return null
+        tx += x
+        ty += y
+        break
+      }
+      case 'translatex': {
+        if (args.length !== 1) return null
+        const x = lengthArgToPx(first())
+        if (x === null) return null
+        tx += x
+        break
+      }
+      case 'translatey': {
+        if (args.length !== 1) return null
+        const y = lengthArgToPx(first())
+        if (y === null) return null
+        ty += y
+        break
+      }
+      case 'translatez': {
+        // Z projects away in the gizmo's 2D model — validate, then drop.
+        if (args.length !== 1) return null
+        if (lengthArgToPx(first()) === null) return null
+        break
+      }
+      case 'rotate': {
+        if (args.length !== 1) return null
+        const d = angleArgToDeg(first())
+        if (d === null) return null
+        rotDeg += d
+        break
+      }
+      case 'scale': {
+        if (args.length < 1 || args.length > 2) return null
+        const a = scaleArgToNum(first())
+        if (a === null) return null
+        const b = args.length === 2 ? scaleArgToNum(args[1]) : a
+        if (b === null) return null
+        sx *= a
+        sy *= b
+        break
+      }
+      case 'scalex': {
+        if (args.length !== 1) return null
+        const a = scaleArgToNum(first())
+        if (a === null) return null
+        sx *= a
+        break
+      }
+      case 'scaley': {
+        if (args.length !== 1) return null
+        const a = scaleArgToNum(first())
+        if (a === null) return null
+        sy *= a
+        break
+      }
+      default:
+        // skew*/matrix/matrix3d/rotatex|y|z/perspective/unknown — out of
+        // scope by contract: null makes callers fall back to identity.
+        return null
+    }
+  }
+
+  if (seen === 0) return null // no recognizable functions at all
+  if (v.slice(cursor).trim() !== '') return null // trailing junk
+
+  // Collapse accumulated per-axis scale into the pose's UNIFORM channel:
+  // exact when the chain stayed isotropic (including mirrored negative
+  // scales); otherwise an area-preserving best effort (geometric mean with
+  // net reflection sign) — documented approximation; anisotropic gizmo
+  // boxes are future work.
+  const scale =
+    Math.abs(sx - sy) <= 1e-9 * Math.max(1, Math.abs(sx), Math.abs(sy))
+      ? sx
+      : Math.sign(sx * sy) * Math.sqrt(Math.abs(sx * sy))
+  return { tx, ty, rotDeg, scale }
+}

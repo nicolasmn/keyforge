@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
+  IDENTITY_GIZMO_POSE,
   GIZMO_HIT_EPSILON_MS,
+  applyPoseToBox,
   clampScale,
+  combineGizmoPoses,
   cursorForPart,
   formatRotateDeg,
   formatScaleNum,
@@ -11,6 +14,7 @@ import {
   inheritEasingForNewKeyframe,
   moveDelta,
   normalizeAngleRad,
+  parseCompositeTransform,
   parseRotateDeg,
   parseScaleNum,
   parseTranslatePair,
@@ -404,5 +408,210 @@ describe('hitTestGizmo geometry', () => {
     expect(cursorForPart('ne')).toBe('nesw-resize')
     expect(cursorForPart('sw')).toBe('nesw-resize')
     expect(cursorForPart('rotate')).toBe('grab')
+  })
+})
+
+describe('parseCompositeTransform', () => {
+  const pose = (tx: number, ty: number, rotDeg: number, scale: number) => ({
+    tx,
+    ty,
+    rotDeg,
+    scale,
+  })
+
+  it('parses a lone translateY', () => {
+    expect(parseCompositeTransform('translateY(40px)')).toEqual(pose(0, 40, 0, 1))
+    expect(parseCompositeTransform('translateY(-12.5px)')).toEqual(pose(0, -12.5, 0, 1))
+  })
+
+  it('sums translate + rotate combos into one pose', () => {
+    expect(parseCompositeTransform('translateY(40px) rotate(45deg)')).toEqual(pose(0, 40, 45, 1))
+    // Order-independent accumulation: same result, reversed chain.
+    expect(parseCompositeTransform('rotate(45deg) translateY(40px)')).toEqual(pose(0, 40, 45, 1))
+  })
+
+  it('sums multiple translations across function forms', () => {
+    expect(parseCompositeTransform('translate(10px, -5px) translateX(-2px)')).toEqual(
+      pose(8, -5, 0, 1),
+    )
+    expect(parseCompositeTransform('translateX(-60px) translateX(120px)')).toEqual(
+      pose(60, 0, 0, 1),
+    )
+  })
+
+  it('multiplies scales; scaleX+scaleY(2,2) matches uniform scale(2)', () => {
+    expect(parseCompositeTransform('scale(2)')).toEqual(pose(0, 0, 0, 2))
+    expect(parseCompositeTransform('scaleX(2) scaleY(2)')).toEqual(pose(0, 0, 0, 2))
+    // Lone-axis factors are anisotropic under the uniform pose model → they
+    // collapse to the area-preserving uniform approximation like any mixed chain.
+    expect(parseCompositeTransform('scaleX(3)')?.scale).toBeCloseTo(Math.sqrt(3), 6)
+    expect(parseCompositeTransform('scaleY(0.5)')?.scale).toBeCloseTo(Math.sqrt(0.5), 6)
+    // Chains multiply per axis.
+    expect(parseCompositeTransform('scale(2) scale(1.5)')?.scale).toBeCloseTo(3, 9)
+    // Two-argument scale(sx, sy) accumulates per axis (→ area-preserving collapse).
+    expect(parseCompositeTransform('scale(2, 4)')?.scale).toBeCloseTo(Math.sqrt(8), 6)
+    // Anisotropic chains collapse to a documented area-preserving uniform
+    // approximation (geometric mean with net sign) — pinned here so the
+    // simplification is explicit.
+    expect(parseCompositeTransform('scaleX(2) scaleY(3)')?.scale).toBeCloseTo(Math.sqrt(6), 6)
+    expect(parseCompositeTransform('scale(2, 0.5)')?.scale).toBeCloseTo(1, 6)
+  })
+
+  it('converts turn/rad/grad rotation units and sums across functions', () => {
+    expect(parseCompositeTransform('rotate(0.5turn)')?.rotDeg).toBeCloseTo(180, 6)
+    expect(parseCompositeTransform('rotate(1rad)')?.rotDeg).toBeCloseTo(180 / Math.PI, 6)
+    expect(parseCompositeTransform('rotate(100grad)')?.rotDeg).toBeCloseTo(90, 6)
+    expect(parseCompositeTransform('rotate(30deg) rotate(0.25turn)')?.rotDeg).toBeCloseTo(120, 6)
+    expect(parseCompositeTransform('rotate(-90deg) rotate(45deg)')?.rotDeg).toBeCloseTo(-45, 6)
+  })
+
+  it('composes long multi-function chains additively/multiplicatively', () => {
+    expect(
+      parseCompositeTransform(
+        'translateX(10px) rotate(90deg) scale(2) translateY(4px) translateZ(30px)',
+      ),
+    ).toEqual(pose(10, 4, 90, 2))
+  })
+
+  it('validates then drops translateZ (projects away in 2D)', () => {
+    expect(parseCompositeTransform('translateY(12px) translateZ(30px)')).toEqual(pose(0, 12, 0, 1))
+    // But a malformed Z argument still poisons the chain.
+    expect(parseCompositeTransform('translateZ(bogus)')).toBe(null)
+  })
+
+  it('treats percent/other-unit lengths as 0 contribution (Phase-1 limitation)', () => {
+    // Same documented convention as parseTranslatePair: % has no linear-px
+    // answer without box context; it must not null out the rest of the chain.
+    expect(parseCompositeTransform('translate(50%, 20px)')).toEqual(pose(0, 20, 0, 1))
+    expect(parseCompositeTransform('translateX(50%) translateY(8px)')).toEqual(pose(0, 8, 0, 1))
+  })
+
+  it('is case-insensitive on function names and units', () => {
+    expect(parseCompositeTransform('TRANSLATEY(40PX) ROTATE(45DEG)')).toEqual(pose(0, 40, 45, 1))
+    expect(parseCompositeTransform('Scale(2) ScaleX(1.5)')?.scale).toBeCloseTo(Math.sqrt(6), 6)
+  })
+
+  it('returns null for unknown functions — including mixed into valid chains', () => {
+    expect(parseCompositeTransform('bogusFn(3px)')).toBe(null)
+    expect(parseCompositeTransform('perspective(100px)')).toBe(null)
+    expect(parseCompositeTransform('rotateX(45deg)')).toBe(null)
+    expect(parseCompositeTransform('rotateY(45deg)')).toBe(null)
+    expect(parseCompositeTransform('rotateZ(45deg)')).toBe(null)
+    expect(parseCompositeTransform('translateY(10px) bogusFn(1px)')).toBe(null)
+  })
+
+  it('returns null for skew — explicitly out of scope', () => {
+    expect(parseCompositeTransform('skew(10deg, 5deg)')).toBe(null)
+    expect(parseCompositeTransform('skewX(15deg)')).toBe(null)
+    expect(parseCompositeTransform('skewY(15deg)')).toBe(null)
+    expect(parseCompositeTransform('translateY(40px) skewX(15deg)')).toBe(null)
+  })
+
+  it('returns null for matrix/matrix3d — explicitly out of scope', () => {
+    expect(parseCompositeTransform('matrix(1, 0, 0, 1, 10, 20)')).toBe(null)
+    expect(
+      parseCompositeTransform('matrix3d(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 10, 20, 0, 1)'),
+    ).toBe(null)
+    expect(parseCompositeTransform('translateY(10px) matrix(1, 0, 0, 1, 10, 20)')).toBe(null)
+  })
+
+  it('returns null for empty / none / unparseable input (identity-ish fallback)', () => {
+    expect(parseCompositeTransform('')).toBe(null)
+    expect(parseCompositeTransform('   ')).toBe(null)
+    expect(parseCompositeTransform('none')).toBe(null)
+    expect(parseCompositeTransform('NONE')).toBe(null)
+    expect(parseCompositeTransform('garbage')).toBe(null)
+    // Trailing junk after valid functions is untrustworthy → whole value null.
+    expect(parseCompositeTransform('translateY(40px) garbage')).toBe(null)
+    // Unbalanced parens / malformed args / invalid arg shapes.
+    expect(parseCompositeTransform('translateY(40px')).toBe(null)
+    expect(parseCompositeTransform('translateY()')).toBe(null)
+    expect(parseCompositeTransform('translateY(abc)')).toBe(null)
+    expect(parseCompositeTransform('rotate(45)')).toBe(null) // bare angle invalid
+    expect(parseCompositeTransform('scale(2px)')).toBe(null) // scale args are unitless
+    expect(parseCompositeTransform('translate(10px 20px)')).toBe(null) // needs comma
+    expect(parseCompositeTransform('translate()')).toBe(null)
+    expect(parseCompositeTransform('translateY(40px) rotate(45deg) extra')).toBe(null)
+  })
+
+  it('keeps exact uniform negative (mirrored) scales', () => {
+    expect(parseCompositeTransform('scale(-1)')).toEqual(pose(0, 0, 0, -1))
+    expect(parseCompositeTransform('scaleX(-2) scaleY(-2)')).toEqual(pose(0, 0, 0, -2))
+    expect(parseCompositeTransform('scale(0)')).toEqual(pose(0, 0, 0, 0))
+  })
+
+  it('accepts adjacent functions without separators (valid CSS)', () => {
+    expect(parseCompositeTransform('translateX(10px)rotate(90deg)')).toEqual(pose(10, 0, 90, 1))
+    expect(parseCompositeTransform('scale(2)rotate(45deg)')).toEqual(pose(0, 0, 45, 2))
+    expect(parseCompositeTransform('translateY(4px)  rotate(45deg)\n')).toEqual(pose(0, 4, 45, 1))
+  })
+
+  it('never throws on pathological input', () => {
+    for (const v of [
+      'translateY(1e309px)', // overflows to Infinity → unparseable
+      '(((((',
+      '))))',
+      'rotate(rad)',
+      'translateY(40px))',
+      'calc(100% - 10px)',
+    ]) {
+      const p = parseCompositeTransform(v)
+      if (p !== null) {
+        expect(Number.isFinite(p.tx)).toBe(true)
+        expect(Number.isFinite(p.ty)).toBe(true)
+        expect(Number.isFinite(p.rotDeg)).toBe(true)
+        expect(Number.isFinite(p.scale)).toBe(true)
+      }
+    }
+    expect(parseCompositeTransform('translateY(1e309px)')).toBe(null)
+  })
+})
+
+describe('combineGizmoPoses (individual ⊕ composite)', () => {
+  it('sums tx/ty/rotDeg and multiplies scale', () => {
+    expect(
+      combineGizmoPoses(
+        { tx: 10, ty: -4, rotDeg: 15, scale: 2 },
+        { tx: -3, ty: 40, rotDeg: 45, scale: 0.5 },
+      ),
+    ).toEqual({ tx: 7, ty: 36, rotDeg: 60, scale: 1 })
+  })
+
+  it('has IDENTITY_GIZMO_POSE as an exact neutral element', () => {
+    // Guarantees the composite path cannot perturb layers without a usable
+    // transform-track value — the no-composite behavior stays byte-identical.
+    const base = { tx: 12, ty: -8, rotDeg: 33, scale: 2.5 }
+    expect(combineGizmoPoses(base, { ...IDENTITY_GIZMO_POSE })).toEqual(base)
+    expect(combineGizmoPoses({ ...IDENTITY_GIZMO_POSE }, base)).toEqual(base)
+  })
+})
+
+describe('applyPoseToBox golden case (composite-derived pose)', () => {
+  // Reference box 100×50 at (100, 50); center pivot O = (150, 75). The pose
+  // comes straight from parseCompositeTransform("translateY(40px) rotate(90deg)")
+  // = {tx: 0, ty: 40, rotDeg: 90, scale: 1}. With θ=90°: cos=0, sin=1, so
+  // xf(px,py) = (150 − dy, 115 + dx) where d = p − O.
+  const box = { left: 100, top: 50, width: 100, height: 50 }
+  const parsed = parseCompositeTransform('translateY(40px) rotate(90deg)')
+  it('places rotated+translated corners exactly where CSS would', () => {
+    expect(parsed).toEqual({ tx: 0, ty: 40, rotDeg: 90, scale: 1 })
+    const geo = applyPoseToBox(box, parsed!, { xPct: 50, yPct: 50 })
+    expect(geo.corners.map((c) => ({ part: c.part, x: c.x, y: c.y }))).toEqual([
+      { part: 'nw', x: 175, y: 65 },
+      { part: 'ne', x: 175, y: 165 },
+      { part: 'se', x: 125, y: 165 },
+      { part: 'sw', x: 125, y: 65 },
+    ])
+    // Stem starts at the transformed top-edge midpoint…
+    expect(geo.stemBase).toEqual({ x: 175, y: 115 })
+    // …and "up" after a +90° rotation points screen-right (+x), STEM_LEN px out.
+    expect(geo.rotateCenter).toEqual({ x: 197, y: 115 })
+    // Polygon mirrors corner order for drawing/hit-testing.
+    expect(geo.polygon).toEqual([
+      { x: 175, y: 65 },
+      { x: 175, y: 165 },
+      { x: 125, y: 165 },
+      { x: 125, y: 65 },
+    ])
   })
 })

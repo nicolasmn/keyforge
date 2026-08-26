@@ -27,13 +27,16 @@ import {
 import {
   applyPoseToBox,
   clampScale,
+  combineGizmoPoses,
   CORNER_GLYPH_PX,
   cursorForPart,
   formatRotateDeg,
   formatScaleNum,
   formatTranslate,
   hitTestGizmoPosed,
+  IDENTITY_GIZMO_POSE,
   moveDelta,
+  parseCompositeTransform,
   parseRotateDeg,
   parseScaleNum,
   parseTranslatePair,
@@ -81,7 +84,10 @@ import type { AnimatableProperty, Layer } from '@/types'
  *   auto-key always on · individual properties only · corners only ·
  *   unified spatial snapping wired into MOVE (Revision 1 §C).
  *
- * Layers whose motion lives ONLY in a composite `transform` track render the
+ * Composite `transform` tracks are READ-ONLY composed into the drawn
+ * geometry (poseForLayer → parseCompositeTransform): outlines, handles and
+ * hit-testing follow the animated element even when its motion lives in a
+ * composite value. Layers whose motion lives ONLY there still render the
  * muted "composite — edit in inspector" badge with inert handles (Phase 3
  * maps drags onto transformStack functions).
  *
@@ -231,19 +237,44 @@ export default function TransformOverlay() {
     return map
   })
 
-  /** Pose the preview SHOWS for a LAYER at the playhead (plan §1c). */
+  /**
+   * Pose the preview SHOWS for a LAYER at the playhead (plan §1c).
+   *
+   * Composes BOTH transform sources read-only:
+   *   1. individual-property tracks (translate/rotate/scale), and
+   *   2. a composite `transform` track, parsed via
+   *      parseCompositeTransform(interpolatedValueAt(transform track)).
+   *
+   * Combination rule (combineGizmoPoses): tx/ty and rotDeg SUM, scale
+   * MULTIPLIES. This loosely mirrors CSS paint order — individual
+   * properties apply before the `transform` property — but deliberately
+   * ignores intra-chain ORDER (a composite "rotate(90deg) translateX(10px)"
+   * is not distinguished from "translateX(10px) rotate(90deg)"). Exact for
+   * kind-pure chains; documented approximation otherwise.
+   *
+   * Every pose consumer funnels through here: the main `pose()` memo
+   * (selected layer's gizmo), ghostOutlines (live-edit ghosts), and
+   * collectSnapTargets (frozen move-snap inputs) — so composed values are
+   * seen everywhere at once. Absent/unparseable composite values parse to
+   * null → identity contribution → behavior byte-identical to the
+   * individual-only path. Writes remain individual-property canonical;
+   * this function is READ-only geometry.
+   */
   function poseForLayer(layer: Layer, phMs: number): GizmoPose {
     const at = (property: AnimatableProperty): string | null => {
       const t = layer.tracks.find((tr) => tr.property === property)
       return t ? interpolatedValueAt(t, phMs) : null
     }
     const t = parseTranslatePair(at('translate') ?? '0px 0px')
-    return {
+    const individual: GizmoPose = {
       tx: t.x,
       ty: t.y,
       rotDeg: parseRotateDeg(at('rotate') ?? '0deg'),
       scale: parseScaleNum(at('scale') ?? '1'),
     }
+    // No transform track → '' → null → identity contribution below.
+    const composite = parseCompositeTransform(at('transform') ?? '')
+    return composite ? combineGizmoPoses(individual, composite) : individual
   }
 
   /**
@@ -333,7 +364,7 @@ export default function TransformOverlay() {
   const pose = createMemo(() => {
     const phMs = Math.round(playhead())
     const layer = selectedLayer()
-    return layer ? poseForLayer(layer, phMs) : { tx: 0, ty: 0, rotDeg: 0, scale: 1 }
+    return layer ? poseForLayer(layer, phMs) : { ...IDENTITY_GIZMO_POSE }
   })
 
   const posedGeo = createMemo<PosedGizmoGeometry | null>(() => {
