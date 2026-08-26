@@ -976,9 +976,8 @@ export default function Timeline() {
     // On scroll end: snap to nearest increment. Debounce so each wheel event
     // resets the timer — snap only fires when scrolling stops (~150ms).
     clearTimeout(wheelSnapTimer)
-    const shift = e.shiftKey
     wheelSnapTimer = setTimeout(() => {
-      setPlayhead((prev) => snapOrSoft(prev, shift))
+      setPlayhead((prev) => snapOrSoft(prev, true))
     }, 150)
   }
 
