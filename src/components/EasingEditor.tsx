@@ -754,6 +754,7 @@ export default function EasingEditor(props: Props) {
       if (!t) return
       if (rootEl?.contains(t)) return
       if (t.closest('[data-easing-chip]')) return
+      if (t.closest('.easing-editor__tab')) return
       props.onClose()
     }
     document.addEventListener('pointerdown', onDocPointerDown, true)
@@ -839,6 +840,7 @@ export default function EasingEditor(props: Props) {
               classList={{ 'easing-editor__tab--active': mode() === 'curve' }}
               role="tab"
               aria-selected={mode() === 'curve'}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={() => setMode('curve')}
             >
               Curve
@@ -848,6 +850,7 @@ export default function EasingEditor(props: Props) {
               classList={{ 'easing-editor__tab--active': mode() === 'spring' }}
               role="tab"
               aria-selected={mode() === 'spring'}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={() => setMode('spring')}
             >
               Spring
