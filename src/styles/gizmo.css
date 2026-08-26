@@ -141,6 +141,15 @@
   pointer-events: none;
 }
 
+/* Phase 3: LIVE composite layers keep the badge but flip its copy to
+   "composite — drag to edit" and strengthen the hairline one notch so an
+   interactive stack reads apart from an inert one — same neutral family,
+   no accent ink (Revision 1 §B discipline). */
+.preview__canvas .kf-gizmo__badge--live {
+  border-color: var(--color-text-faint);
+  color: var(--color-text-muted);
+}
+
 /* Live value chip following the cursor during gestures — mirrors the
   ruler's ghost time chip visual language (accent fill + ink). Transient
   feedback keeps the accent even though static chrome went neutral. */
