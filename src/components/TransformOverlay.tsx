@@ -47,6 +47,7 @@ import {
   scaleFactor,
   snapRotationToStep,
   toLayoutPoint,
+  type BoxDimsLike,
   type GizmoPart,
   type GizmoPose,
   type GizmoSpace,
@@ -260,7 +261,7 @@ export default function TransformOverlay() {
    * individual-only path. Writes remain individual-property canonical;
    * this function is READ-only geometry.
    */
-  function poseForLayer(layer: Layer, phMs: number): GizmoPose {
+  function poseForLayer(layer: Layer, phMs: number, dims?: BoxDimsLike | null): GizmoPose {
     const at = (property: AnimatableProperty): string | null => {
       const t = layer.tracks.find((tr) => tr.property === property)
       return t ? interpolatedValueAt(t, phMs) : null
@@ -273,7 +274,9 @@ export default function TransformOverlay() {
       scale: parseScaleNum(at('scale') ?? '1'),
     }
     // No transform track → '' → null → identity contribution below.
-    const composite = parseCompositeTransform(at('transform') ?? '')
+    // `dims` (the layer's own measured box) lets %-unit translations in the
+    // composite resolve against real box size; null/absent → they read as 0.
+    const composite = parseCompositeTransform(at('transform') ?? '', dims)
     return composite ? combineGizmoPoses(individual, composite) : individual
   }
 
@@ -295,7 +298,7 @@ export default function TransformOverlay() {
       const box = boxes.get(layer.id)
       if (!box) continue
       const pct = resolvePivot({ element: { origin: layer.element.origin } }, null, box)
-      const geo = applyPoseToBox(box, poseForLayer(layer, phMs), pct)
+      const geo = applyPoseToBox(box, poseForLayer(layer, phMs, box), pct)
       ghosts.push({ id: layer.id, points: geo.polygon.map((p) => `${p.x},${p.y}`).join(' ') })
     }
     return ghosts
@@ -327,7 +330,7 @@ export default function TransformOverlay() {
       inputs.push({
         id: layer.id,
         box,
-        pose: poseForLayer(layer, phMs),
+        pose: poseForLayer(layer, phMs, box),
         pivotPct: resolvePivot({ element: { origin: layer.element.origin } }, null, box),
       })
     }
@@ -364,7 +367,10 @@ export default function TransformOverlay() {
   const pose = createMemo(() => {
     const phMs = Math.round(playhead())
     const layer = selectedLayer()
-    return layer ? poseForLayer(layer, phMs) : { ...IDENTITY_GIZMO_POSE }
+    // targetBox() is the selected layer's measured box — feeding it here
+    // makes %-unit composite translations resolve against real box size and
+    // keeps the pose reactive to box resizes.
+    return layer ? poseForLayer(layer, phMs, targetBox()) : { ...IDENTITY_GIZMO_POSE }
   })
 
   const posedGeo = createMemo<PosedGizmoGeometry | null>(() => {
