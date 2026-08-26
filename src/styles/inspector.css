@@ -381,6 +381,9 @@
 /* Mini-curve thumbnail: stroke inherits the chip's easing color via
    currentColor; fill must be none or the open path renders as a black
    polygon smudge (SVG default fill applies to open paths too). */
+/* Static SVG curve thumbnail — hidden by default inside the inspector's
+   easing chip; revealed only in the EasingEditor popover (where the same
+   .kf-ease-thumb class is used without a .kf-chip--easing ancestor). */
 .kf-ease-thumb {
   display: block;
   flex-shrink: 0;
@@ -389,6 +392,36 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   fill: none;
+}
+/* Inspector-only: hide the static curve and show a motion preview on hover. */
+.kf-chip--easing .kf-ease-thumb {
+  display: none;
+}
+/* Motion preview container — compact, fits where the SVG thumbnail was. */
+.kf-ease-motion {
+  position: relative;
+  width: 30px;
+  height: 16px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+  pointer-events: none;
+}
+.kf-chip--easing:hover .kf-ease-motion,
+.kf-chip--easing:focus-visible .kf-ease-motion {
+  opacity: 1;
+}
+/* The animated dot — rides left-to-right using the easing value as
+   animation-timing-function; reuses kf-easing-run-a keyframes. */
+.kf-ease-motion__dot {
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: currentColor;
 }
 .kf-chip--string {
   color: var(--color-text-muted);

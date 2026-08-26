@@ -1003,6 +1003,21 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
           title="Edit easing curve"
         >
           <EasingCurveChip value={props.kf.easing} />
+          {/* Hover-only motion preview: a dot that rides left-to-right
+              using the easing value as animation-timing-function. Reuses
+              existing kf-easing-run-a keyframes; hidden by default via CSS
+              and revealed on .kf-chip--easing:hover. */}
+          <span class="kf-ease-motion" aria-hidden="true">
+            <span
+              class="kf-ease-motion__dot"
+              style={{
+                'animation-name': 'kf-easing-run-a',
+                'animation-duration': '1.4s',
+                'animation-timing-function': props.kf.easing,
+                'animation-iteration-count': 'infinite',
+              }}
+            />
+          </span>
           <span class="kf-chip__label">{shortEasingLabel(props.kf.easing)}</span>
         </span>
 
