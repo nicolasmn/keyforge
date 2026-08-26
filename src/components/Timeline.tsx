@@ -55,6 +55,43 @@ const LABEL_GAP_PX = 12
 const MIN_TICK_SPACING_PX = 6
 /** Density-strip band cap: >6 tracks merge their surplus into the 6th band. */
 const MAX_STRIP_BANDS = 6
+/** Soft-snap tolerance (ms): when snap increment is off, snap to nearby
+ * keyframe times within this window. */
+const SOFT_SNAP_MS = 10
+
+/** Collect all keyframe times across all layers/tracks. */
+function allKeyframeTimes(): number[] {
+  const times: number[] = []
+  for (const layer of doc.layers) {
+    for (const track of layer.tracks) {
+      for (const kf of track.keyframes) times.push(kf.time)
+    }
+  }
+  return times
+}
+
+/** Soft-snap to nearest keyframe time when snap increment is off. */
+function softSnapToKeyframes(t: number): number {
+  const times = allKeyframeTimes()
+  if (times.length === 0) return t
+  let best = t
+  let bestDist = SOFT_SNAP_MS
+  for (const kt of times) {
+    const d = Math.abs(kt - t)
+    if (d < bestDist) {
+      bestDist = d
+      best = kt
+    }
+  }
+  return best
+}
+
+/** Unified snap: uses increment if set, otherwise soft-snaps to keyframes. */
+function snapOrSoft(t: number): number {
+  const inc = snapIncrement()
+  if (inc !== 'off') return snapTime(t, inc, doc.duration)
+  return softSnapToKeyframes(t)
+}
 
 export default function Timeline() {
   let canvas: HTMLCanvasElement | undefined
@@ -459,7 +496,7 @@ export default function Timeline() {
         const snapPx = timeToX(snap, width / dpr) - timeToX(0, width / dpr)
         if (snapPx >= 4) {
           ctx.save()
-          ctx.globalAlpha = 0.4
+          ctx.globalAlpha = 0.2
           ctx.fillStyle = colorAccent
           const snapCount = Math.floor(doc.duration / snap)
           for (let i = 0; i <= snapCount; i++) {
@@ -817,7 +854,7 @@ export default function Timeline() {
       // Continuous follow during the drag; snapping lands on release.
       const raw = xToTime(x, canvas!.offsetWidth)
       setPlayhead(raw)
-      dragSnapTime = snapTime(raw, snapIncrement(), doc.duration)
+      dragSnapTime = snapOrSoft(raw)
       return
     }
     // Disclosure click zones take precedence over every other gesture below
@@ -854,7 +891,7 @@ export default function Timeline() {
       setPlaying(false)
       const raw = xToTime(x, canvas!.offsetWidth)
       setPlayhead(raw)
-      dragSnapTime = snapTime(raw, snapIncrement(), doc.duration)
+      dragSnapTime = snapOrSoft(raw)
     }
   }
 
@@ -878,13 +915,13 @@ export default function Timeline() {
       ghostX = x
       const raw = xToTime(x, canvas!.offsetWidth)
       setPlayhead(raw) // every frame, unsnapped — preview stays fluid
-      dragSnapTime = snapTime(raw, snapIncrement(), doc.duration)
+      dragSnapTime = snapOrSoft(raw)
     }
     // Touch keeps its small-movement slop so sloppy taps don't nudge keyframes.
     if (draggingKf && (downPointerType !== 'touch' || movedPastSlop)) {
       const raw = Math.round(xToTime(x, canvas!.offsetWidth))
       updateKeyframe(draggingKf.layerId, draggingKf.trackId, draggingKf.kfId, { time: raw })
-      dragSnapTime = snapTime(raw, snapIncrement(), doc.duration)
+      dragSnapTime = snapOrSoft(raw)
     }
     if (activePointerId === null) {
       // Hover-only state: zone cursor, hovered diamond/chevron, ghost chip.
@@ -937,7 +974,7 @@ export default function Timeline() {
     // resets the timer — snap only fires when scrolling stops (~150ms).
     clearTimeout(wheelSnapTimer)
     wheelSnapTimer = setTimeout(() => {
-      setPlayhead((prev) => snapTime(prev, snapIncrement(), doc.duration))
+      setPlayhead((prev) => snapOrSoft(prev))
     }, 150)
   }
 
@@ -976,9 +1013,7 @@ export default function Timeline() {
   }
 
   function laneMenuItems(layerId: string, trackId: string, x: number): MenuItem[] {
-    const time = Math.round(
-      snapTime(xToTime(x, canvas!.offsetWidth), snapIncrement(), doc.duration),
-    )
+    const time = Math.round(snapOrSoft(xToTime(x, canvas!.offsetWidth)))
     const track = doc.layers.find((l) => l.id === layerId)?.tracks.find((t) => t.id === trackId)
     return [
       {
