@@ -541,49 +541,9 @@ export default function Timeline() {
       ctx.restore()
     }
 
-    // Playhead (audit F24): triangle head in the ruler, glow while
-    // scrubbing, time bubble during drags. The line itself stays a 2px
-    // accent hairline.
+    // Playhead x (used by ghost rendering too).
     const ph = timeToX(playhead(), width / dpr) * dpr
-    if (scrubbing) {
-      ctx.save()
-      ctx.shadowColor = colorAccent
-      ctx.shadowBlur = 8 * dpr
-      ctx.fillStyle = colorAccent
-      ctx.fillRect(ph, 0, 2 * dpr, height)
-      ctx.restore()
-    } else {
-      ctx.fillStyle = colorAccent
-      ctx.fillRect(ph, 0, 2 * dpr, height)
-    }
-    // Triangle head pointing into the timeline (owner preference; reverts
-    // #62's dot/cap while keeping glow + time bubble + grab column).
-    // Apex at y=10px like the pre-#62 version, so it stays inside
-    // HEADER_HEIGHT even if that constant shrinks. 1px bg outline keeps it
-    // crisp over the ruler border, same convention as keyframe diamonds.
-    ctx.beginPath()
-    ctx.moveTo(ph - 6 * dpr, 0)
-    ctx.lineTo(ph + 6 * dpr, 0)
-    ctx.lineTo(ph, 10 * dpr)
-    ctx.fillStyle = colorAccent
-    ctx.fill()
-    ctx.lineWidth = 1 * dpr
-    ctx.strokeStyle = colorBg
-    ctx.stroke()
-    // Time bubble while scrubbing — eyes stay on the playhead, not the counter.
-    if (scrubbing) {
-      drawTimeChip(
-        ctx,
-        ph / dpr,
-        HEADER_HEIGHT + 6,
-        `${(playhead() / 1000).toFixed(2)}s`,
-        width / dpr,
-        dpr,
-        colorBg,
-        colorBorder,
-        colorText,
-      )
-    }
+
     // Ghost time chip following the cursor over the ruler (F10c/F23).
     if (!scrubbing && ghostX !== null) {
       const t = xToTime(ghostX, width / dpr)
@@ -675,6 +635,49 @@ export default function Timeline() {
         ctx.strokeRect(-gr / 2, -gr / 2, gr, gr)
         ctx.restore()
       }
+    }
+
+    // Playhead handle (audit F24): triangle head in the ruler, glow while
+    // scrubbing, time bubble during drags. Drawn AFTER ghosts so the real
+    // playhead always sits on top of ghost lines and time chips.
+    if (scrubbing) {
+      ctx.save()
+      ctx.shadowColor = colorAccent
+      ctx.shadowBlur = 8 * dpr
+      ctx.fillStyle = colorAccent
+      ctx.fillRect(ph, 0, 2 * dpr, height)
+      ctx.restore()
+    } else {
+      ctx.fillStyle = colorAccent
+      ctx.fillRect(ph, 0, 2 * dpr, height)
+    }
+    // Triangle head pointing into the timeline (owner preference; reverts
+    // #62's dot/cap while keeping glow + time bubble + grab column).
+    // Apex at y=10px like the pre-#62 version, so it stays inside
+    // HEADER_HEIGHT even if that constant shrinks. 1px bg outline keeps it
+    // crisp over the ruler border, same convention as keyframe diamonds.
+    ctx.beginPath()
+    ctx.moveTo(ph - 6 * dpr, 0)
+    ctx.lineTo(ph + 6 * dpr, 0)
+    ctx.lineTo(ph, 10 * dpr)
+    ctx.fillStyle = colorAccent
+    ctx.fill()
+    ctx.lineWidth = 1 * dpr
+    ctx.strokeStyle = colorBg
+    ctx.stroke()
+    // Time bubble while scrubbing — eyes stay on the playhead, not the counter.
+    if (scrubbing) {
+      drawTimeChip(
+        ctx,
+        ph / dpr,
+        HEADER_HEIGHT + 6,
+        `${(playhead() / 1000).toFixed(2)}s`,
+        width / dpr,
+        dpr,
+        colorBg,
+        colorBorder,
+        colorText,
+      )
     }
   }
 
