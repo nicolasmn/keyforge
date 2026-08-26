@@ -15,6 +15,8 @@ import {
   theme,
   liveEdit,
   setLiveEdit,
+  showOrigins,
+  setShowOrigins,
   canUndo,
   canRedo,
   undo as undoHistory,
@@ -129,6 +131,24 @@ export default function Playback(props: PlaybackProps = {}) {
         }
       >
         <span style={{ 'font-size': '11px', 'letter-spacing': '0.02em' }}>Live</span>
+      </button>
+      <button
+        class="btn btn--ghost"
+        classList={{ 'btn--active': showOrigins() }}
+        onClick={() => setShowOrigins(!showOrigins())}
+        aria-label="Toggle transform-origin crosshairs"
+        aria-pressed={showOrigins()}
+        title="Show transform origins: Crosshairs an der Bühne anzeigen"
+        style={
+          showOrigins()
+            ? {
+                background: 'color-mix(in oklch, var(--color-accent) 14%, transparent)',
+                color: 'var(--color-accent)',
+              }
+            : undefined
+        }
+      >
+        <span style={{ 'font-size': '11px', 'letter-spacing': '0.02em' }}>Origin</span>
       </button>
       <button
         class="btn btn--ghost"
