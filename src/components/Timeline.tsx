@@ -124,6 +124,8 @@ export default function Timeline() {
   let dragSnapTime: number | null = null
   /** Debounce timer for snap-on-release after horizontal wheel scroll. */
   let wheelSnapTimer: ReturnType<typeof setTimeout> | undefined
+  /** Snap destination during wheel scroll — drives the ghost preview. */
+  let wheelSnapTime: number | null = null
   /** Layer whose disclosure zone is hovered — accent-color feedback only. */
 
   /**
@@ -626,6 +628,34 @@ export default function Timeline() {
         )
       }
     }
+    // Snap ghost while wheel-scrolling: same dashed accent line + chip as
+    // drag, showing where the playhead will land on scroll-end.
+    if (wheelSnapTime !== null) {
+      const sx = timeToX(wheelSnapTime, width / dpr) * dpr
+      if (Math.abs(sx - ph) > 1 * dpr) {
+        ctx.save()
+        ctx.globalAlpha = 0.55
+        ctx.strokeStyle = colorAccent
+        ctx.lineWidth = 2 * dpr
+        ctx.setLineDash([4 * dpr, 4 * dpr])
+        ctx.beginPath()
+        ctx.moveTo(sx, 0)
+        ctx.lineTo(sx, height)
+        ctx.stroke()
+        ctx.restore()
+        drawTimeChip(
+          ctx,
+          sx / dpr,
+          HEADER_HEIGHT + 6,
+          `${(wheelSnapTime / 1000).toFixed(2)}s`,
+          width / dpr,
+          dpr,
+          colorBg,
+          colorBorder,
+          colorAccent,
+        )
+      }
+    }
     // Keyframe-drag snap ghost: outlined diamond at the landing point on the
     // dragged track's row.
     if (draggingKf && dragSnapTime !== null && !scrubbing) {
@@ -969,15 +999,20 @@ export default function Timeline() {
     setPlaying(false)
     const msPerPx = doc.duration / canvas!.offsetWidth
     // During scroll: set playhead to unsnapped value (fluid, no stickiness).
+    // Track the snap destination for the ghost preview.
     setPlayhead((prev) => {
       const next = Math.max(0, Math.min(doc.duration, prev + e.deltaX * msPerPx))
+      wheelSnapTime = snapOrSoft(next, true)
       return next
     })
+    scheduleDraw()
     // On scroll end: snap to nearest increment. Debounce so each wheel event
     // resets the timer — snap only fires when scrolling stops (~150ms).
     clearTimeout(wheelSnapTimer)
     wheelSnapTimer = setTimeout(() => {
       setPlayhead((prev) => snapOrSoft(prev, true))
+      wheelSnapTime = null
+      scheduleDraw()
     }, 150)
   }
 
