@@ -14,6 +14,8 @@ import {
 import { originPicking } from './originPickState'
 import { slugify } from '@/utils/slugify'
 import { interpolatedValueAt } from '@/utils/interpolate'
+import { parseCssString } from '@/utils/originMath'
+import { applyGizmoPoseToStack, isGizmoWritableStack } from '@/utils/transformStack'
 import {
   alignmentTargets,
   AXIS_LOCK_THRESHOLD_PX,
@@ -88,9 +90,14 @@ import type { AnimatableProperty, Layer } from '@/types'
  * Composite `transform` tracks are READ-ONLY composed into the drawn
  * geometry (poseForLayer → parseCompositeTransform): outlines, handles and
  * hit-testing follow the animated element even when its motion lives in a
- * composite value. Layers whose motion lives ONLY there still render the
- * muted "composite — edit in inspector" badge with inert handles (Phase 3
- * maps drags onto transformStack functions).
+ * composite value. Phase 3 (owner decisions 2026-08-26) maps drags onto the
+ * stack itself for COMPOSITE-ONLY layers whose every track value (keyframes
+ * AND the static initialCss base) is fully mappable: writes go through
+ * transformStack surgery (applyGizmoPoseToStack) onto the `transform` track
+ * via the same auto-key/receipt path. Layers with any non-mappable function
+ * keep the muted "composite — edit in inspector" badge with inert handles;
+ * mixed layers (individual + composite tracks) keep writing individual
+ * tracks exactly as before, composite contribution frozen during drags.
  *
  * Gesture architecture mirrors Inspector's module-scope chip-scrub session:
  * exactly one gesture lives at MODULE scope, so rAF-throttled store writes
@@ -149,6 +156,15 @@ interface GizmoSession {
   /** Structural receipts for Esc-cancel reversal. */
   receipts: GizmoEditReceipt[]
   lastClient: Point
+  /**
+   * Composite-track writes (`property === 'transform'`, Phase 3): the frozen
+   * drag-start stack value, its pose parsed against the SAME frozen dims,
+   * and the box dims themselves (owner decision 4: % resolves against the
+   * drag-start box). Null on individual-track gestures.
+   */
+  startStackValue: string | null
+  startComposite: GizmoPose | null
+  dims: { width: number; height: number } | null
 }
 
 let session: GizmoSession | null = null
@@ -337,16 +353,53 @@ export default function TransformOverlay() {
     return alignmentTargets(inputs, stageBox, excludeLayer.id)
   }
 
-  /** Composite-only layers: badge + inert handles (plan §2 precedence). */
-  const compositeOnly = createMemo(() => {
+  /**
+   * Composite-track editability for the SELECTED layer (Phase 3, owner
+   * decisions 2026-08-26):
+   *
+   *   'absent'   no transform track, OR mixed layer (individual tracks +
+   *              composite): drags keep writing individual tracks exactly
+   *              as before (decision 3 — composite contribution rides along
+   *              frozen in the gesture-start pose). No badge.
+   *   'live'     composite-only layer whose EVERY value on the track
+   *              (keyframes AND the static initialCss transform base) is a
+   *              clean stack of gizmo-writable functions with parseable
+   *              pose semantics → handles go live, drags rewrite the stack.
+   *   'readonly' composite-only with ANY non-mappable function anywhere
+   *              (decision 2, conservative) or an unparseable value →
+   *              badge + inert handles exactly as Phase 1/2.
+   */
+  const compositeGate = createMemo<'absent' | 'live' | 'readonly'>(() => {
     const layer = selectedLayer()
-    if (!layer) return false
-    const hasTransform = layer.tracks.some((t) => t.property === 'transform')
+    if (!layer) return 'absent'
+    const track = layer.tracks.find((t) => t.property === 'transform')
+    if (!track) return 'absent'
     const hasIndividual = ['translate', 'rotate', 'scale'].some((p) =>
       layer.tracks.some((t) => t.property === p),
     )
-    return hasTransform && !hasIndividual
+    if (hasIndividual) return 'absent'
+    const values = track.keyframes.map((k) => k.value)
+    // Static/base transform declaration in initialCss counts too (decision 2).
+    const staticBase = parseCssString(layer.element.initialCss)['transform']
+    if (staticBase) values.push(staticBase)
+    // targetBox() keeps the pose-parseability check reactive to resizes;
+    // empty/'none' values are trivially fine (drags insert at the front).
+    const dims = targetBox()
+    const allMappable = values.every((v) => {
+      if (!isGizmoWritableStack(v).writable) return false
+      const tv = v.trim().toLowerCase()
+      if (!tv || tv === 'none') return true
+      return parseCompositeTransform(v, dims) !== null
+    })
+    return allMappable ? 'live' : 'readonly'
   })
+
+  /** Composite-only layer present at all (badge shows for live AND readonly). */
+  const compositePresent = () => compositeGate() !== 'absent'
+  /** Badge + inert + muted handles (Phase 1/2 semantics, unchanged). */
+  const compositeReadonly = () => compositeGate() === 'readonly'
+  /** Fully-mappable composite-only: handles are live and drags write the stack. */
+  const compositeLive = () => compositeGate() === 'live'
 
   /**
    * Visibility (Revision 1 §A): Live-Editing ON → chrome always drawn
@@ -445,7 +498,7 @@ export default function TransformOverlay() {
     if (g === 'move') canvas.style.cursor = 'move'
     else if (g === 'rotate') canvas.style.cursor = 'grabbing'
     else if (g === 'scale') canvas.style.cursor = part ? cursorForPart(part) : 'nwse-resize'
-    else if (!compositeOnly()) canvas.style.cursor = part ? cursorForPart(part) : ''
+    else if (!compositeReadonly()) canvas.style.cursor = part ? cursorForPart(part) : ''
     else canvas.style.cursor = ''
   })
 
@@ -483,7 +536,7 @@ export default function TransformOverlay() {
     if (session || e.button !== 0 || originPicking()) return
     const space = liveSpace()
     const geo = posedGeo()
-    if (!space || !geo || compositeOnly()) return
+    if (!space || !geo || compositeReadonly()) return
     const p = layoutPointFrom(e, space)
     const part = hitTestGizmoPosed(geo, p.x, p.y)
     if (!part) return // fall through: stage clicks keep selecting layers
@@ -516,10 +569,26 @@ export default function TransformOverlay() {
     const moverCandidates =
       kind === 'move' && geo0 ? moverCandidatesFromPolygon(geo0.polygon) : null
 
+    // Phase 3: fully-mappable COMPOSITE-ONLY layers route drags onto the
+    // `transform` track itself (transformStack surgery). Everything else —
+    // including mixed layers, per owner decision 3 — writes individual
+    // properties exactly as before.
+    const property: AnimatableProperty = compositeLive() ? 'transform' : GIZMO_PROPERTIES[kind]
+    const dims = { width: refBox.width, height: refBox.height }
+    let startStackValue: string | null = null
+    let startComposite: GizmoPose | null = null
+    if (property === 'transform') {
+      const transformTrack = layer.tracks.find((t) => t.property === 'transform')
+      startStackValue = (transformTrack ? interpolatedValueAt(transformTrack, phMs) : null) ?? ''
+      // Same frozen dims as the write path: % args resolve identically at
+      // read and write time for the whole gesture.
+      startComposite = parseCompositeTransform(startStackValue, dims) ?? { ...IDENTITY_GIZMO_POSE }
+    }
+
     session = {
       pointerId: e.pointerId,
       kind,
-      property: GIZMO_PROPERTIES[kind],
+      property,
       layerId: layer.id,
       space,
       startClient: { x: e.clientX, y: e.clientY },
@@ -538,6 +607,9 @@ export default function TransformOverlay() {
       raf: 0,
       receipts: [],
       lastClient: { x: e.clientX, y: e.clientY },
+      startStackValue,
+      startComposite,
+      dims,
     }
     setGestureKind(kind)
     setHoverPart(part) // gesture owns visibility from this instant
@@ -553,41 +625,88 @@ export default function TransformOverlay() {
     }
   }
 
+  /**
+   * Move-gesture translation delta in layout px with the full Revision 1.2
+   * snapping pipeline (ALT axis lock → alignment snap → rounded fallback),
+   * shared by BOTH write targets so the individual and composite paths can
+   * never drift. Sets guide lines as a side effect.
+   */
+  function snappedMoveDelta(s: GizmoSession, e: PointerEvent): { dx: number; dy: number } {
+    const d = moveDelta(
+      { x: s.startClient.x, y: s.startClient.y, space: s.space },
+      e.clientX,
+      e.clientY,
+    )
+    // Alignment targets to other layers stay ACTIVE by default (guides
+    // appear when crossing their edges/centers); ALT = pure axis lock.
+    if (e.altKey) {
+      const locked = axisLockDelta(d.dx, d.dy)
+      setGuides(guidesForAxisLock(locked))
+      return locked
+    }
+    if (s.snapTargets && s.moverCandidates) {
+      const r = snapTranslate(d.dx, d.dy, {
+        alt: false,
+        axisLock: false,
+        targets: s.snapTargets,
+        mover: s.moverCandidates,
+      })
+      setGuides({ x: r.guideX, y: r.guideY })
+      return { dx: Math.round(r.dx), dy: Math.round(r.dy) }
+    }
+    // Defensive fallback (no frozen inputs): still round to the grid.
+    setGuides(null)
+    return { dx: Math.round(d.dx), dy: Math.round(d.dy) }
+  }
+
+  /**
+   * Phase 3 composite path (`s.property === 'transform'`): accumulate the
+   * gesture delta onto the FROZEN drag-start composite pose, then plan the
+   * new stack string via transformStack surgery against the same frozen
+   * dims. The gesture-start stack is the baseline — never re-read mid-drag.
+   */
+  function computeCompositeValue(s: GizmoSession, e: PointerEvent): string {
+    const cur = toLayoutPoint(s.space, e.clientX, e.clientY)
+    const start = s.startComposite ?? { tx: 0, ty: 0, rotDeg: 0, scale: 1 }
+    const target: GizmoPose = {
+      tx: start.tx,
+      ty: start.ty,
+      rotDeg: start.rotDeg,
+      scale: start.scale,
+    }
+    if (s.kind === 'move') {
+      const md = snappedMoveDelta(s, e)
+      target.tx = start.tx + md.dx
+      target.ty = start.ty + md.dy
+    } else if (s.kind === 'rotate') {
+      const dRad = rotationDelta(
+        s.startAngleRad,
+        s.pivot,
+        s.startLayout.x,
+        s.startLayout.y,
+        cur.x,
+        cur.y,
+      )
+      let deg = start.rotDeg + (dRad * 180) / Math.PI
+      if (e.shiftKey) deg = snapRotationToStep(deg, 15)
+      target.rotDeg = deg
+    } else {
+      const factor = scaleFactor(s.pivot, s.startDist, cur.x, cur.y)
+      const raw = clampScale(start.scale * factor)
+      // Scale pixel-snap (Revision 1 §C), same as the individual path.
+      target.scale = snapScaleToWholeEdges(raw, s.box.width, s.box.height)
+    }
+    return applyGizmoPoseToStack(s.startStackValue ?? '', start, target, s.dims)
+  }
+
   function computeValue(s: GizmoSession, e: PointerEvent): string {
+    // Composite-track writes go through the Phase 3 planner exclusively.
+    if (s.property === 'transform') return computeCompositeValue(s, e)
     const cur = toLayoutPoint(s.space, e.clientX, e.clientY)
     if (s.kind === 'move') {
-      const d = moveDelta(
-        { x: s.startClient.x, y: s.startClient.y, space: s.space },
-        e.clientX,
-        e.clientY,
-      )
-      // Revision 1.2 (owner refinement): alignment targets to other layers
-      // stay ACTIVE by default (guides appear when crossing their
-      // edges/centers); ALT switches to pure axis lock instead.
-      if (e.altKey) {
-        const locked = axisLockDelta(d.dx, d.dy)
-        setGuides(guidesForAxisLock(locked))
-        return formatTranslate(s.startTranslate.x + locked.dx, s.startTranslate.y + locked.dy)
-      }
-      if (s.snapTargets && s.moverCandidates) {
-        const r = snapTranslate(d.dx, d.dy, {
-          alt: false,
-          axisLock: false,
-          targets: s.snapTargets,
-          mover: s.moverCandidates,
-        })
-        setGuides({ x: r.guideX, y: r.guideY })
-        return formatTranslate(
-          s.startTranslate.x + Math.round(r.dx),
-          s.startTranslate.y + Math.round(r.dy),
-        )
-      }
-      // Defensive fallback (no frozen inputs): still round to the grid.
-      setGuides(null)
-      return formatTranslate(
-        s.startTranslate.x + Math.round(d.dx),
-        s.startTranslate.y + Math.round(d.dy),
-      )
+      // Same snapping pipeline as the composite path (shared helper).
+      const md = snappedMoveDelta(s, e)
+      return formatTranslate(s.startTranslate.x + md.dx, s.startTranslate.y + md.dy)
     }
     if (s.kind === 'rotate') {
       const dRad = rotationDelta(
@@ -609,7 +728,8 @@ export default function TransformOverlay() {
     return formatScaleNum(snapScaleToWholeEdges(raw, s.box.width, s.box.height))
   }
 
-  function chipText(s: Pick<GizmoSession, 'kind'>, value: string): string {
+  function chipText(s: Pick<GizmoSession, 'kind' | 'property'>, value: string): string {
+    if (s.property === 'transform') return `transform ${value}`
     if (s.kind === 'move') return `translate ${value}`
     if (s.kind === 'rotate') return `rotate ${value}`
     return `scale ${Number(value).toFixed(2)}×`
@@ -767,7 +887,7 @@ export default function TransformOverlay() {
         containerEl = el
       }}
       class="kf-gizmo"
-      classList={{ 'kf-gizmo--readonly': compositeOnly() }}
+      classList={{ 'kf-gizmo--readonly': compositeReadonly() }}
     >
       <svg class="kf-gizmo__svg" aria-hidden="true">
         {/* Live-Editing mode (Revision 1 §A): faint POSED outline per other
@@ -867,15 +987,16 @@ export default function TransformOverlay() {
                   </div>
                 )}
               </Show>
-              <Show when={compositeOnly()}>
+              <Show when={compositePresent()}>
                 <div
                   class="kf-gizmo__badge"
+                  classList={{ 'kf-gizmo__badge--live': compositeLive() }}
                   style={{
                     left: `${Math.min(...geo().polygon.map((p) => p.x))}px`,
                     top: `${Math.max(...geo().polygon.map((p) => p.y)) + 10}px`,
                   }}
                 >
-                  composite — edit in inspector
+                  {compositeLive() ? 'composite — drag to edit' : 'composite — edit in inspector'}
                 </div>
               </Show>
             </>
