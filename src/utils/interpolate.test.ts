@@ -67,6 +67,53 @@ describe('interpolatedValueAt', () => {
   it('returns null for empty tracks', () => {
     expect(interpolatedValueAt(trackOf(), 100)).toBeNull()
   })
+
+  it('lerps two-component translate values (px px)', () => {
+    const t = trackOf([0, '0px 0px'], [1000, '100px 200px'])
+    expect(interpolatedValueAt(t, 500)).toBe('50px 100px')
+    expect(interpolatedValueAt(t, 250)).toBe('25px 50px')
+  })
+
+  it('lerps two-component scale values (unitless)', () => {
+    const t = trackOf([0, '1 1'], [1000, '2 3'])
+    expect(interpolatedValueAt(t, 500)).toBe('1.5 2')
+    expect(interpolatedValueAt(t, 0)).toBe('1 1')
+    expect(interpolatedValueAt(t, 1000)).toBe('2 3')
+  })
+
+  it('applies easing to all components identically', () => {
+    // ease-in: at t=0.5 the eased value is < 0.5
+    const t = trackOf([0, '0px 0px', 'ease-in'], [1000, '100px 200px'])
+    const v = interpolatedValueAt(t, 500)!
+    const [ax, ay] = v.split(' ').map((p) => Number.parseFloat(p))
+    // Both components should be < midpoint (eased < 0.5)
+    expect(ax).toBeLessThan(50)
+    expect(ay).toBeLessThan(100)
+    // Both should use the same eased t: ax/100 === ay/200
+    expect(ax / 100).toBeCloseTo(ay / 200, 4)
+  })
+
+  it('holds mismatched-unit multi-component values', () => {
+    const t = trackOf([0, '0px 0px'], [1000, '100% 200%'])
+    expect(interpolatedValueAt(t, 500)).toBe('0px 0px')
+  })
+
+  it('holds when component counts differ', () => {
+    const t = trackOf([0, '0px 0px'], [1000, '100px'])
+    expect(interpolatedValueAt(t, 500)).toBe('0px 0px')
+  })
+
+  it('handles comma-separated values by normalizing to spaces', () => {
+    // Commas are normalized to spaces before parsing, so "0px, 0px"
+    // is treated as two components and interpolated.
+    const t = trackOf([0, '0px, 0px'], [1000, '100px, 200px'])
+    expect(interpolatedValueAt(t, 500)).toBe('50px 100px')
+  })
+
+  it('preserves mixed units per component', () => {
+    const t = trackOf([0, '0px 0'], [1000, '100px 1'])
+    expect(interpolatedValueAt(t, 500)).toBe('50px 0.5')
+  })
 })
 
 describe('applyEasing', () => {
