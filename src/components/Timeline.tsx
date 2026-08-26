@@ -126,6 +126,10 @@ export default function Timeline() {
   let wheelSnapTimer: ReturnType<typeof setTimeout> | undefined
   /** Snap destination during wheel scroll — drives the ghost preview. */
   let wheelSnapTime: number | null = null
+  /** Playhead position when the current wheel session started — used to
+   * skip snapping when the user scrolls away from a snap point very slowly
+   * (total movement below threshold = no snap, stay free). */
+  let wheelStartPos = 0
   /** Layer whose disclosure zone is hovered — accent-color feedback only. */
 
   /**
@@ -1001,6 +1005,9 @@ export default function Timeline() {
     e.preventDefault()
     setPlaying(false)
     const msPerPx = doc.duration / canvas!.offsetWidth
+    // Start of a new wheel session (no active timer): record the playhead
+    // position so we can skip snapping when the user barely moves.
+    if (!wheelSnapTimer) wheelStartPos = playhead()
     // During scroll: set playhead to unsnapped value (fluid, no stickiness).
     // Track the snap destination for the ghost preview.
     setPlayhead((prev) => {
@@ -1011,9 +1018,14 @@ export default function Timeline() {
     scheduleDraw()
     // On scroll end: snap to nearest increment. Debounce so each wheel event
     // resets the timer — snap only fires when scrolling stops (~150ms).
+    // Skip snapping if total movement was very small (user is slowly nudging
+    // away from a snap point — snapping back would feel sticky).
     clearTimeout(wheelSnapTimer)
     wheelSnapTimer = setTimeout(() => {
-      setPlayhead((prev) => snapOrSoft(prev, true))
+      const moved = Math.abs(playhead() - wheelStartPos)
+      if (moved >= 5) {
+        setPlayhead((prev) => snapOrSoft(prev, true))
+      }
       wheelSnapTime = null
       scheduleDraw()
     }, 150)
