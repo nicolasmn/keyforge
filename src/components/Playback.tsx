@@ -181,8 +181,7 @@ export default function Playback(props: PlaybackProps = {}) {
             const raw = (e.currentTarget as HTMLSelectElement).value
             const v = SNAP_OPTIONS.find((o) => String(o.value) === raw)?.value ?? 'off'
             setSnapIncrement(v)
-            // Full-blob write: theme rides along so a snap change never
-            // clobbers the persisted theme (prefs blob is version-1 whole).
+            // savePrefs merges over the stored blob — theme rides along.
             savePrefs({ version: 1, snapIncrement: v, theme: theme() })
           }}
         >

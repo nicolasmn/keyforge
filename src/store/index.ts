@@ -903,7 +903,13 @@ export function duplicateLayer(layerId: string): string | null {
   if (!source) return null
   const copy: Layer = JSON.parse(JSON.stringify(source))
   copy.id = nanoid()
-  copy.name = `${source.name} copy`
+  // Slug-parity guard (#104): two layers named "Box copy" would emit
+  // identical [data-layer-id] selectors and @keyframes names — last one
+  // wins for BOTH copies. Uniquify against current layer names.
+  copy.name = uniqueName(
+    `${source.name} copy`,
+    doc.layers.map((l) => l.name),
+  )
   copy.collapsed = false
   for (const t of copy.tracks) {
     t.id = nanoid()
