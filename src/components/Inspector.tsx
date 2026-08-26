@@ -1005,7 +1005,7 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
           <EasingCurveChip value={props.kf.easing} />
           <span class="kf-chip__label">{shortEasingLabel(props.kf.easing)}</span>
           {/* Hover-only motion preview: a line that grows left-to-right
-              under the label using the easing as animation-timing-function.
+              under the chip using the easing as animation-timing-function.
               Hidden by default, revealed on .kf-chip--easing:hover. */}
           <span class="kf-ease-line" aria-hidden="true">
             <span

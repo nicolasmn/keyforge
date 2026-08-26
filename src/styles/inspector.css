@@ -372,6 +372,7 @@
   gap: 4px;
 }
 .kf-chip--easing {
+  position: relative;
   color: var(--chip-easing);
   font-size: calc(var(--chip-fs) - 1px);
   max-width: 140px;
@@ -399,12 +400,12 @@
 }
 /* Motion preview: a line that grows under the easing label using the
    easing value as animation-timing-function. Hidden by default,
-   revealed on hover/focus. Sits below the label text, minimal footprint. */
+   revealed on hover/focus. Sits below the chip, minimal footprint. */
 .kf-ease-line {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 1px;
+  bottom: -3px;
   height: 2px;
   overflow: hidden;
   border-radius: 1px;
