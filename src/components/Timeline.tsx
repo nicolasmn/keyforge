@@ -86,11 +86,14 @@ function softSnapToKeyframes(t: number): number {
   return best
 }
 
-/** Unified snap: uses increment if set, otherwise soft-snaps to keyframes. */
-function snapOrSoft(t: number): number {
+/** Unified snap: uses increment if set, otherwise soft-snaps to keyframes
+ * (only when Shift is held). No snap at all when increment is off and Shift
+ * is not held. */
+function snapOrSoft(t: number, shiftKey = false): number {
   const inc = snapIncrement()
   if (inc !== 'off') return snapTime(t, inc, doc.duration)
-  return softSnapToKeyframes(t)
+  if (shiftKey) return softSnapToKeyframes(t)
+  return t
 }
 
 export default function Timeline() {
@@ -854,7 +857,7 @@ export default function Timeline() {
       // Continuous follow during the drag; snapping lands on release.
       const raw = xToTime(x, canvas!.offsetWidth)
       setPlayhead(raw)
-      dragSnapTime = snapOrSoft(raw)
+      dragSnapTime = snapOrSoft(raw, e.shiftKey)
       return
     }
     // Disclosure click zones take precedence over every other gesture below
@@ -891,7 +894,7 @@ export default function Timeline() {
       setPlaying(false)
       const raw = xToTime(x, canvas!.offsetWidth)
       setPlayhead(raw)
-      dragSnapTime = snapOrSoft(raw)
+      dragSnapTime = snapOrSoft(raw, e.shiftKey)
     }
   }
 
@@ -915,13 +918,13 @@ export default function Timeline() {
       ghostX = x
       const raw = xToTime(x, canvas!.offsetWidth)
       setPlayhead(raw) // every frame, unsnapped — preview stays fluid
-      dragSnapTime = snapOrSoft(raw)
+      dragSnapTime = snapOrSoft(raw, e.shiftKey)
     }
     // Touch keeps its small-movement slop so sloppy taps don't nudge keyframes.
     if (draggingKf && (downPointerType !== 'touch' || movedPastSlop)) {
       const raw = Math.round(xToTime(x, canvas!.offsetWidth))
       updateKeyframe(draggingKf.layerId, draggingKf.trackId, draggingKf.kfId, { time: raw })
-      dragSnapTime = snapOrSoft(raw)
+      dragSnapTime = snapOrSoft(raw, e.shiftKey)
     }
     if (activePointerId === null) {
       // Hover-only state: zone cursor, hovered diamond/chevron, ghost chip.
@@ -973,8 +976,9 @@ export default function Timeline() {
     // On scroll end: snap to nearest increment. Debounce so each wheel event
     // resets the timer — snap only fires when scrolling stops (~150ms).
     clearTimeout(wheelSnapTimer)
+    const shift = e.shiftKey
     wheelSnapTimer = setTimeout(() => {
-      setPlayhead((prev) => snapOrSoft(prev))
+      setPlayhead((prev) => snapOrSoft(prev, shift))
     }, 150)
   }
 
@@ -1013,7 +1017,7 @@ export default function Timeline() {
   }
 
   function laneMenuItems(layerId: string, trackId: string, x: number): MenuItem[] {
-    const time = Math.round(snapOrSoft(xToTime(x, canvas!.offsetWidth)))
+    const time = Math.round(snapOrSoft(xToTime(x, canvas!.offsetWidth), false))
     const track = doc.layers.find((l) => l.id === layerId)?.tracks.find((t) => t.id === trackId)
     return [
       {
