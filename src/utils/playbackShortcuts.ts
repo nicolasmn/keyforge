@@ -8,6 +8,9 @@ import {
   redo,
   playbackRate,
   setPlaybackRate,
+  selectedKeyframeId,
+  setSelectedKeyframeId,
+  removeKeyframe,
 } from '@/store'
 
 /**
@@ -85,6 +88,25 @@ export function installGlobalShortcuts(): () => void {
       if (isTypingTarget(e.target as EventTarget | null)) return
       e.preventDefault()
       cyclePlaybackRate(e.key === ',' || e.key === '<' ? -1 : 1)
+      return
+    }
+    // Backspace/Delete: remove the selected keyframe. Searches doc.layers for
+    // the owning layer+track since getSelectedTrackAndKeyframe() returns only
+    // {track, keyframe} without layerId. Clears selection after deletion.
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      if (isTypingTarget(e.target as EventTarget | null)) return
+      const kfId = selectedKeyframeId()
+      if (!kfId) return
+      e.preventDefault()
+      for (const layer of doc.layers) {
+        for (const track of layer.tracks) {
+          if (track.keyframes.some((k) => k.id === kfId)) {
+            removeKeyframe(layer.id, track.id, kfId)
+            setSelectedKeyframeId(null)
+            return
+          }
+        }
+      }
       return
     }
     if (e.code !== 'Space') return

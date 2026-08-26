@@ -53,10 +53,48 @@ const PLAYHEAD_HIT = 6
 const LABEL_GAP_PX = 12
 /** Ticks closer than this many CSS px read as noise (plan §4). */
 const MIN_TICK_SPACING_PX = 6
-/** Opacity for lane gridlines over track backgrounds (plan §3). */
-const GRIDLINE_ALPHA = 0.35
 /** Density-strip band cap: >6 tracks merge their surplus into the 6th band. */
 const MAX_STRIP_BANDS = 6
+/** Soft-snap tolerance (ms): when snap increment is off, snap to nearby
+ * keyframe times within this window. */
+const SOFT_SNAP_MS = 10
+
+/** Collect all keyframe times across all layers/tracks. */
+function allKeyframeTimes(): number[] {
+  const times: number[] = []
+  for (const layer of doc.layers) {
+    for (const track of layer.tracks) {
+      for (const kf of track.keyframes) times.push(kf.time)
+    }
+  }
+  return times
+}
+
+/** Soft-snap to nearest keyframe time when snap increment is off. */
+function softSnapToKeyframes(t: number): number {
+  const times = allKeyframeTimes()
+  if (times.length === 0) return t
+  let best = t
+  let bestDist = SOFT_SNAP_MS
+  for (const kt of times) {
+    const d = Math.abs(kt - t)
+    if (d < bestDist) {
+      bestDist = d
+      best = kt
+    }
+  }
+  return best
+}
+
+/** Unified snap: uses increment if set, otherwise soft-snaps to keyframes
+ * (only when Shift is held). No snap at all when increment is off and Shift
+ * is not held. */
+function snapOrSoft(t: number, shiftKey = false): number {
+  const inc = snapIncrement()
+  if (inc !== 'off') return snapTime(t, inc, doc.duration)
+  if (shiftKey) return softSnapToKeyframes(t)
+  return t
+}
 
 export default function Timeline() {
   let canvas: HTMLCanvasElement | undefined
@@ -84,6 +122,14 @@ export default function Timeline() {
    * value snaps there once, on release.
    */
   let dragSnapTime: number | null = null
+  /** Debounce timer for snap-on-release after horizontal wheel scroll. */
+  let wheelSnapTimer: ReturnType<typeof setTimeout> | undefined
+  /** Snap destination during wheel scroll — drives the ghost preview. */
+  let wheelSnapTime: number | null = null
+  /** Playhead position when the current wheel session started — used to
+   * skip snapping when the user scrolls away from a snap point very slowly
+   * (total movement below threshold = no snap, stay free). */
+  let wheelStartPos = 0
   /** Layer whose disclosure zone is hovered — accent-color feedback only. */
 
   /**
@@ -184,8 +230,13 @@ export default function Timeline() {
     for (let i = 0; i <= lastMajorIndex; i++) majorTimes.push(i * labelStep)
     for (const t of majorTimes) {
       const x = timeToX(t, cssWidth)
-      ctx.fillStyle = colorBorder
+      // Header background is colorBorder; tick lines must contrast against
+      // it (same-on-same = invisible). Use muted text color at low alpha.
+      ctx.save()
+      ctx.globalAlpha = 0.35
+      ctx.fillStyle = colorText
       ctx.fillRect(x * dpr, 0, 1, HEADER_HEIGHT * dpr)
+      ctx.restore()
       const label = formatTick(t, labelStep)
       const labelW = ctx.measureText(label).width / dpr
       let lx = x + 4
@@ -262,16 +313,8 @@ export default function Timeline() {
       if (!layer.visible) ctx.globalAlpha = 0.35
       ctx.fillStyle = selectedLayerId() === row.layerId ? colorRowSelected : colorBg
       ctx.fillRect(0, y, width, row.height * dpr)
-      // Label gridlines through the lanes (plan §3): after the row
-      // background but before diamonds, so full-height lines stay visible
-      // without washing out keyframes.
-      ctx.save()
-      ctx.globalAlpha = GRIDLINE_ALPHA * ctx.globalAlpha
-      ctx.fillStyle = colorBorder
-      for (const t of majorTimes) {
-        ctx.fillRect(timeToX(t, width / dpr) * dpr, y, 1, row.height * dpr)
-      }
-      ctx.restore()
+      // Full-height gridlines are now drawn in a single pass after all rows
+      // (see below) — no per-row gridlines here.
       ctx.fillStyle = colorBorder
       ctx.fillRect(0, y + row.height * dpr - 1, width, 1)
       // Keyframe baseline near the row's bottom edge (DevTools style):
@@ -437,6 +480,44 @@ export default function Timeline() {
       else drawLayerRow(row)
     }
 
+    // Full-height gridlines below the header — span all rows (track AND
+    // layer) plus empty space below the last row. Drawn after row content at
+    // low alpha so the grid reads without washing out keyframes or easing
+    // glyphs. The header's own tick lines are drawn separately above.
+    {
+      ctx.save()
+      ctx.globalAlpha = 0.22
+      ctx.fillStyle = colorText
+      const gridTop = HEADER_HEIGHT * dpr
+      const gridH = height - gridTop
+      for (const t of majorTimes) {
+        ctx.fillRect(timeToX(t, width / dpr) * dpr, gridTop, 1, gridH)
+      }
+      ctx.restore()
+    }
+
+    // Prominent snap-point lines when snapping is enabled — more visible
+    // than the regular gridlines (accent color, higher alpha). Skipped when
+    // snap points are closer than 4px apart (would render as a solid block).
+    {
+      const snap = snapIncrement()
+      if (snap !== 'off') {
+        const snapPx = timeToX(snap, width / dpr) - timeToX(0, width / dpr)
+        if (snapPx >= 4) {
+          ctx.save()
+          ctx.globalAlpha = 0.2
+          ctx.fillStyle = colorAccent
+          const snapCount = Math.floor(doc.duration / snap)
+          for (let i = 0; i <= snapCount; i++) {
+            const t = i * snap
+            if (t > doc.duration) break
+            ctx.fillRect(timeToX(t, width / dpr) * dpr, 0, 1, height)
+          }
+          ctx.restore()
+        }
+      }
+    }
+
     // Work-area band + bookends: shaded region between the two handles in
     // the ruler's lower half — the region playback loops within.
     {
@@ -464,49 +545,9 @@ export default function Timeline() {
       ctx.restore()
     }
 
-    // Playhead (audit F24): triangle head in the ruler, glow while
-    // scrubbing, time bubble during drags. The line itself stays a 2px
-    // accent hairline.
+    // Playhead x (used by ghost rendering too).
     const ph = timeToX(playhead(), width / dpr) * dpr
-    if (scrubbing) {
-      ctx.save()
-      ctx.shadowColor = colorAccent
-      ctx.shadowBlur = 8 * dpr
-      ctx.fillStyle = colorAccent
-      ctx.fillRect(ph, 0, 2 * dpr, height)
-      ctx.restore()
-    } else {
-      ctx.fillStyle = colorAccent
-      ctx.fillRect(ph, 0, 2 * dpr, height)
-    }
-    // Triangle head pointing into the timeline (owner preference; reverts
-    // #62's dot/cap while keeping glow + time bubble + grab column).
-    // Apex at y=10px like the pre-#62 version, so it stays inside
-    // HEADER_HEIGHT even if that constant shrinks. 1px bg outline keeps it
-    // crisp over the ruler border, same convention as keyframe diamonds.
-    ctx.beginPath()
-    ctx.moveTo(ph - 6 * dpr, 0)
-    ctx.lineTo(ph + 6 * dpr, 0)
-    ctx.lineTo(ph, 10 * dpr)
-    ctx.fillStyle = colorAccent
-    ctx.fill()
-    ctx.lineWidth = 1 * dpr
-    ctx.strokeStyle = colorBg
-    ctx.stroke()
-    // Time bubble while scrubbing — eyes stay on the playhead, not the counter.
-    if (scrubbing) {
-      drawTimeChip(
-        ctx,
-        ph / dpr,
-        HEADER_HEIGHT + 6,
-        `${(playhead() / 1000).toFixed(2)}s`,
-        width / dpr,
-        dpr,
-        colorBg,
-        colorBorder,
-        colorText,
-      )
-    }
+
     // Ghost time chip following the cursor over the ruler (F10c/F23).
     if (!scrubbing && ghostX !== null) {
       const t = xToTime(ghostX, width / dpr)
@@ -551,6 +592,34 @@ export default function Timeline() {
         )
       }
     }
+    // Snap ghost while wheel-scrolling: same dashed accent line + chip as
+    // drag, showing where the playhead will land on scroll-end.
+    if (wheelSnapTime !== null) {
+      const sx = timeToX(wheelSnapTime, width / dpr) * dpr
+      if (Math.abs(sx - ph) > 1 * dpr) {
+        ctx.save()
+        ctx.globalAlpha = 0.55
+        ctx.strokeStyle = colorAccent
+        ctx.lineWidth = 2 * dpr
+        ctx.setLineDash([4 * dpr, 4 * dpr])
+        ctx.beginPath()
+        ctx.moveTo(sx, 0)
+        ctx.lineTo(sx, height)
+        ctx.stroke()
+        ctx.restore()
+        drawTimeChip(
+          ctx,
+          sx / dpr,
+          HEADER_HEIGHT + 6,
+          `${(wheelSnapTime / 1000).toFixed(2)}s`,
+          width / dpr,
+          dpr,
+          colorBg,
+          colorBorder,
+          colorAccent,
+        )
+      }
+    }
     // Keyframe-drag snap ghost: outlined diamond at the landing point on the
     // dragged track's row.
     if (draggingKf && dragSnapTime !== null && !scrubbing) {
@@ -570,6 +639,49 @@ export default function Timeline() {
         ctx.strokeRect(-gr / 2, -gr / 2, gr, gr)
         ctx.restore()
       }
+    }
+
+    // Playhead handle (audit F24): triangle head in the ruler, glow while
+    // scrubbing, time bubble during drags. Drawn AFTER ghosts so the real
+    // playhead always sits on top of ghost lines and time chips.
+    if (scrubbing) {
+      ctx.save()
+      ctx.shadowColor = colorAccent
+      ctx.shadowBlur = 8 * dpr
+      ctx.fillStyle = colorAccent
+      ctx.fillRect(ph, 0, 2 * dpr, height)
+      ctx.restore()
+    } else {
+      ctx.fillStyle = colorAccent
+      ctx.fillRect(ph, 0, 2 * dpr, height)
+    }
+    // Triangle head pointing into the timeline (owner preference; reverts
+    // #62's dot/cap while keeping glow + time bubble + grab column).
+    // Apex at y=10px like the pre-#62 version, so it stays inside
+    // HEADER_HEIGHT even if that constant shrinks. 1px bg outline keeps it
+    // crisp over the ruler border, same convention as keyframe diamonds.
+    ctx.beginPath()
+    ctx.moveTo(ph - 6 * dpr, 0)
+    ctx.lineTo(ph + 6 * dpr, 0)
+    ctx.lineTo(ph, 10 * dpr)
+    ctx.fillStyle = colorAccent
+    ctx.fill()
+    ctx.lineWidth = 1 * dpr
+    ctx.strokeStyle = colorBg
+    ctx.stroke()
+    // Time bubble while scrubbing — eyes stay on the playhead, not the counter.
+    if (scrubbing) {
+      drawTimeChip(
+        ctx,
+        ph / dpr,
+        HEADER_HEIGHT + 6,
+        `${(playhead() / 1000).toFixed(2)}s`,
+        width / dpr,
+        dpr,
+        colorBg,
+        colorBorder,
+        colorText,
+      )
     }
   }
 
@@ -782,7 +894,7 @@ export default function Timeline() {
       // Continuous follow during the drag; snapping lands on release.
       const raw = xToTime(x, canvas!.offsetWidth)
       setPlayhead(raw)
-      dragSnapTime = snapTime(raw, snapIncrement(), doc.duration)
+      dragSnapTime = snapOrSoft(raw, e.shiftKey)
       return
     }
     // Disclosure click zones take precedence over every other gesture below
@@ -819,7 +931,7 @@ export default function Timeline() {
       setPlaying(false)
       const raw = xToTime(x, canvas!.offsetWidth)
       setPlayhead(raw)
-      dragSnapTime = snapTime(raw, snapIncrement(), doc.duration)
+      dragSnapTime = snapOrSoft(raw, e.shiftKey)
     }
   }
 
@@ -843,13 +955,13 @@ export default function Timeline() {
       ghostX = x
       const raw = xToTime(x, canvas!.offsetWidth)
       setPlayhead(raw) // every frame, unsnapped — preview stays fluid
-      dragSnapTime = snapTime(raw, snapIncrement(), doc.duration)
+      dragSnapTime = snapOrSoft(raw, e.shiftKey)
     }
     // Touch keeps its small-movement slop so sloppy taps don't nudge keyframes.
     if (draggingKf && (downPointerType !== 'touch' || movedPastSlop)) {
       const raw = Math.round(xToTime(x, canvas!.offsetWidth))
       updateKeyframe(draggingKf.layerId, draggingKf.trackId, draggingKf.kfId, { time: raw })
-      dragSnapTime = snapTime(raw, snapIncrement(), doc.duration)
+      dragSnapTime = snapOrSoft(raw, e.shiftKey)
     }
     if (activePointerId === null) {
       // Hover-only state: zone cursor, hovered diamond/chevron, ghost chip.
@@ -893,10 +1005,30 @@ export default function Timeline() {
     e.preventDefault()
     setPlaying(false)
     const msPerPx = doc.duration / canvas!.offsetWidth
+    // Start of a new wheel session (no active timer): record the playhead
+    // position so we can skip snapping when the user barely moves.
+    if (!wheelSnapTimer) wheelStartPos = playhead()
+    // During scroll: set playhead to unsnapped value (fluid, no stickiness).
+    // Track the snap destination for the ghost preview.
     setPlayhead((prev) => {
       const next = Math.max(0, Math.min(doc.duration, prev + e.deltaX * msPerPx))
-      return snapTime(next, snapIncrement(), doc.duration)
+      wheelSnapTime = snapOrSoft(next, true)
+      return next
     })
+    scheduleDraw()
+    // On scroll end: snap to nearest increment. Debounce so each wheel event
+    // resets the timer — snap only fires when scrolling stops (~150ms).
+    // Skip snapping if total movement was very small (user is slowly nudging
+    // away from a snap point — snapping back would feel sticky).
+    clearTimeout(wheelSnapTimer)
+    wheelSnapTimer = setTimeout(() => {
+      const moved = Math.abs(playhead() - wheelStartPos)
+      if (moved >= 5) {
+        setPlayhead((prev) => snapOrSoft(prev, true))
+      }
+      wheelSnapTime = null
+      scheduleDraw()
+    }, 150)
   }
 
   // ── Right-click context menus (context-menus plan §6.4) ────────────────
@@ -934,9 +1066,7 @@ export default function Timeline() {
   }
 
   function laneMenuItems(layerId: string, trackId: string, x: number): MenuItem[] {
-    const time = Math.round(
-      snapTime(xToTime(x, canvas!.offsetWidth), snapIncrement(), doc.duration),
-    )
+    const time = Math.round(snapOrSoft(xToTime(x, canvas!.offsetWidth), false))
     const track = doc.layers.find((l) => l.id === layerId)?.tracks.find((t) => t.id === trackId)
     return [
       {
