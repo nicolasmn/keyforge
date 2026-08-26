@@ -53,8 +53,6 @@ const PLAYHEAD_HIT = 6
 const LABEL_GAP_PX = 12
 /** Ticks closer than this many CSS px read as noise (plan §4). */
 const MIN_TICK_SPACING_PX = 6
-/** Opacity for lane gridlines over track backgrounds (plan §3). */
-const GRIDLINE_ALPHA = 0.35
 /** Density-strip band cap: >6 tracks merge their surplus into the 6th band. */
 const MAX_STRIP_BANDS = 6
 
@@ -84,6 +82,8 @@ export default function Timeline() {
    * value snaps there once, on release.
    */
   let dragSnapTime: number | null = null
+  /** Debounce timer for snap-on-release after horizontal wheel scroll. */
+  let wheelSnapTimer: ReturnType<typeof setTimeout> | undefined
   /** Layer whose disclosure zone is hovered — accent-color feedback only. */
 
   /**
@@ -184,8 +184,13 @@ export default function Timeline() {
     for (let i = 0; i <= lastMajorIndex; i++) majorTimes.push(i * labelStep)
     for (const t of majorTimes) {
       const x = timeToX(t, cssWidth)
-      ctx.fillStyle = colorBorder
+      // Header background is colorBorder; tick lines must contrast against
+      // it (same-on-same = invisible). Use muted text color at low alpha.
+      ctx.save()
+      ctx.globalAlpha = 0.35
+      ctx.fillStyle = colorText
       ctx.fillRect(x * dpr, 0, 1, HEADER_HEIGHT * dpr)
+      ctx.restore()
       const label = formatTick(t, labelStep)
       const labelW = ctx.measureText(label).width / dpr
       let lx = x + 4
@@ -262,16 +267,8 @@ export default function Timeline() {
       if (!layer.visible) ctx.globalAlpha = 0.35
       ctx.fillStyle = selectedLayerId() === row.layerId ? colorRowSelected : colorBg
       ctx.fillRect(0, y, width, row.height * dpr)
-      // Label gridlines through the lanes (plan §3): after the row
-      // background but before diamonds, so full-height lines stay visible
-      // without washing out keyframes.
-      ctx.save()
-      ctx.globalAlpha = GRIDLINE_ALPHA * ctx.globalAlpha
-      ctx.fillStyle = colorBorder
-      for (const t of majorTimes) {
-        ctx.fillRect(timeToX(t, width / dpr) * dpr, y, 1, row.height * dpr)
-      }
-      ctx.restore()
+      // Full-height gridlines are now drawn in a single pass after all rows
+      // (see below) — no per-row gridlines here.
       ctx.fillStyle = colorBorder
       ctx.fillRect(0, y + row.height * dpr - 1, width, 1)
       // Keyframe baseline near the row's bottom edge (DevTools style):
@@ -435,6 +432,44 @@ export default function Timeline() {
     for (const row of rows()) {
       if (row.type === 'track') drawTrackRow(row)
       else drawLayerRow(row)
+    }
+
+    // Full-height gridlines below the header — span all rows (track AND
+    // layer) plus empty space below the last row. Drawn after row content at
+    // low alpha so the grid reads without washing out keyframes or easing
+    // glyphs. The header's own tick lines are drawn separately above.
+    {
+      ctx.save()
+      ctx.globalAlpha = 0.22
+      ctx.fillStyle = colorText
+      const gridTop = HEADER_HEIGHT * dpr
+      const gridH = height - gridTop
+      for (const t of majorTimes) {
+        ctx.fillRect(timeToX(t, width / dpr) * dpr, gridTop, 1, gridH)
+      }
+      ctx.restore()
+    }
+
+    // Prominent snap-point lines when snapping is enabled — more visible
+    // than the regular gridlines (accent color, higher alpha). Skipped when
+    // snap points are closer than 4px apart (would render as a solid block).
+    {
+      const snap = snapIncrement()
+      if (snap !== 'off') {
+        const snapPx = timeToX(snap, width / dpr) - timeToX(0, width / dpr)
+        if (snapPx >= 4) {
+          ctx.save()
+          ctx.globalAlpha = 0.4
+          ctx.fillStyle = colorAccent
+          const snapCount = Math.floor(doc.duration / snap)
+          for (let i = 0; i <= snapCount; i++) {
+            const t = i * snap
+            if (t > doc.duration) break
+            ctx.fillRect(timeToX(t, width / dpr) * dpr, 0, 1, height)
+          }
+          ctx.restore()
+        }
+      }
     }
 
     // Work-area band + bookends: shaded region between the two handles in
@@ -893,10 +928,17 @@ export default function Timeline() {
     e.preventDefault()
     setPlaying(false)
     const msPerPx = doc.duration / canvas!.offsetWidth
+    // During scroll: set playhead to unsnapped value (fluid, no stickiness).
     setPlayhead((prev) => {
       const next = Math.max(0, Math.min(doc.duration, prev + e.deltaX * msPerPx))
-      return snapTime(next, snapIncrement(), doc.duration)
+      return next
     })
+    // On scroll end: snap to nearest increment. Debounce so each wheel event
+    // resets the timer — snap only fires when scrolling stops (~150ms).
+    clearTimeout(wheelSnapTimer)
+    wheelSnapTimer = setTimeout(() => {
+      setPlayhead((prev) => snapTime(prev, snapIncrement(), doc.duration))
+    }, 150)
   }
 
   // ── Right-click context menus (context-menus plan §6.4) ────────────────
