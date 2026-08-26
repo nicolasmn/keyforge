@@ -371,8 +371,12 @@
   cursor: default;
   gap: 4px;
 }
-.kf-chip--easing {
+.kf-ease-chip-wrap {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.kf-chip--easing {
   color: var(--chip-easing);
   font-size: calc(var(--chip-fs) - 1px);
   max-width: 140px;
@@ -413,8 +417,8 @@
   transition: opacity 120ms ease-out;
   pointer-events: none;
 }
-.kf-chip--easing:hover .kf-ease-line,
-.kf-chip--easing:focus-visible .kf-ease-line {
+.kf-ease-chip-wrap:hover .kf-ease-line,
+.kf-chip--easing:focus-visible ~ .kf-ease-line {
   opacity: 1;
 }
 .kf-ease-line__bar {

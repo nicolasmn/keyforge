@@ -989,21 +989,23 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
             Opens/toggles THE single app-wide easing popover anchored here;
             outside-click dismiss ignores chips via [data-easing-chip] so a
             chip click never closes-then-reopens. */}
-        <span
-          ref={chipEl}
-          class="kf-chip kf-chip--easing"
-          classList={{ 'kf-chip--easing-open': isEasingPopoverOpenFor(props.kf.id) }}
-          data-easing-chip=""
-          tabindex={0}
-          role="button"
-          aria-label={`Edit easing curve ${props.kf.easing}`}
-          aria-expanded={isEasingPopoverOpenFor(props.kf.id)}
-          onClick={toggleEasing}
-          onKeyDown={(e: KeyboardEvent) => chipKeyDown(e, toggleEasing)}
-          title="Edit easing curve"
-        >
-          <EasingCurveChip value={props.kf.easing} />
-          <span class="kf-chip__label">{shortEasingLabel(props.kf.easing)}</span>
+        <span class="kf-ease-chip-wrap">
+          <span
+            ref={chipEl}
+            class="kf-chip kf-chip--easing"
+            classList={{ 'kf-chip--easing-open': isEasingPopoverOpenFor(props.kf.id) }}
+            data-easing-chip=""
+            tabindex={0}
+            role="button"
+            aria-label={`Edit easing curve ${props.kf.easing}`}
+            aria-expanded={isEasingPopoverOpenFor(props.kf.id)}
+            onClick={toggleEasing}
+            onKeyDown={(e: KeyboardEvent) => chipKeyDown(e, toggleEasing)}
+            title="Edit easing curve"
+          >
+            <EasingCurveChip value={props.kf.easing} />
+            <span class="kf-chip__label">{shortEasingLabel(props.kf.easing)}</span>
+          </span>
           {/* Hover-only motion preview: a line that grows left-to-right
               under the chip using the easing as animation-timing-function.
               Hidden by default, revealed on .kf-chip--easing:hover. */}
