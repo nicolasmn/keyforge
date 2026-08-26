@@ -625,6 +625,9 @@ export default function TransformOverlay() {
   function onGestureMove(e: PointerEvent) {
     const s = session
     if (!s || e.pointerId !== s.pointerId) return
+    // Chord guard: RMB press/release mid-drag jumps the pointer; ignore
+    // moves while the primary button isn't held (mouse only).
+    if (e.pointerType === 'mouse' && e.buttons !== 1) return
     s.lastClient = { x: e.clientX, y: e.clientY }
     const value = computeValue(s, e)
     s.latest = value
@@ -654,6 +657,8 @@ export default function TransformOverlay() {
   function onGestureUp(e: PointerEvent) {
     const s = session
     if (!s || e.pointerId !== s.pointerId) return
+    // RMB release must not commit a jumped value mid-drag.
+    if (e.pointerType === 'mouse' && e.button !== 0) return
     endGesture(true)
   }
 

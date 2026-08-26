@@ -107,7 +107,12 @@ export function ContextMenuHost() {
       menuEl.querySelector<HTMLElement>('.kf-ctx-menu__item:not(:disabled)')?.focus()
     })
 
-    const onDocPointerDown = () => dismiss()
+    const onDocPointerDown = (e: PointerEvent) => {
+      // Clicks ON the menu must reach their items: pointerdown bubbles to
+      // document and would otherwise unmount the menu before click fires.
+      if (menuEl && menuEl.contains(e.target as Node)) return
+      dismiss()
+    }
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault()
