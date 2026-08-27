@@ -651,11 +651,29 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
 
   return (
     <>
+      {/* translate track: sub-token chips with scrub + unit, but no
+          function-stack UI (no fn() wrapper, no remove/move/add buttons).
+          Values are space-separated ("10px 20px"), not function-wrapped. */}
+      <Show when={props.token.type === 'transform' && props.property === 'translate'}>
+        <span class="kf-chip kf-chip--transform">
+          <Index each={props.token.subTokens ?? []}>
+            {(sub, i) => (
+              <>
+                <SubScrub sub={sub()} parent={props.token} property={props.property} />
+                <Show when={i < (props.token.subTokens?.length ?? 0) - 1}>
+                  <span class="kf-chip__sep"> </span>
+                </Show>
+              </>
+            )}
+          </Index>
+        </span>
+      </Show>
+
       {/* transform: sub-token chips, grouped per function, stack controls.
           Renders even for an EMPTY stack ('none' after delete-all): the
           "no functions" hint plus the always-visible (+) picker keep the
           add flow reachable instead of dead-ending in the text branch. */}
-      <Show when={props.token.type === 'transform'}>
+      <Show when={props.token.type === 'transform' && props.property !== 'translate'}>
         <span
           class="kf-chip kf-chip--transform"
           title={hasTransformFns() ? undefined : EMPTY_TRANSFORM_HINT}
