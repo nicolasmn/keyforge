@@ -458,7 +458,15 @@ export default function Timeline() {
                 // Global track index keys the color, so bands match the diamonds
                 // expanding reveals.
                 ctx.fillStyle = trackColors[ti2 % trackColors.length]
-                for (const kf of tracksOfLayer[ti2].keyframes) {
+                const kfs = [...tracksOfLayer[ti2].keyframes].sort((a, b) => a.time - b.time)
+                // Connecting line between consecutive keyframes
+                if (kfs.length >= 2) {
+                  const bandMidY = (bandYCss + bandH / 2) * dpr
+                  const firstX = timeToX(kfs[0].time, width / dpr) * dpr
+                  const lastX = timeToX(kfs[kfs.length - 1].time, width / dpr) * dpr
+                  ctx.fillRect(firstX, bandMidY, lastX - firstX, Math.max(1, dpr))
+                }
+                for (const kf of kfs) {
                   const kx = timeToX(kf.time, width / dpr) * dpr
                   ctx.fillRect(kx, bandYCss * dpr, 3 * dpr, bandH * dpr)
                 }
