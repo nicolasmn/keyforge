@@ -747,17 +747,18 @@ export default function EasingEditor(props: Props) {
     rootEl?.addEventListener('keydown', onRootKeyDown)
 
     // Outside-click dismiss: clicks outside the popover AND outside any
-    // easing chip (chips toggle themselves via their own handler).
+    // easing chip (chips toggle themselves via their own handler). Using
+    // the bubbling phase (not capture) so chip click handlers fire first
+    // and can retarget the popover before this listener closes it.
     const onDocPointerDown = (e: PointerEvent) => {
       if (dragging) return
       const t = e.target as HTMLElement | null
       if (!t) return
       if (rootEl?.contains(t)) return
       if (t.closest('[data-easing-chip]')) return
-      if (t.closest('.easing-editor__tab')) return
       props.onClose()
     }
-    document.addEventListener('pointerdown', onDocPointerDown, true)
+    document.addEventListener('pointerdown', onDocPointerDown)
 
     const onWinResize = () => reposition()
     window.addEventListener('resize', onWinResize)
@@ -840,7 +841,6 @@ export default function EasingEditor(props: Props) {
               classList={{ 'easing-editor__tab--active': mode() === 'curve' }}
               role="tab"
               aria-selected={mode() === 'curve'}
-              onPointerDown={(e) => e.stopPropagation()}
               onClick={() => setMode('curve')}
             >
               Curve
@@ -850,7 +850,6 @@ export default function EasingEditor(props: Props) {
               classList={{ 'easing-editor__tab--active': mode() === 'spring' }}
               role="tab"
               aria-selected={mode() === 'spring'}
-              onPointerDown={(e) => e.stopPropagation()}
               onClick={() => setMode('spring')}
             >
               Spring
