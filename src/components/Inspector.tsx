@@ -64,7 +64,7 @@ import {
   type EasingPopoverAnchor,
   type EasingPopoverTarget,
 } from './easingPopover'
-import { builtinNameFor } from '@/utils/easingCurve'
+import { builtinNameFor, resolveBuiltin, formatBezier } from '@/utils/easingCurve'
 import { parseCubicBezier } from '@/utils/easing-presets'
 import { customEasings } from '@/store/easingLibrary'
 import OriginSection from './OriginSection'
@@ -860,12 +860,22 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
 /** Shortened easing label for the mini-curve chip (plan §3): preset name
  *  when resolvable, compacted control points for literal beziers, stop
  *  count for springs, truncated raw otherwise. */
+/** Normalize an easing string for comparison (handles whitespace/format differences). */
+function normalizedEasing(v: string): string {
+  const canon = resolveBuiltin(v) ?? v.trim()
+  const b = parseCubicBezier(canon)
+  return b ? formatBezier(b) : canon.replace(/\s+/g, '')
+}
+
 function shortEasingLabel(value: string): string {
   const t = value.trim()
   const named = builtinNameFor(t)
   if (named) return named
-  // Check saved library for a matching value (e.g. spring presets)
-  const lib = customEasings().find((e) => e.value === t)
+  // Check saved library for a matching value (e.g. spring presets).
+  // Use normalized comparison — the same spring can have different
+  // whitespace/formatting between the keyframe and the library entry.
+  const norm = normalizedEasing(t)
+  const lib = customEasings().find((e) => normalizedEasing(e.value) === norm)
   if (lib) return lib.name
   const b = parseCubicBezier(t)
   if (b) return `(${b.map((n) => String(+n.toFixed(2)).replace(/^(-?)0\./, '$1.')).join(', ')})`
