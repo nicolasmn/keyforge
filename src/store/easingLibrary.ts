@@ -1,28 +1,14 @@
 /**
  * Reactive in-memory easing library.
  *
- * Uses @solid-primitives/storage makeObjectStorage so the API matches
- * a real Storage and can be swapped for localForage (IndexedDB) in Phase 4
- * by changing the `storage` option — zero other changes needed.
- *
  * localStorage is intentionally NOT used: the app runs in sandboxed iframes
- * where localStorage access is blocked.
+ * where localStorage access is blocked. Uses a plain signal — persistence
+ * can be added later via localForage (IndexedDB) in Phase 4.
  */
 import { createSignal } from 'solid-js'
-import { makePersisted, makeObjectStorage } from '@solid-primitives/storage'
 import type { EasingPreset } from '@/utils/easing-presets'
 
-const _backingStore: Record<string, string> = {}
-
-// Array destructuring is intentional: makePersisted's union return type
-// (array | object form) prevents solid/reactivity from proving the array
-// form, so the rule flags a legitimate destructure.
-/* eslint-disable solid/reactivity */
-const [customEasings, setCustomEasings] = makePersisted(createSignal<EasingPreset[]>([]), {
-  name: 'keyforge-easing-library',
-  storage: makeObjectStorage(_backingStore),
-})
-/* eslint-enable solid/reactivity */
+const [customEasings, setCustomEasings] = createSignal<EasingPreset[]>([])
 
 export { customEasings }
 

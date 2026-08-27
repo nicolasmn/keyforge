@@ -67,6 +67,7 @@ import {
 import { builtinNameFor, resolveBuiltin, formatBezier } from '@/utils/easingCurve'
 import { parseCubicBezier } from '@/utils/easing-presets'
 import { customEasings } from '@/store/easingLibrary'
+import { springPresetName } from '@/utils/spring'
 import OriginSection from './OriginSection'
 import { RotationDial, NumberUnitField } from './fields'
 import { tokenizeKeyframe, NUMBER_UNIT_RE } from '@/utils/tokenize'
@@ -871,7 +872,10 @@ function shortEasingLabel(value: string): string {
   const t = value.trim()
   const named = builtinNameFor(t)
   if (named) return named
-  // Check saved library for a matching value (e.g. spring presets).
+  // Check if this is a built-in spring preset (Gentle, Snappy, etc.)
+  const springName = springPresetName(t)
+  if (springName) return springName
+  // Check saved library for a matching value.
   // Use normalized comparison — the same spring can have different
   // whitespace/formatting between the keyframe and the library entry.
   const norm = normalizedEasing(t)
@@ -901,11 +905,7 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
 
   // Reactive easing label — re-evaluates when the keyframe's easing OR
   // the saved library changes (so saved spring names appear on chips).
-  const easingLabel = createMemo(() => {
-    const lib = customEasings()
-    console.log('[DEBUG easingLabel]', { easing: props.kf.easing, libCount: lib.length, lib })
-    return shortEasingLabel(props.kf.easing)
-  })
+  const easingLabel = createMemo(() => shortEasingLabel(props.kf.easing))
 
   const toggleEasing = () =>
     toggleEasingPopover({
