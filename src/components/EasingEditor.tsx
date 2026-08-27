@@ -642,6 +642,16 @@ export default function EasingEditor(props: Props) {
     })).filter((g) => g.items.length > 0),
   )
 
+  /** Saved library entries filtered by active tab: springs (linear) in
+   *  spring tab, curves (bezier/named) in curve tab. */
+  const savedForTab = createMemo(() => {
+    const all = customEasings()
+    if (mode() === 'spring') {
+      return all.filter((e) => /^\s*linear\s*\(/i.test(e.value))
+    }
+    return all.filter((e) => !/^\s*linear\s*\(/i.test(e.value))
+  })
+
   // ── Save-to-library flow (header ⭐ → inline footer form, plan §6.2) ───
   function suggestName(): string {
     const nm = builtinNameFor(rawInput())
@@ -1039,11 +1049,11 @@ export default function EasingEditor(props: Props) {
           </Show>
         </Show>
 
-        {/* Saved library entries — visible in both curve and spring tabs */}
-        <Show when={customEasings().length > 0}>
+        {/* Saved library entries — filtered by tab */}
+        <Show when={savedForTab().length > 0}>
           <div class="easing-editor__group-label">Saved</div>
           <div class="easing-editor__presets easing-editor__presets--visual">
-            <For each={customEasings()}>
+            <For each={savedForTab()}>
               {(preset) => (
                 <span class="easing-editor__preset-wrap">
                   <button
