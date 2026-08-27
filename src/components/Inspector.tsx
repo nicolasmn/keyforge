@@ -889,6 +889,10 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
   let timeInputEl: HTMLInputElement | undefined
   let chipEl: HTMLSpanElement | undefined
 
+  // Reactive easing label — re-evaluates when the keyframe's easing OR
+  // the saved library changes (so saved spring names appear on chips).
+  const easingLabel = createMemo(() => shortEasingLabel(props.kf.easing))
+
   const toggleEasing = () =>
     toggleEasingPopover({
       layerId: props.layerId,
@@ -1008,7 +1012,7 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
             title="Edit easing curve"
           >
             <EasingCurveChip value={props.kf.easing} />
-            <span class="kf-chip__label">{shortEasingLabel(props.kf.easing)}</span>
+            <span class="kf-chip__label">{easingLabel()}</span>
           </span>
           {/* Hover-only motion preview: a line that grows left-to-right
               under the chip using the easing as animation-timing-function.
