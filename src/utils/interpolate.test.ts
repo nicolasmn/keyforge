@@ -15,6 +15,14 @@ function trackOf(...kfs: Array<[number, string, string?]>): Track {
   }
 }
 
+function transformTrackOf(...kfs: Array<[number, string, string?]>): Track {
+  return {
+    ...trackOf(...kfs),
+    id: 'TT',
+    property: 'transform',
+  }
+}
+
 describe('interpolatedValueAt', () => {
   const track = trackOf([0, '0'], [1000, '1'])
 
@@ -51,12 +59,29 @@ describe('interpolatedValueAt', () => {
     expect(interpolatedValueAt(t, 500)).toBe('10px')
   })
 
-  it('steps/holds non-numeric values (colors, transforms)', () => {
+  it('steps/holds non-numeric values (colors)', () => {
     const color = trackOf([0, '#ff0000'], [1000, '#00ff00'])
     expect(interpolatedValueAt(color, 400)).toBe('#ff0000')
+  })
 
-    const tf = trackOf([0, 'translateY(40px)'], [1000, 'translateY(0px)'])
-    expect(interpolatedValueAt(tf, 400)).toBe('translateY(40px)')
+  it('interpolates transform function stacks (translateY)', () => {
+    const tf = transformTrackOf([0, 'translateY(40px)'], [1000, 'translateY(0px)'])
+    expect(interpolatedValueAt(tf, 500)).toBe('translateY(20px)')
+    expect(interpolatedValueAt(tf, 0)).toBe('translateY(40px)')
+    expect(interpolatedValueAt(tf, 1000)).toBe('translateY(0px)')
+  })
+
+  it('interpolates multi-function transform stacks', () => {
+    const tf = transformTrackOf(
+      [0, 'translate(0px, 0px) rotate(0deg)'],
+      [1000, 'translate(100px, 200px) rotate(90deg)'],
+    )
+    expect(interpolatedValueAt(tf, 500)).toBe('translate(50px, 100px) rotate(45deg)')
+  })
+
+  it('holds transform stacks with mismatched functions', () => {
+    const tf = transformTrackOf([0, 'translateY(40px)'], [1000, 'scale(2)'])
+    expect(interpolatedValueAt(tf, 500)).toBe('translateY(40px)')
   })
 
   it('handles unsorted keyframe arrays', () => {

@@ -1,5 +1,6 @@
 import type { Track, Keyframe } from '@/types'
 import { parseCubicBezier, evalCubicBezier, BUILTIN_PRESETS } from './easing-presets'
+import { lerpStacks } from './spatialCompose'
 
 /**
  * Interpolated value of a track at an arbitrary time — what the preview
@@ -113,5 +114,17 @@ export function interpolatedValueAt(track: Track, time: number): string | null {
   if (nextIdx === 0) return sorted[0].value // before first → hold first
 
   const prev = sorted[nextIdx - 1]
+
+  // Transform tracks store CSS function stacks like "translateY(40px)" or
+  // "translate(10px, 20px) rotate(45deg)" — lerpNumeric can't parse these.
+  // Use lerpStacks which handles per-function interpolation.
+  if (track.property === 'transform') {
+    const span = next.time - prev.time
+    const raw = span <= 0 ? 0 : (time - prev.time) / span
+    const t = Math.max(0, Math.min(1, raw))
+    const eased = applyEasing(t, prev.easing)
+    return lerpStacks(prev.value, next.value, eased) ?? prev.value
+  }
+
   return lerpNumeric(prev, next, time) ?? prev.value
 }

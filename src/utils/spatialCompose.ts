@@ -53,7 +53,7 @@ function round(n: number): string {
  * pair isn't numeric-with-unit — callers then hold the previous value,
  * matching the stepped fallback used elsewhere.
  */
-function lerpStacks(a: string, b: string, t: number): string | null {
+export function lerpStacks(a: string, b: string, t: number): string | null {
   const sa = parseTransformStack(a)
   const sb = parseTransformStack(b)
   if (sa.length === 0 || sa.length !== sb.length) return null
