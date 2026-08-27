@@ -1,6 +1,7 @@
 import type { Track, Keyframe } from '@/types'
 import { parseCubicBezier, evalCubicBezier, BUILTIN_PRESETS } from './easing-presets'
 import { lerpStacks } from './spatialCompose'
+import { parseLinearEasing } from './spring'
 
 /**
  * Interpolated value of a track at an arbitrary time — what the preview
@@ -87,15 +88,45 @@ function lerpNumeric(a: Keyframe, b: Keyframe, time: number): string | null {
 
 export function applyEasing(t: number, easing: string): number {
   if (easing === 'linear') return t
-  // linear() curves (springs) would need their own sampler; approximating
-  // as linear keeps pose-capture usable until a dedicated evaluator lands.
-  if (easing.startsWith('linear(')) return t
+  // linear() curves (springs): sample the piecewise-linear easing function.
+  if (easing.startsWith('linear(')) {
+    const m = easing.match(/linear\s*\(([^)]*)\)/i)
+    if (!m) return t
+    const stops = parseLinearEasing(m[1])
+    if (!stops || stops.length < 2) return t
+    return evalLinearEasing(t, stops)
+  }
   // Named presets ('ease-in', 'ease-out-back', …) resolve to their
   // canonical cubic-bezier before evaluation.
   const named = BUILTIN_PRESETS.find((p) => p.name === easing)
   const bez = parseCubicBezier(named ? named.value : easing)
   if (!bez) return t
   return evalCubicBezier(t, bez)
+}
+
+/**
+ * Evaluate a `linear()` easing function at progress `t` (0..1).
+ * Stops are { position, progress } pairs — position is the output value
+ * (y-axis), progress is the input time (x-axis, 0..1).
+ * Finds the bracketing pair and lerps.
+ */
+function evalLinearEasing(t: number, stops: { position: number; progress: number }[]): number {
+  // Clamp t to stop range
+  if (t <= stops[0].progress) return stops[0].position
+  const last = stops[stops.length - 1]
+  if (t >= last.progress) return last.position
+
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i]
+    const b = stops[i + 1]
+    if (t >= a.progress && t <= b.progress) {
+      const span = b.progress - a.progress
+      if (span <= 0) return a.position
+      const localT = (t - a.progress) / span
+      return a.position + (b.position - a.position) * localT
+    }
+  }
+  return last.position
 }
 
 /**
