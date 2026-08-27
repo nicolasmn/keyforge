@@ -1036,40 +1036,40 @@ export default function EasingEditor(props: Props) {
                 </>
               )}
             </For>
-
-            {/* Saved library entries */}
-            <Show when={customEasings().length > 0}>
-              <div class="easing-editor__group-label">Saved</div>
-              <div class="easing-editor__presets easing-editor__presets--visual">
-                <For each={customEasings()}>
-                  {(preset) => (
-                    <span class="easing-editor__preset-wrap">
-                      <button
-                        class="easing-editor__preset easing-editor__preset--visual"
-                        classList={{
-                          'easing-editor__preset--active':
-                            normalizedEasing(rawInput()) === normalizedEasing(preset.value),
-                        }}
-                        onClick={() => applyPreset(preset.value)}
-                        title={`${preset.name} — ${preset.value}`}
-                      >
-                        <EasingCurveChip value={preset.value} width={44} height={18} />
-                        <span>{preset.name}</span>
-                      </button>
-                      <button
-                        class="easing-editor__preset-delete"
-                        onClick={() => removeEasing(preset.name)}
-                        title={`Remove ${preset.name}`}
-                        aria-label={`Remove ${preset.name}`}
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  )}
-                </For>
-              </div>
-            </Show>
           </Show>
+        </Show>
+
+        {/* Saved library entries — visible in both curve and spring tabs */}
+        <Show when={customEasings().length > 0}>
+          <div class="easing-editor__group-label">Saved</div>
+          <div class="easing-editor__presets easing-editor__presets--visual">
+            <For each={customEasings()}>
+              {(preset) => (
+                <span class="easing-editor__preset-wrap">
+                  <button
+                    class="easing-editor__preset easing-editor__preset--visual"
+                    classList={{
+                      'easing-editor__preset--active':
+                        normalizedEasing(rawInput()) === normalizedEasing(preset.value),
+                    }}
+                    onClick={() => applyPreset(preset.value)}
+                    title={`${preset.name} — ${preset.value}`}
+                  >
+                    <EasingCurveChip value={preset.value} width={44} height={18} />
+                    <span>{preset.name}</span>
+                  </button>
+                  <button
+                    class="easing-editor__preset-delete"
+                    onClick={() => removeEasing(preset.name)}
+                    title={`Remove ${preset.name}`}
+                    aria-label={`Remove ${preset.name}`}
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+            </For>
+          </div>
         </Show>
 
         {/* Footer: hints + raw input + copy + save form */}
