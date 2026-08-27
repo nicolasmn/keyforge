@@ -562,8 +562,11 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
     }
     const sig = groups.map((g) => `${g.fi}:${g.fn}:${g.subs.length}`).join('|')
     if (sig === lastGroupSig) {
-      // Same shape → keep identity, refresh args in place.
-      for (let i = 0; i < groups.length; i++) lastGroups[i].subs = groups[i].subs
+      // Same shape → create new group wrappers with updated subs so <For>
+      // sees new item references and re-renders. The old approach (mutating
+      // lastGroups[i].subs in place) returned the same array reference, so
+      // <For> never re-rendered and the <Index> inside kept stale subs.
+      lastGroups = groups.map((g, i) => ({ ...lastGroups[i], subs: g.subs }))
       return lastGroups
     }
     lastGroupSig = sig

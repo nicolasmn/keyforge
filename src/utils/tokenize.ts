@@ -80,6 +80,31 @@ function parseTransformSubTokens(value: string, path: TokenPath): SubToken[] {
   return subs
 }
 
+/**
+ * Parse space-separated values like "10px 20px" into sub-tokens for the
+ * individual `translate` track (which stores bare pairs, not function-wrapped).
+ * The assembler reconstructs the space-separated form.
+ */
+function parseSpaceSeparatedSubTokens(value: string, path: TokenPath): SubToken[] {
+  const parts = value.trim().split(/\s+/)
+  const subs: SubToken[] = []
+  parts.forEach((part, argIndex) => {
+    const numMatch = part.match(/^(-?[\d.]+)(\S*)$/)
+    if (!numMatch) return
+    const assembler = (tokens: SubToken[]): string =>
+      tokens.map((t) => `${t.value}${t.unit}`).join(' ')
+    subs.push({
+      type: 'number',
+      value: numMatch[1],
+      unit: numMatch[2] || '',
+      argIndex: argIndex,
+      assembler,
+    })
+  })
+  void path
+  return subs
+}
+
 export function tokenizeLayer(layer: Layer, doc: AnimationDocument): ValueToken[] {
   const tokens: ValueToken[] = []
   for (const track of layer.tracks) {
@@ -123,6 +148,12 @@ export function tokenizeKeyframe(
   }
   if (valueType === 'transform') {
     valueToken.subTokens = parseTransformSubTokens(kf.value, valuePath)
+  } else if (track.property === 'translate' && kf.value.trim()) {
+    // Individual `translate` track values are space-separated ("10px 20px"),
+    // not function-wrapped. Tokenize as transform so the chip gets sub-token
+    // scrub + unit picking like the `transform` track.
+    valueToken.type = 'transform'
+    valueToken.subTokens = parseSpaceSeparatedSubTokens(kf.value, valuePath)
   }
 
   const easingToken: ValueToken = {
