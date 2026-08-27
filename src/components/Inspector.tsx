@@ -66,6 +66,7 @@ import {
 } from './easingPopover'
 import { builtinNameFor } from '@/utils/easingCurve'
 import { parseCubicBezier } from '@/utils/easing-presets'
+import { customEasings } from '@/store/easingLibrary'
 import OriginSection from './OriginSection'
 import { RotationDial, NumberUnitField } from './fields'
 import { tokenizeKeyframe, NUMBER_UNIT_RE } from '@/utils/tokenize'
@@ -863,6 +864,9 @@ function shortEasingLabel(value: string): string {
   const t = value.trim()
   const named = builtinNameFor(t)
   if (named) return named
+  // Check saved library for a matching value (e.g. spring presets)
+  const lib = customEasings().find((e) => e.value === t)
+  if (lib) return lib.name
   const b = parseCubicBezier(t)
   if (b) return `(${b.map((n) => String(+n.toFixed(2)).replace(/^(-?)0\./, '$1.')).join(', ')})`
   const lm = t.match(/^linear\s*\(([^)]*)\)/i)
