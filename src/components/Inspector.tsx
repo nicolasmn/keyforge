@@ -901,7 +901,11 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
 
   // Reactive easing label — re-evaluates when the keyframe's easing OR
   // the saved library changes (so saved spring names appear on chips).
-  const easingLabel = createMemo(() => shortEasingLabel(props.kf.easing))
+  const easingLabel = createMemo(() => {
+    const lib = customEasings()
+    console.log('[DEBUG easingLabel]', { easing: props.kf.easing, libCount: lib.length, lib })
+    return shortEasingLabel(props.kf.easing)
+  })
 
   const toggleEasing = () =>
     toggleEasingPopover({
