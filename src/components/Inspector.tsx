@@ -1183,7 +1183,16 @@ export default function Inspector() {
     const sel = e.currentTarget as HTMLSelectElement
     const prop = sel.value as AnimatableProperty
     if (!prop || !selectedLayerId()) return
-    addTrack(selectedLayerId()!, prop)
+    const trackId = addTrack(selectedLayerId()!, prop)
+    if (trackId) {
+      // Auto-create a keyframe at the current playhead so the new track
+      // has an initial value the user can immediately edit.
+      addKeyframe(selectedLayerId()!, trackId, {
+        time: Math.round(playhead()),
+        value: '',
+        easing: 'linear',
+      })
+    }
     sel.value = ''
   }
 
