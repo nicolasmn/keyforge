@@ -371,6 +371,11 @@
   cursor: default;
   gap: 4px;
 }
+.kf-ease-chip-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
 .kf-chip--easing {
   color: var(--chip-easing);
   font-size: calc(var(--chip-fs) - 1px);
@@ -381,6 +386,9 @@
 /* Mini-curve thumbnail: stroke inherits the chip's easing color via
    currentColor; fill must be none or the open path renders as a black
    polygon smudge (SVG default fill applies to open paths too). */
+/* Static SVG curve thumbnail — hidden by default inside the inspector's
+   easing chip; revealed only in the EasingEditor popover (where the same
+   .kf-ease-thumb class is used without a .kf-chip--easing ancestor). */
 .kf-ease-thumb {
   display: block;
   flex-shrink: 0;
@@ -389,6 +397,44 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   fill: none;
+}
+/* Inspector-only: hide the static curve and show a motion preview on hover. */
+.kf-chip--easing .kf-ease-thumb {
+  display: none;
+}
+/* Motion preview: a line that grows under the easing label using the
+   easing value as animation-timing-function. Hidden by default,
+   revealed on hover/focus. Sits below the chip, minimal footprint. */
+.kf-ease-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 1px;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+  pointer-events: none;
+}
+.kf-ease-chip-wrap:hover .kf-ease-line,
+.kf-chip--easing:focus-visible ~ .kf-ease-line {
+  opacity: 1;
+}
+.kf-ease-line__bar {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: currentColor;
+  border-radius: 1px;
+}
+@keyframes kf-easing-grow {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
 }
 .kf-chip--string {
   color: var(--color-text-muted);

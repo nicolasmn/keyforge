@@ -173,3 +173,24 @@ export const SPRING_PRESETS: Record<string, { label: string; perceptual: Percept
     perceptual: { visualDurationMs: 450, bounce: 0.22 },
   },
 }
+
+/** Pre-generated linear() values for each preset, for fast lookup. */
+const _presetValues: { name: string; value: string }[] = Object.entries(SPRING_PRESETS).map(
+  ([, p]) => ({
+    name: p.label,
+    value: generateSpringLinear(perceptualToConfig(p.perceptual)),
+  }),
+)
+
+/**
+ * Resolve a `linear(...)` easing string back to a spring preset name
+ * (e.g. "Gentle", "Snappy") when the value matches a preset exactly.
+ * Returns null if no preset matches.
+ */
+export function springPresetName(value: string): string | null {
+  const t = value.trim()
+  for (const p of _presetValues) {
+    if (p.value === t) return p.name
+  }
+  return null
+}

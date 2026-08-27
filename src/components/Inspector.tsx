@@ -64,8 +64,10 @@ import {
   type EasingPopoverAnchor,
   type EasingPopoverTarget,
 } from './easingPopover'
-import { builtinNameFor } from '@/utils/easingCurve'
+import { builtinNameFor, resolveBuiltin, formatBezier } from '@/utils/easingCurve'
 import { parseCubicBezier } from '@/utils/easing-presets'
+import { customEasings } from '@/store/easingLibrary'
+import { springPresetName } from '@/utils/spring'
 import OriginSection from './OriginSection'
 import { RotationDial, NumberUnitField } from './fields'
 import { tokenizeKeyframe, NUMBER_UNIT_RE } from '@/utils/tokenize'
@@ -859,10 +861,26 @@ function ValueChip(props: { token: ValueToken; property?: AnimatableProperty }) 
 /** Shortened easing label for the mini-curve chip (plan §3): preset name
  *  when resolvable, compacted control points for literal beziers, stop
  *  count for springs, truncated raw otherwise. */
+/** Normalize an easing string for comparison (handles whitespace/format differences). */
+function normalizedEasing(v: string): string {
+  const canon = resolveBuiltin(v) ?? v.trim()
+  const b = parseCubicBezier(canon)
+  return b ? formatBezier(b) : canon.replace(/\s+/g, '')
+}
+
 function shortEasingLabel(value: string): string {
   const t = value.trim()
   const named = builtinNameFor(t)
   if (named) return named
+  // Check if this is a built-in spring preset (Gentle, Snappy, etc.)
+  const springName = springPresetName(t)
+  if (springName) return springName
+  // Check saved library for a matching value.
+  // Use normalized comparison — the same spring can have different
+  // whitespace/formatting between the keyframe and the library entry.
+  const norm = normalizedEasing(t)
+  const lib = customEasings().find((e) => normalizedEasing(e.value) === norm)
+  if (lib) return lib.name
   const b = parseCubicBezier(t)
   if (b) return `(${b.map((n) => String(+n.toFixed(2)).replace(/^(-?)0\./, '$1.')).join(', ')})`
   const lm = t.match(/^linear\s*\(([^)]*)\)/i)
@@ -884,6 +902,10 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
   const [editTime, setEditTime] = createSignal(false)
   let timeInputEl: HTMLInputElement | undefined
   let chipEl: HTMLSpanElement | undefined
+
+  // Reactive easing label — re-evaluates when the keyframe's easing OR
+  // the saved library changes (so saved spring names appear on chips).
+  const easingLabel = createMemo(() => shortEasingLabel(props.kf.easing))
 
   const toggleEasing = () =>
     toggleEasingPopover({
@@ -989,21 +1011,37 @@ function KeyframeRow(props: { layerId: string; track: Track; kf: Keyframe }) {
             Opens/toggles THE single app-wide easing popover anchored here;
             outside-click dismiss ignores chips via [data-easing-chip] so a
             chip click never closes-then-reopens. */}
-        <span
-          ref={chipEl}
-          class="kf-chip kf-chip--easing"
-          classList={{ 'kf-chip--easing-open': isEasingPopoverOpenFor(props.kf.id) }}
-          data-easing-chip=""
-          tabindex={0}
-          role="button"
-          aria-label={`Edit easing curve ${props.kf.easing}`}
-          aria-expanded={isEasingPopoverOpenFor(props.kf.id)}
-          onClick={toggleEasing}
-          onKeyDown={(e: KeyboardEvent) => chipKeyDown(e, toggleEasing)}
-          title="Edit easing curve"
-        >
-          <EasingCurveChip value={props.kf.easing} />
-          <span class="kf-chip__label">{shortEasingLabel(props.kf.easing)}</span>
+        <span class="kf-ease-chip-wrap">
+          <span
+            ref={chipEl}
+            class="kf-chip kf-chip--easing"
+            classList={{ 'kf-chip--easing-open': isEasingPopoverOpenFor(props.kf.id) }}
+            data-easing-chip=""
+            tabindex={0}
+            role="button"
+            aria-label={`Edit easing curve ${props.kf.easing}`}
+            aria-expanded={isEasingPopoverOpenFor(props.kf.id)}
+            onClick={toggleEasing}
+            onKeyDown={(e: KeyboardEvent) => chipKeyDown(e, toggleEasing)}
+            title="Edit easing curve"
+          >
+            <EasingCurveChip value={props.kf.easing} />
+            <span class="kf-chip__label">{easingLabel()}</span>
+          </span>
+          {/* Hover-only motion preview: a line that grows left-to-right
+              under the chip using the easing as animation-timing-function.
+              Hidden by default, revealed on .kf-chip--easing:hover. */}
+          <span class="kf-ease-line" aria-hidden="true">
+            <span
+              class="kf-ease-line__bar"
+              style={{
+                'animation-name': 'kf-easing-grow',
+                'animation-duration': '1.4s',
+                'animation-timing-function': props.kf.easing,
+                'animation-iteration-count': 'infinite',
+              }}
+            />
+          </span>
         </span>
 
         <button
