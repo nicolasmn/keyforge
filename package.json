@@ -24,7 +24,7 @@
     "@codemirror/language": "^6",
     "@codemirror/state": "^6",
     "@codemirror/view": "^6",
-    "@lezer/highlight": "^1.2.3",
+    "@lezer/highlight": "^1.2.4",
     "@solid-primitives/storage": "~4.3.0",
     "@thisbeyond/solid-dnd": "^0.7.4",
     "solid-js": "^1.9.15",
